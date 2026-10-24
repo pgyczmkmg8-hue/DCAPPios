@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 설정 → 버전정보
+/// 설정 → 버전 정보/업데이트 확인
 /// 사진은 Assets에 "AboutImage"라는 이름의 Image Set으로 넣으면 표시돼요.
 struct AboutView: View {
     static var version: String {
@@ -138,7 +138,7 @@ struct AboutView: View {
             let notes = r.notes.trimmingCharacters(in: .whitespacesAndNewlines)
             Text("지금 버전: \(Self.version)" + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(300))))
         }
-        .navigationTitle("버전정보")
+        .navigationTitle("버전 정보/업데이트 확인")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

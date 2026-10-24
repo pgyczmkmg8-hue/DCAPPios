@@ -281,7 +281,7 @@ struct SettingsView: View {
                         LabeledContent {
                             Text(AboutView.versionString)
                         } label: {
-                            Label("버전정보", systemImage: "info.circle")
+                            Label("버전 정보/업데이트 확인", systemImage: "info.circle")
                         }
                     }
                 }

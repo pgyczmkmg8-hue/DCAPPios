@@ -161,7 +161,7 @@ struct RootView: View {
             if let url = DCNotify.pendingURL { DCNotify.pendingURL = nil; router.open(url) }   // 알림을 눌러서 켠 경우
         }
         .task {
-            // 앱을 켤 때 하루 한 번 GitHub Releases 확인
+            // 앱을 열 때마다 GitHub Releases 확인
             if let r = await UpdateChecker.checkIfDue() { availableUpdate = r }
         }
         .alert(availableUpdate.map { "새 버전 \($0.version)" } ?? "",

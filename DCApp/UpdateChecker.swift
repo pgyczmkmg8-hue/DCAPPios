@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// GitHub Releases에 올라온 최신 버전 정보
-struct AppRelease: Identifiable {
+nonisolated struct AppRelease: Identifiable, Sendable {
     let version: String      // "0.5.6" (태그는 버전 그대로, v가 붙어 있어도 뗌)
     let name: String
     let notes: String
@@ -10,12 +10,11 @@ struct AppRelease: Identifiable {
     var id: String { version }
 }
 
-/// 앱을 켤 때 하루 한 번 GitHub Releases의 최신 버전을 확인해서, 판올림(0.6.x → 0.7.x)일 때만 알려 줌
+/// 앱을 열 때마다 GitHub Releases의 최신 버전을 확인해서, 판올림(0.6.x → 0.7.x)일 때만 알려 줌
 /// (저장소: github.com/pgyczmkmg8-hue/DCApp — 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
-/// 버전정보 화면에서 자동 확인 끄기 / 수동 확인 가능
+/// 버전 정보/업데이트 확인 화면에서 자동 확인 끄기 / 수동 확인 가능
 enum UpdateChecker {
-    static let repo = "pgyczmkmg8-hue/DCApp"
-    private static let lastCheckKey = "updateLastCheck"
+    nonisolated static let repo = "pgyczmkmg8-hue/DCApp"
     private static let skippedKey = "updateSkippedVersion"
     static let autoCheckKey = "updateAutoCheck"
 
@@ -28,15 +27,11 @@ enum UpdateChecker {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    /// 하루가 지났으면 확인. 새 버전이 있고 '건너뛰기'한 버전이 아니면 돌려줌
+    /// 앱을 열 때마다 확인. 판올림 새 버전이 있고 '건너뛰기'한 버전이 아니면 돌려줌
     static func checkIfDue() async -> AppRelease? {
         guard autoCheckEnabled else { return nil }
         let defaults = UserDefaults.standard
-        if let last = defaults.object(forKey: lastCheckKey) as? Date, Date().timeIntervalSince(last) < 24 * 3600 {
-            return nil
-        }
-        guard let latest = await fetchLatest() else { return nil }   // 실패하면 다음에 다시 (시각 기록 안 함)
-        defaults.set(Date(), forKey: lastCheckKey)
+        guard let latest = await fetchLatest() else { return nil }   // 실패하면 다음에 열 때 다시
         guard isMinorNewer(latest.version, than: currentVersion),     // 패치(0.6.1 → 0.6.2)는 조용히
               defaults.string(forKey: skippedKey) != latest.version else { return nil }
         return latest
