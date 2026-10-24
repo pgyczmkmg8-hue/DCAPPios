@@ -92,6 +92,8 @@ struct RootView: View {
     @AppStorage("compactMode") private var compactMode = false
     /// 테마가 바뀌면 화면을 새로 그려 상단바·강조색에 바로 반영
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
+    /// GitHub에 새 버전이 있으면 알림창
+    @State private var availableUpdate: AppRelease?
     @AppStorage("compactTopRatio") private var topRatio = 0.34
     @State private var keyboardVisible = false
     @State private var dragStartRatio: Double?      // 핸들을 끌기 시작할 때의 높이
@@ -157,6 +159,21 @@ struct RootView: View {
         .onAppear {
             compactMode = false     // 앱을 새로 켜면 항상 일반 모드로 시작 (안전장치)
             if let url = DCNotify.pendingURL { DCNotify.pendingURL = nil; router.open(url) }   // 알림을 눌러서 켠 경우
+        }
+        .task {
+            // 앱을 켤 때 하루 한 번 GitHub Releases 확인
+            if let r = await UpdateChecker.checkIfDue() { availableUpdate = r }
+        }
+        .alert(availableUpdate.map { "새 버전 \($0.version)" } ?? "",
+               isPresented: Binding(get: { availableUpdate != nil }, set: { if !$0 { availableUpdate = nil } }),
+               presenting: availableUpdate) { r in
+            Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
+            Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
+            Button("이 버전 건너뛰기") { UpdateChecker.skip(r.version) }
+            Button("나중에", role: .cancel) {}
+        } message: { r in
+            let notes = r.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            Text("지금 버전: \(UpdateChecker.currentVersion)" + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(300))))
         }
         .onReceive(NotificationCenter.default.publisher(for: DCNotify.openURL)) { note in
             if let url = note.object as? URL { DCNotify.pendingURL = nil; router.open(url) }
