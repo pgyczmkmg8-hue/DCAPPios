@@ -51,12 +51,7 @@ final class AppRouter: ObservableObject {
     /// 계정 전환: 지금 로그인을 지우고 → 로그인 화면을 열어 고른 계정으로 자동 로그인
     func switchAccount(_ account: LoginCredential) {
         sheet = nil
-        Task {
-            await DCSession.clear(notify: false)
-            mainBrowser.pendingLogin = account
-            mainBrowser.load(DC.login)
-            mainBrowser.showToast("\(account.id) 계정으로 로그인하는 중…")
-        }
+        mainBrowser.loginHere(account)     // 로그인이 끝나면 보던 페이지로 돌아옴
     }
 
     /// 임시저장 글을 이어서 쓰기: 글쓰기 화면을 열고, 다 열리면 내용을 채움
@@ -95,6 +90,8 @@ struct RootView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var favorites: FavoritesStore
     @AppStorage("compactMode") private var compactMode = false
+    /// 테마가 바뀌면 화면을 새로 그려 상단바·강조색에 바로 반영
+    @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("compactTopRatio") private var topRatio = 0.34
     @State private var keyboardVisible = false
     @State private var dragStartRatio: Double?      // 핸들을 끌기 시작할 때의 높이
@@ -121,6 +118,7 @@ struct RootView: View {
             NavigationStack {
                 BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true)
             }
+            .id(themeRaw)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: compactMode ? 22 : 0,
                                               topTrailingRadius: compactMode ? 22 : 0,
                                               style: .continuous))

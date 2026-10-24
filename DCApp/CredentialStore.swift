@@ -104,3 +104,43 @@ enum DCSession {
         if notify { NotificationCenter.default.post(name: DC.sessionChanged, object: nil) }
     }
 }
+
+/// 유동(비로그인)으로 글·댓글 쓸 때의 닉네임/비밀번호.
+/// 디시는 이걸 사이트 저장소에 두는데, 로그인했다 풀면(사이트 데이터 삭제) 같이 지워져서 앱이 따로 기억함.
+/// 닉네임은 UserDefaults, 비밀번호는 키체인.
+enum AnonStore {
+    private static let nickKey = "anonNick"
+    private static let service = "DCApp.dcinside.anon"
+    private static let account = "password"
+
+    private static var query: [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: service,
+         kSecAttrAccount as String: account]
+    }
+
+    static var nick: String {
+        get { UserDefaults.standard.string(forKey: nickKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: nickKey) }
+    }
+
+    static var password: String {
+        get {
+            var q = query
+            q[kSecReturnData as String] = true
+            q[kSecMatchLimit as String] = kSecMatchLimitOne
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
+                  let d = item as? Data else { return "" }
+            return String(decoding: d, as: UTF8.self)
+        }
+        set {
+            SecItemDelete(query as CFDictionary)
+            guard !newValue.isEmpty else { return }
+            var add = query
+            add[kSecValueData as String] = Data(newValue.utf8)
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            SecItemAdd(add as CFDictionary, nil)
+        }
+    }
+}

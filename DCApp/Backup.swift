@@ -14,6 +14,7 @@ struct BackupFile: Codable {
     var autoImages: AutoImageSettings
     var autoImageFiles: [String: Data]?    // 자짤 사진 (파일 이름 → 내용)
     var prefs: [String: Bool]
+    var stringPrefs: [String: String]? = nil     // 테마 등 (예전 백업에는 없음)
     var recentSearches: [String]
     var visited: [VisitedGallery]? = nil
 }
@@ -22,6 +23,8 @@ struct BackupFile: Codable {
 enum BackupManager {
     /// 앱 설정 스위치들 (UserDefaults)
     static let prefKeys = ["autoLogin", "dockComment", "fullSwipeBack", "hideSiteHeader", "homeRankOnly", "showFloatingBar", "adFilter", "hideDory"]
+    /// 문자열 설정들 (UserDefaults)
+    static let stringPrefKeys = ["appTheme"]
 
     static func makeBackup(favorites: FavoritesStore, includeArchives: Bool, includeImages: Bool) throws -> URL {
         let posts = SavedPostStore.shared
@@ -63,6 +66,9 @@ enum BackupManager {
             autoImages: auto.settings,
             autoImageFiles: images,
             prefs: prefs,
+            stringPrefs: Dictionary(uniqueKeysWithValues: stringPrefKeys.compactMap { k in
+                UserDefaults.standard.string(forKey: k).map { (k, $0) }
+            }),
             recentSearches: UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [],
             visited: VisitedStore.shared.items
         )
@@ -112,6 +118,7 @@ enum BackupManager {
         auto.settings = b.autoImages
 
         for (k, v) in b.prefs { UserDefaults.standard.set(v, forKey: k) }
+        for (k, v) in b.stringPrefs ?? [:] { UserDefaults.standard.set(v, forKey: k) }
         UserDefaults.standard.set(b.recentSearches, forKey: "recentSearches")
         if let v = b.visited { VisitedStore.shared.replaceAll(v) }
 

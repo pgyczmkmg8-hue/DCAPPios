@@ -1,14 +1,70 @@
 import SwiftUI
 
-/// 앱 색상 (공식 앱 느낌의 남색)
+/// 앱 테마 (설정 → 앱 → 테마). 상단바 색, 강조색(하단 바 선택 등), 웹페이지 속 디시 파란색 계열을 바꿀 색
+enum AppTheme: String, CaseIterable, Identifiable {
+    case dc, navy, green, gray
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .dc: "디시 (기본)"
+        case .navy: "남색"
+        case .green: "연두"
+        case .gray: "무채색"
+        }
+    }
+
+    /// 상단바 색
+    var bar: UIColor {
+        switch self {
+        case .dc: UIColor(red: 0.231, green: 0.282, blue: 0.565, alpha: 1)    // 디시 고유 색 (#3B4890)
+        case .navy: UIColor(red: 0.29, green: 0.33, blue: 0.64, alpha: 1)     // 예전 기본색
+        case .green: UIColor(red: 0.01, green: 0.78, blue: 0.35, alpha: 1)    // 네이버 초록 (#03C75A)
+        case .gray: UIColor(red: 0.33, green: 0.33, blue: 0.35, alpha: 1)
+        }
+    }
+
+    /// 강조색 — 밝은 화면 / 어두운 화면(다크 모드에서는 잘 보이게 밝게)
+    var accentLight: UIColor {
+        switch self {
+        case .dc, .navy: bar
+        case .green: UIColor(red: 0.0, green: 0.62, blue: 0.29, alpha: 1)      // 흰 바탕 글자용으로 조금 진하게
+        case .gray: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1)
+        }
+    }
+    var accentDark: UIColor {
+        switch self {
+        case .dc, .navy: UIColor(red: 0.55, green: 0.62, blue: 1.0, alpha: 1)
+        case .green: UIColor(red: 0.18, green: 0.88, blue: 0.48, alpha: 1)
+        case .gray: UIColor(red: 0.78, green: 0.78, blue: 0.80, alpha: 1)
+        }
+    }
+
+    /// 웹페이지 속 디시 파란색 계열을 바꿀 색 (h: 색상각, s: 채도 배율). nil이면 사이트 색 그대로
+    var pageTint: [String: Double]? {
+        switch self {
+        case .dc, .navy: nil
+        case .green: ["h": 147, "s": 1.6]
+        case .gray: ["h": 230, "s": 0]
+        }
+    }
+}
+
+/// 앱 색상 — 지금 고른 테마를 따름
 enum DCTheme {
-    static let navy = Color(red: 0.29, green: 0.33, blue: 0.64)
-    /// 하단 바 선택 색 (다크 모드에서는 조금 밝게)
-    static let accent = Color(uiColor: UIColor { trait in
-        trait.userInterfaceStyle == .dark
-            ? UIColor(red: 0.55, green: 0.62, blue: 1.0, alpha: 1)
-            : UIColor(red: 0.29, green: 0.33, blue: 0.64, alpha: 1)
-    })
+    static let storageKey = "appTheme"
+    static var current: AppTheme {
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .dc
+    }
+    /// 상단바 색 (이름은 예전 그대로 navy)
+    static var navy: Color { Color(uiColor: current.bar) }
+    /// 하단 바 선택 색 등 (다크 모드에서는 밝게)
+    static var accent: Color {
+        let t = current
+        return Color(uiColor: UIColor { trait in
+            trait.userInterfaceStyle == .dark ? t.accentDark : t.accentLight
+        })
+    }
 }
 
 /// 갤러리 하단 바의 칸
@@ -641,9 +697,16 @@ struct BrowserView: View {
                     .fixedSize()
                 }
                 .noGlassBackground()
-            } else if !showFloatingBar {
-                ToolbarItem(placement: .topBarTrailing) { topMoreMenu.foregroundStyle(.white) }
-                    .noGlassBackground()
+            } else {
+                // 다른 화면: 왼쪽에 로그인/로그아웃(계정) 버튼 — 글쓰기 화면과 같은 메뉴
+                ToolbarItem(placement: .topBarLeading) {
+                    accountMenu.foregroundStyle(.white)
+                }
+                .noGlassBackground()
+                if !showFloatingBar {
+                    ToolbarItem(placement: .topBarTrailing) { topMoreMenu.foregroundStyle(.white) }
+                        .noGlassBackground()
+                }
             }
         } else {
             ToolbarItemGroup(placement: .topBarTrailing) {

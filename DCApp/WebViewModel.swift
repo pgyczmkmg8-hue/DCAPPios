@@ -156,6 +156,12 @@ final class WebViewModel: NSObject, ObservableObject {
             .sink { [weak self] _ in Task { @MainActor in self?.keyboardUp = false } }
             .store(in: &cancellables)
 
+        // 로그인 계정이 바뀌면 (내 글·댓글 형광펜 대상이 바뀜) 페이지 설정 다시 반영
+        NotificationCenter.default.publisher(for: DC.credentialsChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in Task { @MainActor in self?.applyFilters() } }
+            .store(in: &cancellables)
+
         // 차단 목록이 바뀌면 바로 반영
         NotificationCenter.default.publisher(for: DC.filtersChanged)
             .receive(on: DispatchQueue.main)
@@ -235,7 +241,12 @@ final class WebViewModel: NSObject, ObservableObject {
         // 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터·글 보는 중에는 뒤로가기)
         let openGalleries = isGalleryListPage && listPageNumber <= 1 && onGallerySwipe != nil &&
             (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
-        guard openGalleries || webView.canGoBack else { return }
+        // 글 보는 중이면 → 뒤로가기 대신 그 갤러리 목록 1페이지로 (로그인한 뒤 뒤로 가면 로그인 창이 다시 뜨는 문제 방지)
+        let postGallery: Gallery? = webView.url.flatMap { url -> Gallery? in
+            guard SavedPostStore.postInfo(url) != nil, let g = Gallery.parse(url) else { return nil }
+            return Gallery(galleryID: g.id, name: g.id, kind: g.kind)
+        }
+        guard openGalleries || postGallery != nil || webView.canGoBack else { return }
         Task {
             // 말머리 탭처럼 가로로 스크롤되는 곳에서 시작한 스와이프는 무시
             let inHScroll = await call("return window.__dcapp ? window.__dcapp.lastTouchInHScroll() : false;") as? Bool ?? false
@@ -247,6 +258,10 @@ final class WebViewModel: NSObject, ObservableObject {
                 load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
             } else if openGalleries {
                 onGallerySwipe?()
+            } else if let g = postGallery {
+                // 개념글에서 들어온 글이면 개념글 목록 1페이지로
+                let fromRecommend = webView.url?.query?.contains("recommend=1") == true
+                load(fromRecommend ? g.recommendURL : g.url)
             } else {
                 goBack()
             }
@@ -596,6 +611,11 @@ extension WebViewModel: WKScriptMessageHandler {
             if !urls.isEmpty {
                 imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0)
             }
+        case "anon":   // 유동 닉네임/비밀번호를 입력하면 기억 (다음에 빈 칸이면 채움)
+            let v = body["value"] as? String ?? ""
+            if body["kind"] as? String == "pw" { AnonStore.password = v } else { AnonStore.nick = v }
+            // 페이지 스크립트에 넣어 둔 설정은 설치할 때 값이라, 다시 설치해야 다음 페이지(로그아웃 후 등)에서 새 값으로 채움
+            installUserScript()
         case "pwskip":
             showToast("비밀번호 변경 안내를 건너뛰었어요")
         case "blockmiss":
@@ -647,6 +667,15 @@ extension WebViewModel: WKNavigationDelegate {
         }
         if host == DC.loginHost {
             autofillLogin()
+        }
+        // 웹페이지의 로그아웃 링크로 로그아웃한 경우 → 앱이 기억하는 '지금 계정'도 비움
+        if host == "m.dcinside.com", CredentialStore.currentAccountID != nil {
+            Task {
+                let state = await call("return window.__dcapp ? window.__dcapp.loginState() : 'unknown';") as? String
+                if state == "out", CredentialStore.currentAccountID != nil {
+                    CredentialStore.currentAccountID = nil
+                }
+            }
         }
         if isPickMode { setPickMode(true) }   // 새 페이지에도 선택 모드 유지
         if isBlockPickMode { setBlockPickMode(true) }

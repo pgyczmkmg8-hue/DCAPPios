@@ -25,6 +25,7 @@ struct SettingsView: View {
     @AppStorage("homeRankOnly") private var homeRankOnly = true
     @AppStorage("showFloatingBar") private var showFloatingBar = true
     @AppStorage("adFilter") private var adFilter = true
+    @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("hideDory") private var hideDory = true
     @AppStorage(DCNotify.enabledKey) private var notifyEnabled = false
     @State private var notifyResult: String?
@@ -75,6 +76,9 @@ struct SettingsView: View {
                     if !accounts.isEmpty {
                         Toggle("로그인 화면에서 자동 로그인", isOn: $autoLogin)
                     }
+                    NavigationLink { AnonInfoView() } label: {
+                        Label("유동 닉네임·비밀번호", systemImage: "person.fill.questionmark")
+                    }
                     NavigationLink {
                         BrowserView(startURL: DC.login, fallbackTitle: "로그인")
                     } label: {
@@ -118,6 +122,22 @@ struct SettingsView: View {
 
                 // 앱 아이콘 / 제스처
                 Section("앱") {
+                    Picker(selection: $themeRaw) {
+                        ForEach(AppTheme.allCases) { t in
+                            Label {
+                                Text(t.name)
+                            } icon: {
+                                Image(systemName: "circle.fill").foregroundStyle(Color(uiColor: t.bar))
+                            }
+                            .tag(t.rawValue)
+                        }
+                    } label: {
+                        Label("테마", systemImage: "paintpalette")
+                    }
+                    .pickerStyle(.navigationLink)
+                    .onChange(of: themeRaw) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 웹페이지 색도 다시 칠하기
+                    }
                     Toggle("화면을 오른쪽으로 쓸어 뒤로가기", isOn: $fullSwipeBack)
                         .onChange(of: fullSwipeBack) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
@@ -502,5 +522,32 @@ struct HiddenElementsView: View {
         }
         .navigationTitle("직접 숨긴 요소")
         .toolbar { EditButton() }
+    }
+}
+
+
+/// 유동(비로그인)으로 쓸 때 자동으로 채울 닉네임·비밀번호
+struct AnonInfoView: View {
+    @State private var nick = AnonStore.nick
+    @State private var password = AnonStore.password
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("닉네임 (비우면 갤러리 기본 닉네임)", text: $nick)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("비밀번호", text: $password)
+            } footer: {
+                Text("로그아웃 상태에서 댓글·글쓰기 칸에 자동으로 채워요. 댓글칸에 직접 입력해도 여기에 저장돼요. 비밀번호는 이 기기 키체인에 암호화해서 보관해요.")
+            }
+        }
+        .navigationTitle("유동 닉네임·비밀번호")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            AnonStore.nick = nick.trimmingCharacters(in: .whitespaces)
+            AnonStore.password = password
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 페이지 스크립트에 새 값 반영
+        }
     }
 }

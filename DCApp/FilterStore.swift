@@ -157,6 +157,9 @@ final class FilterStore: ObservableObject {
             "hideHeader": UserDefaults.standard.object(forKey: "hideSiteHeader") as? Bool ?? true,
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
+            "myId": CredentialStore.currentAccountID ?? "",
+            "anon": ["nick": AnonStore.nick, "pw": AnonStore.password],   // 유동 닉/비번 자동 채우기
+            "tint": (DCTheme.current.pageTint as Any?) ?? NSNull(),   // 웹페이지 속 디시 파란색 → 테마 색   // 내 글·댓글 닉네임 형광펜용
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return "{}" }

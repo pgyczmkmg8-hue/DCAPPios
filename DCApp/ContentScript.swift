@@ -43,6 +43,12 @@ enum ContentScript {
       '[data-dcapp-unit],img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none}',
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
+      // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
+      // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
+      '.dcapp-mine-name{background:rgb(64,140,200)!important;color:#fff!important;padding:0 3px!important;border-radius:4px!important;line-height:1.2!important}',
+      // 디시는 내 댓글 li에 'on' 클래스를 붙여 파랗게 칠함 → 디시 쪽 규칙보다 우선하도록 클래스를 겹쳐 씀
+      'li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine>*{background:none!important;background-color:transparent!important;box-shadow:none!important}',
+      'li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine::before,li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine::after{background:none!important;box-shadow:none!important}',
       '.dcapp-dock-head{display:flex!important;align-items:center!important;justify-content:space-between!important;height:44px!important;padding:0 6px 0 16px!important;border-bottom:1px solid rgba(127,127,127,.18)!important;font-size:15px!important;color:#888!important}',
       '.dcapp-dock-close{width:44px!important;height:44px!important;font-size:22px!important;line-height:44px!important;color:#888!important;background:none!important;border:0!important;padding:0!important}',
       '.dcapp-docked{position:fixed!important;left:0!important;right:0!important;bottom:auto!important;width:auto!important;max-width:none!important;margin:0!important;z-index:2147483000!important;max-height:60vh!important;overflow-y:auto!important;box-shadow:0 -4px 14px rgba(0,0,0,.14)!important;box-sizing:border-box!important;transform:none!important}'
@@ -374,7 +380,7 @@ enum ContentScript {
   }
 
   // ---------- 댓글돌이 (뉴스 링크를 다는 자동 댓글 봇) ----------
-  // 만두 모양 아이콘(클래스나 그림 주소에 dory)으로만 구분 → 그 댓글 칸(li)을 숨김
+  // 만두 모양 아이콘(디시 모바일은 span.sp-icon.dori-icon)으로만 구분 → 그 댓글 칸(li)을 숨김
   // (닉네임만 '댓글돌이'인 사람은 숨기지 않음)
   function doryItems() {
     var out = [];
@@ -382,7 +388,7 @@ enum ContentScript {
       var li = el && el.closest ? el.closest('li') : null;
       if (li && out.indexOf(li) < 0) out.push(li);
     }
-    document.querySelectorAll('[class*="dory"], img[src*="dory"]').forEach(add);
+    document.querySelectorAll('.dori-icon, [class*="dory"], img[src*="dory"]').forEach(add);
     return out;
   }
   function hideDory() {
@@ -407,6 +413,236 @@ enum ContentScript {
     });
   }
 
+  /// 페이지에 보이는 로그인/로그아웃 링크로 지금 로그인 상태 추정 ('in' / 'out' / 'unknown')
+  function loginState() {
+    var links = Array.prototype.slice.call(document.querySelectorAll('a, button'));
+    function has(re) { return links.some(function (a) { return re.test(txt(a)); }); }
+    if (has(/^로그아웃$/)) return 'in';
+    if (links.some(function (a) { return /^로그인$/.test(txt(a)) && /msign\.dcinside\.com|login/i.test(a.getAttribute('href') || a.getAttribute('onclick') || ''); })) return 'out';
+    return 'unknown';
+  }
+
+  /// 내 댓글이 아닌 보통 댓글 칸의 배경색 (없으면 페이지 배경색, 그것도 투명이면 흰색)
+  function normalCommentBg() {
+    var others = document.querySelectorAll('li.comment:not(.on):not(.dcapp-mine)');
+    for (var i = 0; i < others.length; i++) {
+      var c = getComputedStyle(others[i]).backgroundColor;
+      if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c;
+    }
+    var b = getComputedStyle(document.body).backgroundColor;
+    return (b && b !== 'rgba(0, 0, 0, 0)' && b !== 'transparent') ? b : '#fff';
+  }
+
+  // ---------- 테마: 웹페이지 속 디시 파란색 계열을 앱 테마 색으로 ----------
+  // 파란색 계열(색상각 200~262°, 채도 있는 색)만 골라 색상각을 테마 색으로 돌림. 밝기는 그대로라 연한 배경은 연하게 유지
+  // 글 본문(사용자가 쓴 내용)은 건드리지 않음
+  var tintKey = '', tintN = 0, tintTimer = null;
+  function parseRGB(c) {
+    var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c || '');
+    if (!m) return null;
+    var a = m[4] === undefined ? 1 : +m[4];
+    return a === 0 ? null : [+m[1], +m[2], +m[3], a];
+  }
+  function rgb2hsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), h = 0, s = 0, l = (mx + mn) / 2;
+    if (mx !== mn) {
+      var d = mx - mn;
+      s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h *= 60;
+    }
+    return [h, s, l];
+  }
+  function hsl2rgb(h, s, l) {
+    if (s === 0) return [l * 255, l * 255, l * 255];
+    h /= 360;
+    function f(p, q, t) {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    var q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    return [f(p, q, h + 1 / 3) * 255, f(p, q, h) * 255, f(p, q, h - 1 / 3) * 255];
+  }
+  function tintColor(c, t) {
+    var v = parseRGB(c);
+    if (!v) return null;
+    var hsl = rgb2hsl(v[0], v[1], v[2]);
+    if (hsl[0] < 200 || hsl[0] > 262 || hsl[1] < 0.12) return null;
+    var o = hsl2rgb(t.h, Math.min(1, hsl[1] * t.s), hsl[2]);
+    return 'rgba(' + Math.round(o[0]) + ',' + Math.round(o[1]) + ',' + Math.round(o[2]) + ',' + v[3] + ')';
+  }
+  var TINT_PROPS = [['color', 'color'], ['backgroundColor', 'background-color'],
+    ['borderTopColor', 'border-top-color'], ['borderBottomColor', 'border-bottom-color'],
+    ['borderLeftColor', 'border-left-color'], ['borderRightColor', 'border-right-color']];
+  function untintAll() {
+    document.querySelectorAll('[data-dcapp-tint]').forEach(function (el) {
+      el.getAttribute('data-dcapp-tint').split(',').forEach(function (p) { if (p) el.style.removeProperty(p); });
+      el.removeAttribute('data-dcapp-tint');
+    });
+    document.querySelectorAll('[data-dcapp-pc]').forEach(function (el) { el.removeAttribute('data-dcapp-pc'); });
+    var st = document.getElementById('dcapp-tint-pseudo');
+    if (st) st.textContent = '';
+  }
+  function tintPage() {
+    var t = cfg.tint;
+    var key = t ? t.h + '/' + t.s : '';
+    if (key !== tintKey) { untintAll(); tintKey = key; }
+    if (!t || !document.body) return;
+    var st = document.getElementById('dcapp-tint-pseudo');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'dcapp-tint-pseudo';
+      (document.head || document.documentElement).appendChild(st);
+    }
+    var body = articleBody(), rules = [];
+    var all = document.body.getElementsByTagName('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (body && body.contains(el)) continue;                     // 글 본문은 그대로
+      if (el.closest('.dcapp-mine-name')) continue;                // 내 닉네임 표시 색은 테마와 상관없이 유지
+      if (/^(IMG|VIDEO|SVG|PATH|SCRIPT|STYLE|IFRAME)$/i.test(el.tagName)) continue;
+      var cs = getComputedStyle(el), done = el.getAttribute('data-dcapp-tint') || '';
+      TINT_PROPS.forEach(function (p) {
+        var nc = tintColor(cs[p[0]], t);
+        if (!nc) return;
+        el.style.setProperty(p[1], nc, 'important');
+        if (done.indexOf(p[1]) < 0) done += (done ? ',' : '') + p[1];
+      });
+      if (done) el.setAttribute('data-dcapp-tint', done);
+      // ::before / ::after (선택된 탭 밑줄 등)
+      if (el.hasAttribute('data-dcapp-pc')) continue;
+      ['before', 'after'].forEach(function (ps) {
+        var pcs = getComputedStyle(el, '::' + ps);
+        if (!pcs || pcs.content === 'none' || pcs.content === 'normal') return;
+        var decl = '';
+        TINT_PROPS.forEach(function (p) {
+          var nc = tintColor(pcs[p[0]], t);
+          if (nc) decl += p[1] + ':' + nc + '!important;';
+        });
+        if (!decl) return;
+        if (!el.hasAttribute('data-dcapp-pc')) el.setAttribute('data-dcapp-pc', String(++tintN));
+        rules.push('[data-dcapp-pc="' + el.getAttribute('data-dcapp-pc') + '"]::' + ps + '{' + decl + '}');
+      });
+    }
+    if (rules.length) st.textContent += rules.join('\n') + '\n';
+  }
+  function scheduleTint() {
+    if (tintTimer) return;
+    tintTimer = setTimeout(function () { tintTimer = null; try { tintPage(); } catch (e) {} }, 250);
+  }
+
+  /// 닉네임 글자(첫 텍스트)만 span으로 감싸 표시 / 해제
+  function markMineNick(nk, mine) {
+    var sp = null;
+    for (var c = nk.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 1 && c.classList.contains('dcapp-mine-name')) { sp = c; break; }
+    }
+    if (mine && !sp) {
+      for (var n = nk.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && n.nodeValue.trim()) {
+          var name = n.nodeValue.trim();
+          sp = document.createElement('span');
+          sp.className = 'dcapp-mine-name';
+          sp.textContent = name;
+          nk.replaceChild(sp, n);
+          break;
+        }
+      }
+    } else if (!mine && sp) {
+      nk.replaceChild(document.createTextNode(sp.textContent), sp);
+    }
+  }
+
+  // ---------- 유동 닉네임/비밀번호 기억 (로그인했다 풀면 사이트가 지워버려서 앱이 기억했다가 채움) ----------
+  function anonFields() {
+    if (isLoginPage()) return [];
+    var out = [];
+    document.querySelectorAll('input').forEach(function (i) {
+      if (i.type === 'hidden' || i.id === 'commentDel_pw') return;
+      if ((i.disabled || i.readOnly) && i.type === 'password') return; // 닉네임 칸은 잠겨('ㅇㅇ' 고정) 있어도 포함
+      if (i.closest && i.closest('#pw_layer, .layer-center-popup')) return;   // 댓글 삭제 비번 등 팝업 칸 제외
+      var lab = ((i.name || '') + ' ' + (i.id || '') + ' ' + (i.getAttribute('placeholder') || '')).toLowerCase();
+      var kind = null;
+      if (i.type === 'password' && /pass|pw|비밀번호/.test(lab)) kind = 'pw';
+      else if ((i.type === 'text' || i.type === '') && /nick|name|닉네임/.test(lab) && !/search|subject|title|제목|검색/.test(lab)) kind = 'nick';
+      if (kind) out.push({ el: i, kind: kind });
+    });
+    return out;
+  }
+  // 디시는 페이지를 그린 뒤 잠깐 있다가 닉네임 칸에 갤러리 기본 닉네임을 넣고 잠금 → 앱이 먼저 채워도 덮어씀.
+  // 그래서 한 번 채우고 끝내지 않고, 몇 번(페이지 열린 뒤 0.5/1.5/3초 등) 다시 확인해서 잠겨 있으면 다시 풂.
+  // 사람이 직접 입력한 칸은 더 이상 건드리지 않음.
+  function fillAnon() {
+    var a = cfg.anon || {};
+    anonFields().forEach(function (f) {
+      if (f.el.getAttribute('data-dcapp-user') === '1') return;     // 직접 입력한 칸
+      if (f.el.getAttribute('data-dcapp-unlocking') === '1') return; // 지금 푸는 중
+      var tries = +(f.el.getAttribute('data-dcapp-anon-tries') || 0);
+      if (tries >= 4) return;
+      var saved = f.kind === 'pw' ? a.pw : a.nick;
+      if (!saved) return;
+      var locked = f.el.disabled || f.el.readOnly;
+      var cur = f.el.value;
+      if (!locked && cur === saved) return;
+      if (!locked && cur && !(f.kind === 'nick' && cur === 'ㅇㅇ')) return;   // 잠기지 않은 칸의 다른 값은 그대로
+      f.el.setAttribute('data-dcapp-anon-tries', String(tries + 1));
+      if (locked) { unlockAndFill(f.el, saved); return; }
+      setVal(f.el, saved);
+      anonLog.push(f.kind + ' 빈 칸 채움');
+    });
+  }
+  [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(function () { try { fillAnon(); } catch (e) {} }, ms); });
+
+  /// 잠긴 유동 닉네임 칸 풀고 채우기: 디시 버튼(닉네임 지우기 → 닉네임 사용)을 차례로 눌러 보고,
+  /// 그래도 잠겨 있으면 직접 잠금을 풂. 디시 처리가 늦을 수 있어서 잠깐씩 기다리며 확인
+  var anonLog = [];
+  function unlockAndFill(el, value) {
+    var steps = [
+      // 디시는 버튼 안쪽 span에 onclick(gallNicknameSetting(this,'off'))을 달아 둬서, 버튼이 아니라 그 span을 눌러야 함
+      function () { var b = document.getElementById('delete_nickname_btn'); if (b) { (b.querySelector('[onclick]') || b).click(); return '갤닉 끄기'; } return null; },
+      function () { el.disabled = false; el.readOnly = false; el.removeAttribute('disabled'); el.removeAttribute('readonly'); return '직접 해제'; }
+    ];
+    var i = 0, waited = 0;
+    el.setAttribute('data-dcapp-unlocking', '1');
+    function tick() {
+      if (!el.disabled && !el.readOnly) {
+        el.removeAttribute('data-dcapp-unlocking');
+        setVal(el, value);
+        anonLog.push('채움(' + (i ? '단계 ' + i : '바로') + ') → 값=' + (el.value === value ? '내 닉' : el.value));
+        // 디시가 곧바로 다시 덮어쓰는지 확인
+        setTimeout(function () { anonLog.push('0.5초 뒤 값=' + (el.value === value ? '내 닉' : el.value) + (el.disabled ? ' 비활성' : '')); }, 500);
+        return;
+      }
+      if (waited >= 300 || waited === 0) {
+        if (i >= steps.length) { el.removeAttribute('data-dcapp-unlocking'); anonLog.push('실패: 계속 잠김'); return; }
+        var r = steps[i++]();
+        anonLog.push('시도 ' + i + ': ' + (r || '버튼 없음'));
+        waited = 0;
+      }
+      waited += 50;
+      setTimeout(tick, 50);
+    }
+    tick();
+  }
+
+  var anonTimer = null;
+  function onAnonInput(e) {
+    if (!e.isTrusted) return;          // 사람이 직접 입력한 것만 기억 (사이트·앱이 채운 값은 저장 안 함)
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT') return;
+    var f = anonFields().filter(function (x) { return x.el === t; })[0];
+    if (!f) return;
+    f.el.setAttribute('data-dcapp-user', '1');
+    clearTimeout(anonTimer);
+    anonTimer = setTimeout(function () { post('anon', { kind: f.kind, value: t.value }); }, 400);
+  }
+  document.addEventListener('input', onAnonInput, true);
+  document.addEventListener('change', onAnonInput, true);
+
   function clearSelection() {
     try {
       var sel = window.getSelection();
@@ -416,6 +652,8 @@ enum ContentScript {
 
   function apply() {
     ensureStyle();
+    try { fillAnon(); } catch (e) {}
+    if (cfg.tint || tintKey) scheduleTint();
     try { sizeReplyBoxes(); } catch (e) {}
     try { hideDory(); } catch (e) {}
     try { skipPwChange(); } catch (e) {}
@@ -426,6 +664,24 @@ enum ContentScript {
       var reason = null;
       if (enabled && u.el.getAttribute('data-dcapp-revealed') !== '1') reason = blockedReason(u, identity(u), dset);
       mark(u.el, reason, mode);
+      // 로그인한 내 아이디와 작성자 아이디가 같으면 내 글·댓글
+      var mine = !!cfg.myId && u.kind !== 'article' && identity(u).id === cfg.myId;
+      u.el.classList.toggle('dcapp-mine', mine);
+      // 칸 자체의 배경은 인라인 !important로 (어떤 사이트 규칙보다도 우선)
+      if (u.kind === 'comment') {
+        if (mine) {
+          // 투명하게 하면 뒤의 댓글 영역(연한 파란색)이 비쳐 보임 → 다른 댓글 칸과 같은 색으로 칠함
+          u.el.style.setProperty('background', normalCommentBg(), 'important');
+          u.el.style.setProperty('box-shadow', 'none', 'important');
+          u.el.setAttribute('data-dcapp-mine-bg', '1');
+        } else if (u.el.hasAttribute('data-dcapp-mine-bg')) {
+          u.el.style.removeProperty('background');
+          u.el.style.removeProperty('box-shadow');
+          u.el.removeAttribute('data-dcapp-mine-bg');
+        }
+      }
+      var nk = nickElement(u);
+      if (nk) markMineNick(nk, mine);
       if (u.kind === 'article') {
         var body = articleBody();
         if (body) body.classList.toggle('dcapp-hide', !!reason);
@@ -1162,7 +1418,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v29-blockview', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v43-anon8', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -1251,6 +1507,24 @@ enum ContentScript {
     var ct = document.querySelector('textarea');
     out.push('--- comment ---');
     out.push('first textarea: ' + (ct ? ct.outerHTML.slice(0, 200) + ' isComment=' + isCommentField(ct) : '(없음)'));
+    out.push('유동 칸: ' + anonFields().map(function (f) {
+      return f.kind + '=' + f.el.tagName + '#' + (f.el.id || '') + '[name=' + (f.el.name || '') + '] 값' + (f.el.value ? '있음' : '없음') + (f.el.value === 'ㅇㅇ' ? '(ㅇㅇ)' : '') + (f.el.readOnly ? ' 읽기전용' : '') + (f.el.disabled ? ' 비활성' : '');
+    }).join(' / ') + ' | comment_nick: ' + (function () {
+      var n = document.getElementById('comment_nick');
+      if (!n) return '(없음)';
+      return n.outerHTML.slice(0, 200) + ' disabled=' + n.disabled + ' readOnly=' + n.readOnly + ' 팝업안=' + !!(n.closest && n.closest('.layer-center-popup'));
+    })() + ' | 버튼: ' + ['delete_nickname_btn', 'use_nickname_btn'].map(function (id) {
+      var b = document.getElementById(id);
+      return b ? b.outerHTML.replace(/\s+/g, ' ').slice(0, 160) + ' vis=' + visible(b) : id + '(없음)';
+    }).join(' , ') + ' | 채우기 기록: ' + (anonLog.join(' → ') || '(없음)') + ' | 앱에 저장: 닉' + ((cfg.anon || {}).nick ? '있음' : '없음') + ' 비번' + ((cfg.anon || {}).pw ? '있음' : '없음'));
+    var mineLi = document.querySelector('li.comment.dcapp-mine');
+    if (mineLi) {
+      var cs = getComputedStyle(mineLi), ca = getComputedStyle(mineLi, '::before');
+      out.push('내 댓글 칸 스타일: bg=' + cs.backgroundColor + ' img=' + cs.backgroundImage.slice(0, 60) + ' shadow=' + cs.boxShadow +
+               ' border=' + cs.borderLeft + ' / ' + cs.borderTop + ' before=' + ca.content + ' ' + ca.backgroundColor +
+               ' 부모 bg=' + getComputedStyle(mineLi.parentElement).backgroundColor + ' 보통 댓글 bg=' + normalCommentBg() +
+               ' | 자식: ' + Array.prototype.map.call(mineLi.children, function (c) { return c.tagName + '.' + clsOf(c) + ' bg=' + getComputedStyle(c).backgroundColor; }).join(', '));
+    }
     out.push('textareas: ' + Array.prototype.map.call(document.querySelectorAll('textarea'), function (t) {
       return '#' + (t.id || '') + '.' + clsOf(t) + ' h=' + Math.round(t.getBoundingClientRect().height) + ' cmt=' + isCommentField(t);
     }).join(' / '));
@@ -1296,6 +1570,7 @@ enum ContentScript {
       return true;
     },
     clearSelection: function () { clearSelection(); return true; },
+    loginState: loginState,
     setPickMode: function (on) { pick.on = !!on; clearPick(); return true; },
     setBlockPickMode: function (on) {
       blockPick = !!on;
