@@ -13,7 +13,10 @@ enum DCNotify {
     private static let seenKey = "notifySeenKeys"
     private static let endpoint = URL(string: "https://m.dcinside.com/alarm/notification")!
 
-    static var enabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
+    /// 알림 기능 전체 스위치 — 아직 제대로 동작하지 않아서 꺼 둠 (true로 바꾸면 설정에 다시 나타남)
+    static let featureAvailable = false
+
+    static var enabled: Bool { featureAvailable && UserDefaults.standard.bool(forKey: enabledKey) }
     /// 앱이 꺼져 있을 때 알림을 눌러 켠 경우, 화면이 뜬 뒤 열 주소
     static var pendingURL: URL?
 

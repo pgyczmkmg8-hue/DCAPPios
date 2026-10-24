@@ -165,7 +165,8 @@ struct SettingsView: View {
                     }
                 }
 
-                // 알림 (백그라운드에서 디시 알림 확인 → iOS 알림)
+                // 알림 (백그라운드에서 디시 알림 확인 → iOS 알림) — DCNotify.featureAvailable이 false면 숨김
+                if DCNotify.featureAvailable {
                 Section {
                     Toggle("디시 알림 받기", isOn: $notifyEnabled)
                         .onChange(of: notifyEnabled) { _, on in
@@ -198,6 +199,7 @@ struct SettingsView: View {
                     Text("알림")
                 } footer: {
                     Text("앱이 백그라운드에 있을 때 iOS가 정한 간격(보통 15분~몇 시간)으로 디시 알림을 확인해요. 로그인 상태여야 하고, 앱을 위로 쓸어 완전히 종료하면 확인하지 않아요.")
+                }
                 }
 
                 // 디시콘
