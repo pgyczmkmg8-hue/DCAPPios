@@ -617,25 +617,30 @@ struct BrowserView: View {
                     .foregroundStyle(.white)
                 }
                 .noGlassBackground()
+                // 상단바 버튼은 버튼마다 기본 여백이 붙어서 간격 숫자를 줄여도 그대로 → plain 스타일로 여백을 없애고 한 칸에 모음
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 12) {
                         Button("임시저장") { Task { await model.saveDraftManually() } }
                         Button("불러오기") { showDraftPicker = true }
+                        // 등록만 테두리
+                        Button {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            model.submitWrite()
+                        } label: {
+                            Text("등록")
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .overlay(Capsule().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                                .contentShape(Capsule())
+                        }
                     }
+                    .buttonStyle(.plain)
                     .font(.subheadline)
                     .foregroundStyle(.white)
                     .fixedSize()
                 }
                 .noGlassBackground()
-                // 등록만 테두리(글래스) 유지
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        model.submitWrite()
-                    } label: {
-                        Text("등록").fontWeight(.bold).fixedSize()
-                    }
-                }
             } else if !showFloatingBar {
                 ToolbarItem(placement: .topBarTrailing) { topMoreMenu.foregroundStyle(.white) }
                     .noGlassBackground()
