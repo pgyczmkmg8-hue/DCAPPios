@@ -36,7 +36,7 @@ struct HiddenElement: Codable, Hashable, Identifiable {
 enum BlockDisplay: String, Codable, CaseIterable, Identifiable {
     case collapse, remove
     var id: String { rawValue }
-    var label: String { self == .collapse ? "접어서 표시" : "완전히 숨김" }
+    var label: String { self == .collapse ? "차단됨 표시" : "완전히 숨김" }
 }
 
 struct FilterSettings: Codable {
@@ -91,6 +91,42 @@ final class FilterStore: ObservableObject {
     func addDccon(key: String, imageURL: String) {
         guard !key.isEmpty, !settings.dccons.contains(where: { $0.key == key }) else { return }
         settings.dccons.append(BlockedDccon(key: key, imageURL: imageURL))
+    }
+
+    // MARK: 길게 눌렀을 때 이미 차단된 대상인지 / 해제
+
+    /// 이 글·댓글 작성자에게 걸려 있는 유저 차단들
+    func blockedUsers(id: String, ip: String, nick: String) -> [BlockedUser] {
+        settings.users.filter {
+            switch $0.kind {
+            case .id: !id.isEmpty && $0.value == id
+            case .ip: !ip.isEmpty && $0.value == ip
+            case .nick: !nick.isEmpty && $0.value == nick
+            }
+        }
+    }
+
+    /// 이 내용에 걸리는 차단 키워드들
+    func blockedKeywords(in text: String) -> [String] {
+        let t = text.lowercased()
+        guard !t.isEmpty else { return [] }
+        return settings.keywords.filter { t.contains($0.lowercased()) }
+    }
+
+    func isDcconBlocked(_ key: String) -> Bool {
+        !key.isEmpty && settings.dccons.contains { $0.key == key }
+    }
+
+    func removeUser(_ u: BlockedUser) {
+        settings.users.removeAll { $0.id == u.id }
+    }
+
+    func removeDccon(key: String) {
+        settings.dccons.removeAll { $0.key == key }
+    }
+
+    func removeKeyword(_ word: String) {
+        settings.keywords.removeAll { $0.lowercased() == word.lowercased() }
     }
 
     func addKeyword(_ word: String) {

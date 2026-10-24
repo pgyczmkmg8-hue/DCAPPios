@@ -32,13 +32,16 @@ enum ContentScript {
       '.dcapp-hide{display:none!important}',
       '.dcapp-collapsed{position:relative!important;height:30px!important;min-height:0!important;max-height:30px!important;overflow:hidden!important;padding-top:0!important;padding-bottom:0!important}',
       '.dcapp-collapsed>*{visibility:hidden!important}',
-      '.dcapp-collapsed::after{content:attr(data-dcapp-label);visibility:visible;position:absolute;left:0;right:0;top:0;bottom:0;line-height:30px;padding:0 12px;font-size:12px;color:#8e8e93;background:rgba(142,142,147,.12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      // 안내 문구는 회색 칸 한가운데 (가로·세로 가운데 정렬)
+      '.dcapp-collapsed::after{content:attr(data-dcapp-label);visibility:visible;position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.2;padding:0 12px;font-size:12px;color:#8e8e93;background:rgba(142,142,147,.12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.dcapp-dccon-label{display:inline-flex;align-items:center;justify-content:center;min-width:90px;height:30px;padding:0 10px;font-size:12px;color:#8e8e93;background:rgba(142,142,147,.12);border-radius:6px;vertical-align:middle}',
       '.dcapp-dccon-off{display:none!important}',
       '.dcapp-home-off{display:none!important}',
       'html.dcapp-home-wait body{opacity:0!important}',
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       '[data-dcapp-unit],img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none}',
+      '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
       '.dcapp-dock-head{display:flex!important;align-items:center!important;justify-content:space-between!important;height:44px!important;padding:0 6px 0 16px!important;border-bottom:1px solid rgba(127,127,127,.18)!important;font-size:15px!important;color:#888!important}',
       '.dcapp-dock-close{width:44px!important;height:44px!important;font-size:22px!important;line-height:44px!important;color:#888!important;background:none!important;border:0!important;padding:0!important}',
@@ -388,8 +391,32 @@ enum ContentScript {
     if (on) doryItems().forEach(function (li) { li.classList.add('dcapp-dory'); });
   }
 
+  // ---------- 대댓글 입력칸을 일반 댓글칸과 같은 높이로 ----------
+  var mainCommentH = 0;
+  function sizeReplyBoxes() {
+    if (/\/write/.test(location.pathname)) return;
+    var main = document.getElementById('comment_memo') || document.querySelector('textarea.comment-caption');
+    var h = main ? main.getBoundingClientRect().height : 0;
+    if (h >= 60) mainCommentH = h;                        // 보이는 동안 재 둔 높이를 기억 (붙여 둔 동안 등 0일 때 대비)
+    var target = Math.round(mainCommentH || 100);
+    document.querySelectorAll('textarea').forEach(function (t) {
+      if (t === main || !isCommentField(t)) return;
+      if (t.getAttribute('data-dcapp-tall') === String(target)) return;
+      t.setAttribute('data-dcapp-tall', String(target));
+      t.style.setProperty('min-height', target + 'px', 'important');
+    });
+  }
+
+  function clearSelection() {
+    try {
+      var sel = window.getSelection();
+      if (sel && sel.rangeCount) sel.removeAllRanges();
+    } catch (e) {}
+  }
+
   function apply() {
     ensureStyle();
+    try { sizeReplyBoxes(); } catch (e) {}
     try { hideDory(); } catch (e) {}
     try { skipPwChange(); } catch (e) {}
     var enabled = cfg.enabled !== false;
@@ -404,9 +431,23 @@ enum ContentScript {
         if (body) body.classList.toggle('dcapp-hide', !!reason);
       }
     });
+    // 차단한 디시콘: '차단됨 표시'면 그 자리에 회색 안내 칸, '완전히 숨김'이면 흔적 없이
     document.querySelectorAll('img, video').forEach(function (m) {
       var k = dcconKey(m);
-      if (k) m.classList.toggle('dcapp-dccon-off', enabled && dset.has(k));
+      if (!k) return;
+      var off = enabled && dset.has(k);
+      m.classList.toggle('dcapp-dccon-off', off);
+      var prev = m.previousElementSibling;
+      var lab = prev && prev.classList.contains('dcapp-dccon-label') ? prev : null;
+      var wantLabel = off && mode !== 'remove';
+      if (wantLabel && !lab && m.parentNode) {
+        lab = document.createElement('span');
+        lab.className = 'dcapp-dccon-label';
+        lab.textContent = '차단한 디시콘';
+        m.parentNode.insertBefore(lab, m);
+      } else if (!wantLabel && lab) {
+        lab.parentNode.removeChild(lab);
+      }
     });
     if (enabled && cfg.hideBest) hideBestNotice();
     try { homeRankOnly(); } catch (e) {}
@@ -453,6 +494,8 @@ enum ContentScript {
         lp = null;
         suppressClickUntil = Date.now() + 800;
         post('longpress', describe(unitEl, target));
+        // 길게 누르면 iOS가 글자를 선택해 버림 → 메뉴가 뜬 뒤 선택 풀기 (선택은 누르기가 끝날 때 생겨서 몇 번 나눠서)
+        [60, 300, 700].forEach(function (ms) { setTimeout(clearSelection, ms); });
       }, 550)
     };
   }, { capture: true, passive: true });
@@ -1119,7 +1162,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v26-dory', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v29-blockview', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -1208,6 +1251,9 @@ enum ContentScript {
     var ct = document.querySelector('textarea');
     out.push('--- comment ---');
     out.push('first textarea: ' + (ct ? ct.outerHTML.slice(0, 200) + ' isComment=' + isCommentField(ct) : '(없음)'));
+    out.push('textareas: ' + Array.prototype.map.call(document.querySelectorAll('textarea'), function (t) {
+      return '#' + (t.id || '') + '.' + clsOf(t) + ' h=' + Math.round(t.getBoundingClientRect().height) + ' cmt=' + isCommentField(t);
+    }).join(' / '));
     if (ct && isCommentField(ct)) { var cc = commentContainer(ct); out.push('container: ' + cc.tagName + '.' + clsOf(cc) + ' #' + (cc.id || '')); }
     var wf = writeFields();
     out.push('--- write fields ---');
@@ -1241,7 +1287,15 @@ enum ContentScript {
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
 
   window.__dcapp = {
-    setConfig: function (c) { cfg = c || {}; apply(); return true; },
+    setConfig: function (c) {
+      cfg = c || {};
+      // 탭해서 펼쳐 본 글도 차단 설정이 바뀌면 다시 접히게 (펼친 뒤 다시 차단했을 때 바로 가려지도록)
+      document.querySelectorAll('[data-dcapp-revealed]').forEach(function (el) { el.removeAttribute('data-dcapp-revealed'); });
+      clearSelection();
+      apply();
+      return true;
+    },
+    clearSelection: function () { clearSelection(); return true; },
     setPickMode: function (on) { pick.on = !!on; clearPick(); return true; },
     setBlockPickMode: function (on) {
       blockPick = !!on;

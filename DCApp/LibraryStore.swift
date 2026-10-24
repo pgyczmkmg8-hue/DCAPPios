@@ -232,6 +232,12 @@ final class DraftStore: ObservableObject {
         save()
     }
 
+    /// 여러 개 한꺼번에 삭제 (불러오기 창의 '선택 → 삭제')
+    func remove(ids: Set<UUID>) {
+        drafts.removeAll { ids.contains($0.id) }
+        save()
+    }
+
     /// 이 갤러리 것 먼저, 그다음 나머지 (각각 최신순)
     func sorted(for galleryID: String?) -> [Draft] {
         guard let galleryID else { return drafts }

@@ -51,7 +51,13 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var progress: Double = 0
 
-    @Published var blockRequest: BlockRequest?
+    @Published var blockRequest: BlockRequest? {
+        didSet {   // 차단 메뉴가 닫히면 길게 누르며 생긴 글자 선택도 풀기
+            if blockRequest == nil, oldValue != nil {
+                webView.evaluateJavaScript("window.__dcapp && window.__dcapp.clearSelection(); true", completionHandler: nil)
+            }
+        }
+    }
     @Published var pickRequest: PickRequest?
     @Published var isPickMode = false
     @Published var isCapturing = false

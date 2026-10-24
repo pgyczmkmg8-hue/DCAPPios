@@ -243,71 +243,98 @@ struct DraftRow: View {
     }
 }
 
-struct DraftsList: View {
-    @ObservedObject private var store = DraftStore.shared
-    @EnvironmentObject private var router: AppRouter
-
-    var body: some View {
-        List {
-            ForEach(store.drafts) { d in
-                Button {
-                    router.openDraft(d)   // 홈 탭에서 글쓰기 화면을 열고 내용 채우기
-                } label: {
-                    DraftRow(draft: d)
-                }
-            }
-            .onDelete { store.remove(at: $0) }
-        }
-        .overlay {
-            if store.drafts.isEmpty {
-                ContentUnavailableView(
-                    "임시저장한 글이 없어요",
-                    systemImage: "doc.text",
-                    description: Text("글쓰기 화면 아래 '임시저장'을 누르거나,\n쓰는 동안 15초마다 자동으로 저장돼요.")
-                )
-            }
-        }
-    }
-}
-
 /// 글쓰기 화면에서 '불러오기'를 누르면 뜨는 시트
+/// 누르면 불러오기 / 왼쪽으로 밀어 삭제 / '선택'으로 여러 개 골라 삭제 (모두 선택 가능)
 struct DraftPickerSheet: View {
     let galleryID: String?
     let onPick: (Draft) -> Void
     @ObservedObject private var store = DraftStore.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var editMode: EditMode = .inactive
+    @State private var selection = Set<UUID>()
+    @State private var confirmDelete = false
+
+    private var list: [Draft] { store.sorted(for: galleryID) }
+    private var editing: Bool { editMode.isEditing }
+    private var allSelected: Bool { !list.isEmpty && selection.count == list.count }
 
     var body: some View {
         NavigationStack {
-            List {
+            List(selection: $selection) {
                 Section {
-                    ForEach(store.sorted(for: galleryID)) { d in
-                        Button {
-                            onPick(d)
-                            dismiss()
-                        } label: {
-                            DraftRow(draft: d)
+                    ForEach(list) { d in
+                        Group {
+                            if editing {
+                                DraftRow(draft: d)        // 선택 중에는 눌러도 불러오지 않고 체크만
+                            } else {
+                                Button {
+                                    onPick(d)
+                                    dismiss()
+                                } label: {
+                                    DraftRow(draft: d)
+                                }
+                            }
                         }
+                        .tag(d.id)
                     }
                     .onDelete { offsets in
-                        let list = store.sorted(for: galleryID)
-                        for i in offsets { store.remove(list[i]) }
+                        let current = list
+                        for i in offsets { store.remove(current[i]) }
                     }
                 } footer: {
-                    if !store.drafts.isEmpty {
+                    if !store.drafts.isEmpty && !editing {
                         Text("불러오면 지금 쓰고 있는 제목과 본문이 덮어써져요.")
                     }
                 }
             }
+            .environment(\.editMode, $editMode)
             .overlay {
                 if store.drafts.isEmpty {
                     ContentUnavailableView("임시저장한 글이 없어요", systemImage: "doc.text")
                 }
             }
-            .navigationTitle("임시저장 불러오기")
+            .navigationTitle(editing ? (selection.isEmpty ? "삭제할 글 선택" : "\(selection.count)개 선택됨") : "임시저장 불러오기")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    if editing {
+                        Button(allSelected ? "선택 해제" : "모두 선택") {
+                            selection = allSelected ? [] : Set(list.map(\.id))
+                        }
+                    } else {
+                        Button("닫기") { dismiss() }
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if !store.drafts.isEmpty || editing {
+                        Button(editing ? "완료" : "선택") {
+                            withAnimation {
+                                editMode = editing ? .inactive : .active
+                                selection = []
+                            }
+                        }
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    if editing {
+                        Button(role: .destructive) {
+                            confirmDelete = true
+                        } label: {
+                            Text(selection.isEmpty ? "삭제" : "삭제 (\(selection.count))")
+                        }
+                        .tint(.red)
+                        .disabled(selection.isEmpty)
+                    }
+                }
+            }
+            .confirmationDialog("선택한 임시저장 글 \(selection.count)개를 삭제할까요?",
+                                isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("삭제", role: .destructive) {
+                    store.remove(ids: selection)
+                    selection = []
+                    if store.drafts.isEmpty { editMode = .inactive }
+                }
+                Button("취소", role: .cancel) {}
             }
         }
         .presentationDetents([.medium, .large])

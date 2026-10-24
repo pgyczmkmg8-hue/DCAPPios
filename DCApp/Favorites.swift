@@ -122,7 +122,6 @@ final class FavoritesStore: ObservableObject {
 enum LibrarySection: String, CaseIterable, Identifiable {
     case visited = "방문한 갤러리"
     case galleries = "즐겨찾기"
-    case drafts = "임시저장"
     var id: Self { self }
 }
 
@@ -219,7 +218,7 @@ struct VisitedGalleriesList: View {
     }
 }
 
-/// 하단 바 "갤러리": 방문한 갤러리 / 즐겨찾는 갤러리 / 임시저장
+/// 하단 바 "갤러리": 방문한 갤러리 / 즐겨찾는 갤러리 (임시저장은 글쓰기 화면의 '불러오기'에서)
 struct FavoritesView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
@@ -239,7 +238,6 @@ struct FavoritesView: View {
                     switch section {
                     case .visited: VisitedGalleriesList()
                     case .galleries: galleriesList
-                    case .drafts: DraftsList()
                     }
                 }
             }

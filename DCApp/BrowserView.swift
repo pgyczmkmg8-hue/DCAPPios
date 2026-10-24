@@ -308,14 +308,14 @@ struct BrowserView: View {
     /// 차단 메뉴 / 요소 숨기기 확인
     private var layer2: some View {
         layer1
-            .confirmationDialog("차단",
+            .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제" : "차단",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
                                 titleVisibility: .visible,
                                 presenting: model.blockRequest) { req in
                 blockButtons(req)
             } message: { req in
-                Text(req.snippet.isEmpty ? "무엇을 차단할까요?" : req.snippet)
+                Text(req.snippet.isEmpty ? (isAlreadyBlocked(req) ? "차단을 풀까요?" : "무엇을 차단할까요?") : req.snippet)
             }
             .background {
                 // 요소 숨기기 확인 (다이얼로그끼리 겹치지 않게 별도 레이어에 부착)
@@ -919,8 +919,48 @@ struct BrowserView: View {
 
     // MARK: - 차단 메뉴 버튼
 
+    /// 길게 누른 대상이 이미 차단돼 있는지 (그러면 차단 대신 해제를 물음 — 실수로 차단했을 때 바로 되돌리기)
+    private func isAlreadyBlocked(_ req: BlockRequest) -> Bool {
+        !filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick).isEmpty
+            || filters.isDcconBlocked(req.dcconKey)
+            || !filters.blockedKeywords(in: req.snippet).isEmpty
+    }
+
     @ViewBuilder
     private func blockButtons(_ req: BlockRequest) -> some View {
+        if isAlreadyBlocked(req) {
+            unblockButtons(req)
+        } else {
+            newBlockButtons(req)
+        }
+    }
+
+    @ViewBuilder
+    private func unblockButtons(_ req: BlockRequest) -> some View {
+        ForEach(filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick)) { u in
+            let who = u.memo.isEmpty ? u.value : "\(u.memo) (\(u.value))"
+            Button("\(u.kind.label) 차단 해제: \(who)") {
+                filters.removeUser(u)
+                model.showToast("\(u.memo.isEmpty ? u.value : u.memo) 차단을 풀었어요")
+            }
+        }
+        if filters.isDcconBlocked(req.dcconKey) {
+            Button("디시콘 차단 해제") {
+                filters.removeDccon(key: req.dcconKey)
+                model.showToast("디시콘 차단을 풀었어요")
+            }
+        }
+        ForEach(filters.blockedKeywords(in: req.snippet), id: \.self) { w in
+            Button("키워드 차단 해제: \(w)") {
+                filters.removeKeyword(w)
+                model.showToast("'\(w)' 키워드 차단을 풀었어요")
+            }
+        }
+        Button("취소", role: .cancel) {}
+    }
+
+    @ViewBuilder
+    private func newBlockButtons(_ req: BlockRequest) -> some View {
         let name = req.nick.isEmpty ? "작성자" : req.nick
         if !req.userID.isEmpty {
             Button("유저 차단: \(name) (\(req.userID))", role: .destructive) {

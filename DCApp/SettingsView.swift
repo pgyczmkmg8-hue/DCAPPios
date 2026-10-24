@@ -214,7 +214,7 @@ struct SettingsView: View {
                 // 차단
                 Section {
                     Toggle("차단 기능 사용", isOn: $filters.settings.enabled)
-                    Picker("차단된 글 표시", selection: $filters.settings.display) {
+                    Picker("차단된 글·댓글·디시콘", selection: $filters.settings.display) {
                         ForEach(BlockDisplay.allCases) { Text($0.label).tag($0) }
                     }
                     NavigationLink { BlockedUsersView() } label: {
@@ -229,7 +229,7 @@ struct SettingsView: View {
                 } header: {
                     Text("차단")
                 } footer: {
-                    Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '접어서 표시'일 때는 가려진 줄을 탭하면 내용을 볼 수 있어요.")
+                    Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
                 }
 
                 // 화면 정리
