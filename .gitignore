@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Xcode 사용자별 설정 (창 배치, 중단점 등)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# 빌드 결과물
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
