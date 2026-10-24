@@ -685,6 +685,20 @@ enum ContentScript {
     }
     return { title: title, body: body, html: html };
   }
+  /// 글쓰기 제목 칸에 커서 (칸이 늦게 생기면 잠깐 기다렸다가 다시)
+  function focusTitle(tries) {
+    tries = tries || 0;
+    var f = writeFields();
+    if (!f.title) {
+      if (tries < 10) setTimeout(function () { focusTitle(tries + 1); }, 300);
+      return 'waiting';
+    }
+    // 이미 포커스가 있으면 다시 focus()해도 키보드를 띄우는 처리가 안 일어나서, 한 번 풀었다가 다시
+    if (document.activeElement === f.title) f.title.blur();
+    f.title.focus();
+    try { f.title.scrollIntoView({ block: 'center' }); } catch (e) {}
+    return 'focused';
+  }
   function getDraft() {
     var f = writeFields();
     return {
@@ -1254,6 +1268,7 @@ enum ContentScript {
     lastTouchInHScroll: function () { return lastTouchInHScroll; },
     refreshComments: refreshComments,
     headTabs: headTabs,
+    focusTitle: focusTitle,
     submitWrite: submitWrite,
     scrollToComments: scrollToComments,
     prepareCapture: prepareCapture,

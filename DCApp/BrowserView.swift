@@ -788,7 +788,10 @@ struct BrowserView: View {
                 }
             }
             barItem("square.and.pencil", "square.and.pencil", "글쓰기", selected: section == .write, enabled: g != nil) {
-                if let g { model.load(g.writeURL) }
+                if let g {
+                    model.focusTitleOnWrite = true      // 열리면 제목 칸에 바로 키보드
+                    model.load(g.writeURL)
+                }
             }
         }
         .padding(6)

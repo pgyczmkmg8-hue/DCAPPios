@@ -61,6 +61,10 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var isBlockPickMode = false
     @Published var isWritePage = false
     var pendingDraft: Draft?
+    /// 하단 바 '글쓰기'로 들어왔으면, 글쓰기 화면이 열린 뒤 제목 칸에 커서+키보드
+    var focusTitleOnWrite = false
+    /// 키보드가 떠 있는지 (제목 칸 포커스가 먹혔는지 확인용)
+    private var keyboardUp = false
     @Published var toast: String?
     private var toastTask: Task<Void, Never>?
 
@@ -84,6 +88,7 @@ final class WebViewModel: NSObject, ObservableObject {
         // 아이패드에서도 PC판이 아닌 모바일 디시를 받도록 (차단·자짤 등 기능이 모바일 페이지 기준)
         config.defaultWebpagePreferences.preferredContentMode = .mobile
 
+        FocusUnlock.install()
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
 
@@ -138,6 +143,13 @@ final class WebViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
+            .sink { [weak self] _ in Task { @MainActor in self?.keyboardUp = true } }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
+            .sink { [weak self] _ in Task { @MainActor in self?.keyboardUp = false } }
+            .store(in: &cancellables)
+
         // 차단 목록이 바뀌면 바로 반영
         NotificationCenter.default.publisher(for: DC.filtersChanged)
             .receive(on: DispatchQueue.main)
@@ -181,6 +193,14 @@ final class WebViewModel: NSObject, ObservableObject {
         return SavedPostStore.postInfo(url) == nil && AutoImageStore.writeGalleryID(from: url) == nil
     }
 
+    /// 지금 목록의 페이지 번호 (주소의 page=, 없으면 1)
+    private var listPageNumber: Int {
+        guard let url = webView.url,
+              let v = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "page" })?.value,
+              let n = Int(v) else { return 1 }
+        return n
+    }
+
     static var customSwipeEnabled: Bool {
         UserDefaults.standard.object(forKey: "fullSwipeBack") as? Bool ?? true
     }
@@ -206,8 +226,8 @@ final class WebViewModel: NSObject, ObservableObject {
         let th = Self.swipeThresholds
         guard t.x > abs(t.y) * th.ratio,
               t.x > th.distance || (t.x > th.distance / 2 && v.x > th.flickSpeed) else { return }
-        // 갤러리 목록 화면이면 → 뒤로가기 대신 "갤러리" 창 열기 (글 보는 중일 때만 뒤로가기)
-        let openGalleries = isGalleryListPage && onGallerySwipe != nil &&
+        // 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터·글 보는 중에는 뒤로가기)
+        let openGalleries = isGalleryListPage && listPageNumber <= 1 && onGallerySwipe != nil &&
             (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
         guard openGalleries || webView.canGoBack else { return }
         Task {
@@ -651,6 +671,25 @@ extension WebViewModel: WKNavigationDelegate {
                     restoreDraft(d)
                 }
             }
+            if focusTitleOnWrite {
+                focusTitleOnWrite = false
+                let page = webView.url
+                Task {
+                    try? await Task.sleep(for: .milliseconds(400))   // 자짤 첨부 등이 먼저 끝나도록
+                    // 키보드가 실제로 올라올 때까지 몇 번 다시 시도 (페이지 스크립트가 포커스를 뺏거나, 칸이 늦게 생기는 경우)
+                    for attempt in 0..<8 {
+                        guard webView.url == page, !keyboardUp else { break }
+                        // 갤러리 창·하단 바처럼 앱 버튼으로만 이동해 와서 웹뷰를 한 번도 안 눌렀으면
+                        // 웹뷰가 입력 대상(first responder)이 아니라서 키보드가 안 뜸 → 먼저 웹뷰를 입력 대상으로
+                        if attempt == 0 { webView.becomeFirstResponder() }
+                        FocusUnlock.allow(for: 1.5)
+                        await call("return window.__dcapp ? window.__dcapp.focusTitle() : 'none';")
+                        try? await Task.sleep(for: .milliseconds(600))
+                    }
+                }
+            }
+        } else {
+            focusTitleOnWrite = false
         }
         lastHost = host
     }
