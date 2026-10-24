@@ -270,9 +270,16 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
+            // 듀오를 펼쳤을 때 오른쪽(시계·카메라 줄) 안전 영역까지 웹페이지가 쓰도록
+            .ignoresSafeArea(.container, edges: .horizontal)
+            // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
+            // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
+            .background {
+                DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .horizontal])
+            }
             .overlay(alignment: .top) { topOverlay }
             .overlay(alignment: .bottomTrailing) {
-                if showsMenuButton && showFloatingBar && !keyboardVisible { floatingButtons }
+                if showsMenuButton && showFloatingBar && !keyboardVisible { floatingButtonsPlaced }
             }
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
@@ -611,7 +618,7 @@ struct BrowserView: View {
                 }
                 .noGlassBackground()
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 14) {
+                    HStack(spacing: 6) {
                         Button("임시저장") { Task { await model.saveDraftManually() } }
                         Button("불러오기") { showDraftPicker = true }
                     }
@@ -662,6 +669,36 @@ struct BrowserView: View {
 
     // MARK: - 오른쪽 아래 세로 버튼 (한손 모드 / ⋮ 메뉴 / 댓글 새로고침)
 
+    /// 세로 버튼 위치: 보통은 웹페이지 오른쪽 아래.
+    /// 듀오처럼 오른쪽에 넓은 안전 영역(시계·카메라 줄)이 있으면 그 빈 줄의 맨 아래(하단 바 옆)에 넣음
+    private var floatingButtonsPlaced: some View {
+        GeometryReader { g in
+            let side = g.safeAreaInsets.trailing
+            if side >= 56 {
+                ZStack(alignment: .bottom) {
+                    Color.clear.allowsHitTesting(false)
+                    floatingButtons
+                        .padding(.bottom, Self.windowBottomInset + 6)
+                }
+                .frame(width: side)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .ignoresSafeArea(.container, edges: [.trailing, .bottom])
+            } else {
+                floatingButtons
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            }
+        }
+    }
+
+    /// 홈 인디케이터 등 기기 아래쪽 안전 영역 높이
+    private static var windowBottomInset: CGFloat {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        return scene?.windows.first(where: \.isKeyWindow)?.safeAreaInsets.bottom
+            ?? scene?.windows.first?.safeAreaInsets.bottom ?? 0
+    }
+
     private var floatingButtons: some View {
         VStack(spacing: 2) {
             // 1. 한손 모드 켜기/끄기
@@ -684,8 +721,6 @@ struct BrowserView: View {
         }
         .padding(4)
         .glassBar()
-        .padding(.trailing, 12)
-        .padding(.bottom, 16)
     }
 
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }

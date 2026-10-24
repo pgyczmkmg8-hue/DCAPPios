@@ -21,7 +21,7 @@ struct BackupFile: Codable {
 @MainActor
 enum BackupManager {
     /// 앱 설정 스위치들 (UserDefaults)
-    static let prefKeys = ["autoLogin", "dockComment", "fullSwipeBack", "hideSiteHeader", "homeRankOnly", "showFloatingBar", "adFilter"]
+    static let prefKeys = ["autoLogin", "dockComment", "fullSwipeBack", "hideSiteHeader", "homeRankOnly", "showFloatingBar", "adFilter", "hideDory"]
 
     static func makeBackup(favorites: FavoritesStore, includeArchives: Bool, includeImages: Bool) throws -> URL {
         let posts = SavedPostStore.shared

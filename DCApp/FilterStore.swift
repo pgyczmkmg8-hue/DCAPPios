@@ -120,6 +120,7 @@ final class FilterStore: ObservableObject {
             "dockComment": UserDefaults.standard.object(forKey: "dockComment") as? Bool ?? true,
             "hideHeader": UserDefaults.standard.object(forKey: "hideSiteHeader") as? Bool ?? true,
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
+            "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return "{}" }

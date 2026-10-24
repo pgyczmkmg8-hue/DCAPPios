@@ -39,6 +39,7 @@ enum ContentScript {
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       '[data-dcapp-unit],img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none}',
+      '.dcapp-dory{display:none!important}',
       '.dcapp-dock-head{display:flex!important;align-items:center!important;justify-content:space-between!important;height:44px!important;padding:0 6px 0 16px!important;border-bottom:1px solid rgba(127,127,127,.18)!important;font-size:15px!important;color:#888!important}',
       '.dcapp-dock-close{width:44px!important;height:44px!important;font-size:22px!important;line-height:44px!important;color:#888!important;background:none!important;border:0!important;padding:0!important}',
       '.dcapp-docked{position:fixed!important;left:0!important;right:0!important;bottom:auto!important;width:auto!important;max-width:none!important;margin:0!important;z-index:2147483000!important;max-height:60vh!important;overflow-y:auto!important;box-shadow:0 -4px 14px rgba(0,0,0,.14)!important;box-sizing:border-box!important;transform:none!important}'
@@ -343,11 +344,23 @@ enum ContentScript {
       return PW_SKIP_RE.test((txt(b) || b.value || '').replace(/\s/g, ''));
     });
   }
+  /// 버튼 주변(가까운 조상 5단계 안)에 '비밀번호 … 변경' 문구가 있어야 진짜 안내창으로 봄
+  /// (글 화면에 숨어 있는 부매니저 임명 팝업의 '다음에 다시 확인' 같은 버튼을 잘못 누르지 않도록)
+  function pwNagButton() {
+    return pwSkipButtons().filter(function (b) {
+      if (!visible(b)) return false;
+      if (b.closest && b.closest('[id*="appoint"]')) return false;
+      for (var el = b.parentElement, up = 0; el && el !== document.body && up < 5; el = el.parentElement, up++) {
+        var t = txt(el);
+        if (t.length > 600) break;
+        if (/비밀번호/.test(t) && /변경/.test(t)) return true;
+      }
+      return false;
+    })[0] || null;
+  }
   function skipPwChange() {
     if (cfg.skipPwChange === false || !/(^|\.)dcinside\.com$/.test(location.hostname)) return;
-    var t = txt(document.body);
-    if (!/비밀번호/.test(t) || !/변경/.test(t)) return;
-    var b = pwSkipButtons().filter(visible)[0] || pwSkipButtons()[0];
+    var b = pwNagButton();
     if (!b) return;
     var key = 'dcapp-pwskip', last = 0;
     try { last = +(sessionStorage.getItem(key) || 0); } catch (e) {}
@@ -357,8 +370,27 @@ enum ContentScript {
     post('pwskip', { label: txt(b) || b.value || '' });
   }
 
+  // ---------- 댓글돌이 (뉴스 링크를 다는 자동 댓글 봇) ----------
+  // 만두 모양 아이콘(클래스나 그림 주소에 dory)으로만 구분 → 그 댓글 칸(li)을 숨김
+  // (닉네임만 '댓글돌이'인 사람은 숨기지 않음)
+  function doryItems() {
+    var out = [];
+    function add(el) {
+      var li = el && el.closest ? el.closest('li') : null;
+      if (li && out.indexOf(li) < 0) out.push(li);
+    }
+    document.querySelectorAll('[class*="dory"], img[src*="dory"]').forEach(add);
+    return out;
+  }
+  function hideDory() {
+    var on = cfg.hideDory !== false;
+    document.querySelectorAll('.dcapp-dory').forEach(function (el) { if (!on) el.classList.remove('dcapp-dory'); });
+    if (on) doryItems().forEach(function (li) { li.classList.add('dcapp-dory'); });
+  }
+
   function apply() {
     ensureStyle();
+    try { hideDory(); } catch (e) {}
     try { skipPwChange(); } catch (e) {}
     var enabled = cfg.enabled !== false;
     var mode = cfg.mode || 'collapse';
@@ -1073,12 +1105,19 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v25-adnoti', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v26-dory', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
     out.push('units: ' + JSON.stringify(counts));
     units.slice(0, 4).forEach(function (u) { out.push('identity[' + u.kind + ']: ' + JSON.stringify(identity(u))); });
+    var dory = doryItems();
+    out.push('댓글돌이(아이콘 기준): ' + dory.length + '개');
+    // 아이콘 이름 확인용: 닉네임이 '댓글돌이'인 칸의 HTML (숨기지는 않음)
+    var named = Array.prototype.filter.call(document.querySelectorAll('.nick, [class*="nick"], button, strong, b, span'), function (n) {
+      return /^댓글\s*돌이$/.test(txt(n));
+    }).map(function (n) { return n.closest('li') || n.parentElement; })[0];
+    if (named) out.push('닉네임 댓글돌이 칸: ' + named.outerHTML.replace(/\s+/g, ' ').slice(0, 500));
     function snap(label, el, max) {
       out.push('--- ' + label + ' ---');
       out.push(el ? el.outerHTML.replace(/\s+/g, ' ').slice(0, max || 2000) : '(없음)');
@@ -1117,11 +1156,12 @@ enum ContentScript {
       out.push('[' + n.t + '] ' + n.kind + ' ' + n.method + ' ' + n.status + ' ' + n.url);
       if (n.body) out.push('    → ' + n.body);
     });
-    if (isLoginPage() || /비밀번호/.test(txt(document.body))) {
+    if (isLoginPage() || pwNagButton()) {
       out.push('--- 로그인/비번 페이지 --- ' + txt(document.body).slice(0, 300));
       out.push('buttons: ' + Array.prototype.filter.call(document.querySelectorAll('button, a, input[type="button"], input[type="submit"], [role="button"]'), visible)
         .map(function (b) { return (txt(b) || b.value || '').slice(0, 20) + '(' + b.tagName + '.' + clsOf(b) + ')'; }).slice(0, 30).join(' , '));
-      out.push('skip 후보: ' + pwSkipButtons().map(function (b) { return txt(b) || b.value; }).join(' / '));
+      out.push('skip 후보: ' + pwSkipButtons().map(function (b) { return txt(b) || b.value; }).join(' / ') +
+               ' → 누를 것: ' + (pwNagButton() ? txt(pwNagButton()) : '(없음)'));
     }
     out.push('--- 알림 관련 링크/요소 ---');
     Array.prototype.slice.call(document.querySelectorAll('a[href*="alarm"], a[href*="noti"], [class*="alarm"], [class*="bell"], [onclick*="alarm"], [onclick*="noti"]'), 0, 12).forEach(function (el) {

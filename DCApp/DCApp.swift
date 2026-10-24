@@ -105,10 +105,12 @@ struct RootView: View {
     private static let maxTopRatio = 0.6
     private static let exitHoldDelay: Duration = .milliseconds(300)
 
+    /// 앱 창의 실제 높이 (UIScreen.main은 화면이 두 개인 기기(듀오)에서 엉뚱한 화면을 줄 수 있어서 창 크기를 직접 잼)
+    @State private var windowHeight: CGFloat = 800
+
     /// 한손 모드에서 비워둘 위쪽 높이 (상태바 포함)
     private var topGap: CGFloat {
-        let screen = UIScreen.main.bounds.height
-        return compactMode ? screen * topRatio : 0
+        compactMode ? windowHeight * topRatio : 0
     }
 
     var body: some View {
@@ -137,6 +139,14 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea()
             }
+        }
+        .background {
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { windowHeight = g.size.height }
+                    .onChange(of: g.size.height) { _, h in windowHeight = h }
+            }
+            .ignoresSafeArea()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardVisible = true
@@ -180,7 +190,7 @@ struct RootView: View {
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { v in
                         guard compactMode else { return }
-                        let screen = UIScreen.main.bounds.height
+                        let screen = max(windowHeight, 1)
                         if dragStartRatio == nil { dragStartRatio = topRatio }
                         let next = (dragStartRatio ?? topRatio) + Double(v.translation.height / screen)
                         topRatio = min(Self.maxTopRatio, max(Self.minTopRatio, next))

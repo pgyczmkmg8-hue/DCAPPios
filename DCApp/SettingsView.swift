@@ -25,6 +25,7 @@ struct SettingsView: View {
     @AppStorage("homeRankOnly") private var homeRankOnly = true
     @AppStorage("showFloatingBar") private var showFloatingBar = true
     @AppStorage("adFilter") private var adFilter = true
+    @AppStorage("hideDory") private var hideDory = true
     @AppStorage(DCNotify.enabledKey) private var notifyEnabled = false
     @State private var notifyResult: String?
     @State private var notifyChecking = false
@@ -147,6 +148,10 @@ struct SettingsView: View {
                         }
                     Toggle("광고 차단 (애드가드 갤러리 필터)", isOn: $adFilter)
                         .onChange(of: adFilter) { _, _ in
+                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                        }
+                    Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)
+                        .onChange(of: hideDory) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }
                     Toggle("오른쪽 세로 버튼 막대 보기", isOn: $showFloatingBar)

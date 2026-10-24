@@ -246,11 +246,26 @@ final class WebViewModel: NSObject, ObservableObject {
         // 알림 주소 찾기용 네트워크 기록 (페이지 맨 처음에 넣어야 처음부터 기록됨)
         controller.addUserScript(WKUserScript(source: ContentScript.netLog, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        // 웹페이지가 화면 옆 안전 영역(듀오의 시계·카메라 줄)을 비워두지 않고 끝까지 쓰도록
+        controller.addUserScript(WKUserScript(source: Self.viewportFitCover, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         // 광고 차단 (애드가드 갤러리 필터의 디시 규칙) — 광고가 잠깐 보이지 않도록 페이지 맨 처음에
         if UserDefaults.standard.object(forKey: "adFilter") as? Bool ?? true {
             controller.addUserScript(WKUserScript(source: ContentScript.adFilter, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
     }
+
+    private static let viewportFitCover = #"""
+(function () {
+  var m = document.querySelector('meta[name="viewport"]');
+  if (!m) {
+    m = document.createElement('meta');
+    m.name = 'viewport';
+    m.content = 'width=device-width, initial-scale=1';
+    (document.head || document.documentElement).appendChild(m);
+  }
+  if (!/viewport-fit/.test(m.content)) m.content += ', viewport-fit=cover';
+})();
+"""#
 
     func applyFilters() {
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
