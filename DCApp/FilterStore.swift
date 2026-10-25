@@ -18,7 +18,8 @@ struct BlockedUser: Codable, Hashable, Identifiable {
     var kind: Kind
     var value: String
     var memo: String          // 차단할 때의 닉네임 (표시용)
-    var id: String { "\(kind.rawValue):\(value)" }
+    var gallery: String? = nil   // 이 갤러리에서만 차단 (nil = 모든 갤러리)
+    var id: String { "\(kind.rawValue):\(value)@\(gallery ?? "*")" }
 }
 
 struct BlockedDccon: Codable, Hashable, Identifiable {
@@ -82,10 +83,12 @@ final class FilterStore: ObservableObject {
 
     // MARK: 추가
 
-    func addUser(kind: BlockedUser.Kind, value: String, memo: String = "") {
+    /// gallery가 있으면 그 갤러리에서만, nil이면 모든 갤러리에서 차단
+    func addUser(kind: BlockedUser.Kind, value: String, memo: String = "", gallery: String? = nil) {
         let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !v.isEmpty, !settings.users.contains(where: { $0.kind == kind && $0.value == v }) else { return }
-        settings.users.append(BlockedUser(kind: kind, value: v, memo: memo))
+        guard !v.isEmpty,
+              !settings.users.contains(where: { $0.kind == kind && $0.value == v && $0.gallery == gallery }) else { return }
+        settings.users.append(BlockedUser(kind: kind, value: v, memo: memo, gallery: gallery))
     }
 
     func addDccon(key: String, imageURL: String) {
@@ -96,12 +99,14 @@ final class FilterStore: ObservableObject {
     // MARK: 길게 눌렀을 때 이미 차단된 대상인지 / 해제
 
     /// 이 글·댓글 작성자에게 걸려 있는 유저 차단들
-    func blockedUsers(id: String, ip: String, nick: String) -> [BlockedUser] {
-        settings.users.filter {
-            switch $0.kind {
-            case .id: !id.isEmpty && $0.value == id
-            case .ip: !ip.isEmpty && $0.value == ip
-            case .nick: !nick.isEmpty && $0.value == nick
+    /// gallery: 지금 보고 있는 갤러리 (그 갤러리 전용 차단 + 모든 갤러리 차단이 해당)
+    func blockedUsers(id: String, ip: String, nick: String, gallery: String?) -> [BlockedUser] {
+        settings.users.filter { u in
+            guard u.gallery == nil || u.gallery == gallery else { return false }
+            switch u.kind {
+            case .id: return !id.isEmpty && u.value == id
+            case .ip: return !ip.isEmpty && u.value == ip
+            case .nick: return !nick.isEmpty && u.value == nick
             }
         }
     }
@@ -148,7 +153,7 @@ final class FilterStore: ObservableObject {
         let dict: [String: Any] = [
             "enabled": s.enabled,
             "mode": s.display.rawValue,
-            "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value] },
+            "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value, "g": $0.gallery ?? ""] },
             "dccons": s.dccons.map(\.key),
             "keywords": s.keywords.map { $0.lowercased() },
             "selectors": s.hiddenElements.map(\.selector),
@@ -158,6 +163,7 @@ final class FilterStore: ObservableObject {
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
             "myId": CredentialStore.currentAccountID ?? "",
+            "memos": MemoStore.shared.memos.map { ["k": $0.kind.rawValue, "v": $0.value, "t": $0.text, "g": $0.gallery ?? ""] },   // 유저 메모
             "anon": ["nick": AnonStore.nick, "pw": AnonStore.password],   // 유동 닉/비번 자동 채우기
             "tint": (DCTheme.current.pageTint as Any?) ?? NSNull(),   // 웹페이지 속 디시 파란색 → 테마 색   // 내 글·댓글 닉네임 형광펜용
         ]

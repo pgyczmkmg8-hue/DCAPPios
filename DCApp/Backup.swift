@@ -15,6 +15,7 @@ struct BackupFile: Codable {
     var autoImageFiles: [String: Data]?    // 자짤 사진 (파일 이름 → 내용)
     var prefs: [String: Bool]
     var stringPrefs: [String: String]? = nil     // 테마 등 (예전 백업에는 없음)
+    var memos: [UserMemo]? = nil                 // 유저 메모 (예전 백업에는 없음)
     var recentSearches: [String]
     var visited: [VisitedGallery]? = nil
 }
@@ -69,6 +70,7 @@ enum BackupManager {
             stringPrefs: Dictionary(uniqueKeysWithValues: stringPrefKeys.compactMap { k in
                 UserDefaults.standard.string(forKey: k).map { (k, $0) }
             }),
+            memos: MemoStore.shared.memos,
             recentSearches: UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [],
             visited: VisitedStore.shared.items
         )
@@ -121,6 +123,7 @@ enum BackupManager {
         for (k, v) in b.stringPrefs ?? [:] { UserDefaults.standard.set(v, forKey: k) }
         UserDefaults.standard.set(b.recentSearches, forKey: "recentSearches")
         if let v = b.visited { VisitedStore.shared.replaceAll(v) }
+        if let m = b.memos { MemoStore.shared.replaceAll(m) }
 
         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
     }

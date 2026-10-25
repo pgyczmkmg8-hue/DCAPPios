@@ -246,6 +246,9 @@ struct SettingsView: View {
                     NavigationLink { KeywordsView() } label: {
                         LabeledContent("차단 키워드", value: "\(filters.settings.keywords.count)")
                     }
+                    NavigationLink { MemoListView() } label: {
+                        LabeledContent("유저 메모", value: "\(MemoStore.shared.memos.count)")
+                    }
                 } header: {
                     Text("차단")
                 } footer: {
@@ -395,7 +398,7 @@ struct BlockedUsersView: View {
                 ForEach(filters.settings.users) { u in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(u.memo.isEmpty ? u.value : u.memo)
-                        Text("\(u.kind.label) · \(u.value)")
+                        Text("\(u.kind.label) · \(u.value) · \(u.gallery.map { "\($0) 갤러리만" } ?? "모든 갤러리")")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

@@ -250,6 +250,12 @@ struct BrowserView: View {
     @State private var showUserPrompt = false
     @State private var userInput = ""
 
+    // 유저 메모 입력 (길게 누르기 → 메모)
+    @State private var memoTarget: (kind: BlockedUser.Kind, value: String, nick: String, existing: UserMemo?)?
+    // 차단 범위 고르기 (이 갤러리만 / 모든 갤러리)
+    @State private var pendingBlock: (kind: BlockedUser.Kind, value: String, nick: String, label: String)?
+    @State private var memoInput = ""
+
     // 키워드 차단 입력
     @State private var showKeywordPrompt = false
     @State private var keywordInput = ""
@@ -433,9 +439,43 @@ struct BrowserView: View {
             }
     }
 
-    /// 캡처 / 보관 폴더 고르기
+    private func saveMemo(gallery: String?) {
+        guard let t = memoTarget else { return }
+        MemoStore.shared.set(kind: t.kind, value: t.value, text: memoInput, gallery: gallery, replacing: t.existing)
+        let empty = memoInput.trimmingCharacters(in: .whitespaces).isEmpty
+        model.showToast(empty ? "메모를 지웠어요" : (gallery == nil ? "메모를 남겼어요 (모든 갤러리)" : "메모를 남겼어요 (이 갤러리)"))
+    }
+
+    /// 캡처 / 보관 폴더 고르기 / 유저 메모 / 차단 범위
     private var layer4: some View {
         layer3
+            .confirmationDialog("어디서 가릴까요?",
+                                isPresented: Binding(get: { pendingBlock != nil }, set: { if !$0 { pendingBlock = nil } }),
+                                titleVisibility: .visible) {
+                if let b = pendingBlock {
+                    Button("이 갤러리(\(gallery?.name ?? currentGallery?.id ?? ""))에서만", role: .destructive) {
+                        filters.addUser(kind: b.kind, value: b.value, memo: b.nick, gallery: currentGallery?.id)
+                        model.showToast("\(b.label) 차단했어요 (이 갤러리)")
+                    }
+                    Button("모든 갤러리에서", role: .destructive) {
+                        filters.addUser(kind: b.kind, value: b.value, memo: b.nick)
+                        model.showToast("\(b.label) 차단했어요 (모든 갤러리)")
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            }
+            .alert("유저 메모", isPresented: Binding(get: { memoTarget != nil }, set: { if !$0 { memoTarget = nil } })) {
+                TextField("메모 (비우면 삭제)", text: $memoInput)
+                if let gid = currentGallery?.id {
+                    Button("이 갤러리에만 저장") { saveMemo(gallery: gid) }
+                }
+                Button(currentGallery == nil ? "저장" : "모든 갤러리에 저장") { saveMemo(gallery: nil) }
+                Button("취소", role: .cancel) {}
+            } message: {
+                if let t = memoTarget {
+                    Text("\(t.nick.isEmpty ? "" : t.nick + " · ")\(t.kind.label) \(t.value)\n닉네임 옆에 보여요.")
+                }
+            }
             .sheet(item: $model.captured) { CapturePreview(capture: $0) }
             .confirmationDialog("어느 폴더에 보관할까요?", isPresented: $showSaveFolderPicker, titleVisibility: .visible) {
                 Button("분류 없음") { Task { await model.savePost(folderID: nil, keepFolder: false) } }
@@ -984,7 +1024,7 @@ struct BrowserView: View {
 
     /// 길게 누른 대상이 이미 차단돼 있는지 (그러면 차단 대신 해제를 물음 — 실수로 차단했을 때 바로 되돌리기)
     private func isAlreadyBlocked(_ req: BlockRequest) -> Bool {
-        !filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick).isEmpty
+        !filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick, gallery: currentGallery?.id).isEmpty
             || filters.isDcconBlocked(req.dcconKey)
             || !filters.blockedKeywords(in: req.snippet).isEmpty
     }
@@ -1000,9 +1040,9 @@ struct BrowserView: View {
 
     @ViewBuilder
     private func unblockButtons(_ req: BlockRequest) -> some View {
-        ForEach(filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick)) { u in
+        ForEach(filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick, gallery: currentGallery?.id)) { u in
             let who = u.memo.isEmpty ? u.value : "\(u.memo) (\(u.value))"
-            Button("\(u.kind.label) 차단 해제: \(who)") {
+            Button("\(u.kind.label) 차단 해제: \(who)\(u.gallery == nil ? " · 전체" : " · 이 갤러리")") {
                 filters.removeUser(u)
                 model.showToast("\(u.memo.isEmpty ? u.value : u.memo) 차단을 풀었어요")
             }
@@ -1019,6 +1059,7 @@ struct BrowserView: View {
                 model.showToast("'\(w)' 키워드 차단을 풀었어요")
             }
         }
+        memoButton(req)
         Button("취소", role: .cancel) {}
     }
 
@@ -1027,20 +1068,18 @@ struct BrowserView: View {
         let name = req.nick.isEmpty ? "작성자" : req.nick
         if !req.userID.isEmpty {
             Button("유저 차단: \(name) (\(req.userID))", role: .destructive) {
-                filters.addUser(kind: .id, value: req.userID, memo: req.nick)
-                model.showToast("\(name) 차단했어요")
+                askBlockScope(.id, req.userID, req.nick, label: name)
             }
         }
         if !req.ip.isEmpty {
-            Button("IP 차단: \(name) (\(req.ip))", role: .destructive) {
-                filters.addUser(kind: .ip, value: req.ip, memo: req.nick)
-                model.showToast("\(name)(\(req.ip)) 차단했어요")
+            Button("IP로 차단: \(name) (\(req.ip))", role: .destructive) {
+                askBlockScope(.ip, req.ip, req.nick, label: "\(name)(\(req.ip))")
             }
         }
         if req.userID.isEmpty && !req.nick.isEmpty {
-            Button("닉네임 차단: \(req.nick)", role: .destructive) {
-                filters.addUser(kind: .nick, value: req.nick, memo: req.nick)
-                model.showToast("\(req.nick) 차단했어요")
+            // 유동은 IP / 닉네임 중 골라서 차단 (닉네임은 같은 닉네임 쓰는 유동 모두 가려짐)
+            Button("닉네임으로 차단: \(req.nick) (같은 닉 모두)", role: .destructive) {
+                askBlockScope(.nick, req.nick, req.nick, label: req.nick)
             }
         }
         if !req.dcconKey.isEmpty {
@@ -1053,7 +1092,37 @@ struct BrowserView: View {
             keywordInput = ""
             showKeywordPrompt = true
         }
+        memoButton(req)
         Button("취소", role: .cancel) {}
+    }
+
+    /// 길게 누르기 메뉴의 '메모': 고닉·반고닉은 아이디에, 유동은 IP / 닉네임 중 골라서
+    @ViewBuilder
+    private func memoButton(_ req: BlockRequest) -> some View {
+        if !req.userID.isEmpty {
+            memoChoice(.id, req.userID, req.nick, label: "")
+        } else {
+            if !req.ip.isEmpty { memoChoice(.ip, req.ip, req.nick, label: "IP(\(req.ip))에 ") }
+            if !req.nick.isEmpty { memoChoice(.nick, req.nick, req.nick, label: "닉네임(\(req.nick))에 ") }
+        }
+    }
+
+    private func memoChoice(_ kind: BlockedUser.Kind, _ value: String, _ nick: String, label: String) -> some View {
+        let existing = MemoStore.shared.memo(kind: kind, value: value, gallery: currentGallery?.id)
+        return Button(label + (existing == nil ? "메모 남기기…" : "메모 고치기…")) {
+            memoInput = existing?.text ?? ""
+            memoTarget = (kind, value, nick, existing)
+        }
+    }
+
+    /// 차단 대상을 고르면 → 갤러리 안이면 범위(이 갤러리만 / 모든 갤러리)를 한 번 더 물음
+    private func askBlockScope(_ kind: BlockedUser.Kind, _ value: String, _ nick: String, label: String) {
+        if currentGallery == nil {
+            filters.addUser(kind: kind, value: value, memo: nick)
+            model.showToast("\(label) 차단했어요")
+        } else {
+            pendingBlock = (kind, value, nick, label)
+        }
     }
 
     private func toggleFavorite() {

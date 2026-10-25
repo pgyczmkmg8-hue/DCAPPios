@@ -40,9 +40,11 @@ enum ContentScript {
       'html.dcapp-home-wait body{opacity:0!important}',
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
-      '[data-dcapp-unit],img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none}',
+      // 닉네임·디시콘만 길게 누르기 메뉴를 쓰므로 iOS 기본 메뉴(복사 등)를 막고, 나머지 글자는 평소처럼 선택·복사 가능
+      '.dcapp-lp-nick,.dcapp-memo,img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}',
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
+      '.dcapp-memo{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;font-size:11px;line-height:1.6;background:rgba(255,149,0,.16);color:#b86400;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:normal}',
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
       '.dcapp-mine-name{background:rgb(64,140,200)!important;color:#fff!important;padding:0 3px!important;border-radius:4px!important;line-height:1.2!important}',
@@ -103,7 +105,9 @@ enum ContentScript {
     var byClass = el.querySelector('[class*="nick"]');
     if (u.kind === 'post') {
       var g = el.querySelector('.ginfo');
-      if (g && g.children.length) return g.children.length >= 5 ? g.children[1] : g.children[0];
+      // li만 셈 (닉네임 뒤에 붙인 메모 span 때문에 칸 수가 달라지지 않게)
+      var lis = g ? Array.prototype.filter.call(g.children, function (c) { return c.tagName === 'LI'; }) : [];
+      if (lis.length) return lis.length >= 5 ? lis[1] : lis[0];
       return byClass;
     }
     if (u.kind === 'comment') return byClass || el.firstElementChild;
@@ -167,10 +171,17 @@ enum ContentScript {
   }
 
   // ---------- 차단 판정 ----------
+  /// 지금 보고 있는 갤러리 아이디 (/board/{id}, /mini/{id}) — 갤러리별 차단·메모용
+  function currentGalleryId() {
+    var p = location.pathname.split('/');
+    return (p[1] === 'board' || p[1] === 'mini') ? (p[2] || '') : '';
+  }
+
   function blockedReason(u, idn, dset) {
-    var users = cfg.users || [];
+    var users = cfg.users || [], gid = currentGalleryId();
     for (var i = 0; i < users.length; i++) {
       var b = users[i];
+      if (b.g && b.g !== gid) continue;                  // 다른 갤러리 전용 차단
       if ((b.k === 'id' && idn.id && idn.id === b.v) ||
           (b.k === 'ip' && idn.ip && idn.ip === b.v) ||
           (b.k === 'nick' && idn.nick && idn.nick === b.v)) return '차단한 유저';
@@ -535,6 +546,33 @@ enum ContentScript {
     tintTimer = setTimeout(function () { tintTimer = null; try { tintPage(); } catch (e) {} }, 250);
   }
 
+  /// 유저 메모를 닉네임 바로 뒤에 표시 (아이디 > IP > 닉네임 순으로 찾음).
+  /// 닉네임 칸 '안'이 아니라 '뒤'에 붙여서, 작성자 판별(닉네임 글자 읽기)에 섞이지 않게 함
+  function showMemo(u, nk) {
+    if (u.kind === 'article' && !nk.parentNode) return;
+    var gid = currentGalleryId(), idn = identity(u), m = null;
+    // 이 갤러리 전용 메모 우선, 없으면 모든 갤러리 메모
+    var memos = (cfg.memos || []).filter(function (x) { return !x.g || x.g === gid; })
+      .sort(function (a, b) { return (b.g ? 1 : 0) - (a.g ? 1 : 0); });
+    [['id', idn.id], ['ip', idn.ip], ['nick', idn.nick]].some(function (p) {
+      if (!p[1]) return false;
+      m = memos.filter(function (x) { return x.k === p[0] && x.v === p[1]; })[0] || null;
+      return !!m;
+    });
+    var next = nk.nextElementSibling;
+    var tag = next && next.classList.contains('dcapp-memo') ? next : null;
+    if (m) {
+      if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'dcapp-memo';
+        nk.parentNode.insertBefore(tag, nk.nextSibling);
+      }
+      if (tag.textContent !== m.t) tag.textContent = m.t;
+    } else if (tag) {
+      tag.parentNode.removeChild(tag);
+    }
+  }
+
   /// 닉네임 글자(첫 텍스트)만 span으로 감싸 표시 / 해제
   function markMineNick(nk, mine) {
     var sp = null;
@@ -681,7 +719,8 @@ enum ContentScript {
         }
       }
       var nk = nickElement(u);
-      if (nk) markMineNick(nk, mine);
+      if (nk) { markMineNick(nk, mine); nk.classList.add('dcapp-lp-nick'); }
+      if (nk) showMemo(u, nk);
       if (u.kind === 'article') {
         var body = articleBody();
         if (body) body.classList.toggle('dcapp-hide', !!reason);
@@ -738,10 +777,17 @@ enum ContentScript {
     if (pick.on || blockPick || e.touches.length !== 1) return;
     var target = e.target.nodeType === 1 ? e.target : e.target.parentElement;
     if (!target || !target.closest) return;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return;   // 입력 중인 칸은 그대로
     var unitEl = target.closest('[data-dcapp-unit]');
     var media = target.closest('img, video');
     if (!unitEl && !dcconKey(media)) return;
     if (unitEl && unitEl.classList.contains('dcapp-collapsed')) return;
+    // 차단·메모 메뉴는 닉네임(또는 그 옆 메모 칸)을 길게 누를 때만 — 본문·댓글 글자는 평소처럼 길게 눌러 복사
+    if (!dcconKey(media)) {
+      var nk = unitEl ? nickElement({ el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') }) : null;
+      var onNick = (nk && (nk === target || nk.contains(target))) || !!target.closest('.dcapp-memo');
+      if (!onNick) return;
+    }
     var t = e.touches[0];
     clearLP();
     lp = {
@@ -1418,7 +1464,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v43-anon8', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v46-nicklp', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
