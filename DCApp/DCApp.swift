@@ -94,6 +94,9 @@ struct RootView: View {
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     /// GitHub에 새 버전이 있으면 알림창
     @State private var availableUpdate: AppRelease?
+    /// 앱 사용 중 새 디시 알림 배너
+    @ObservedObject private var alarms = AlarmStore.shared
+    @State private var bannerTask: Task<Void, Never>?
     @AppStorage("compactTopRatio") private var topRatio = 0.34
     @State private var keyboardVisible = false
     @State private var dragStartRatio: Double?      // 핸들을 끌기 시작할 때의 높이
@@ -106,6 +109,11 @@ struct RootView: View {
 
     /// 앱 창의 실제 높이 (UIScreen.main은 화면이 두 개인 기기(듀오)에서 엉뚱한 화면을 줄 수 있어서 창 크기를 직접 잼)
     @State private var windowHeight: CGFloat = 800
+
+    private func closeBanner() {
+        bannerTask?.cancel()
+        AlarmStore.shared.incoming = nil
+    }
 
     /// 한손 모드에서 비워둘 위쪽 높이 (상태바 포함)
     private var topGap: CGFloat {
@@ -159,6 +167,29 @@ struct RootView: View {
         .onAppear {
             compactMode = false     // 앱을 새로 켜면 항상 일반 모드로 시작 (안전장치)
             if let url = DCNotify.pendingURL { DCNotify.pendingURL = nil; router.open(url) }   // 알림을 눌러서 켠 경우
+        }
+        .overlay(alignment: .top) {
+            if let inc = alarms.incoming {
+                AlarmBanner(item: inc.item, more: inc.more, onTap: {
+                    AlarmStore.shared.markRead(inc.item)
+                    router.open(inc.item.url)
+                    closeBanner()
+                }, onClose: closeBanner)
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .id(inc.item.id)
+            }
+        }
+        .animation(.spring(duration: 0.35), value: alarms.incoming?.item.id)
+        .onChange(of: alarms.incoming?.item.id) { _, newID in
+            // 4초 뒤 자동으로 닫힘
+            bannerTask?.cancel()
+            guard newID != nil else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            bannerTask = Task {
+                try? await Task.sleep(for: .seconds(4))
+                if !Task.isCancelled { closeBanner() }
+            }
         }
         .task {
             // 앱을 열 때마다 GitHub Releases 확인

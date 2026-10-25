@@ -27,6 +27,7 @@ struct SettingsView: View {
     @AppStorage("adFilter") private var adFilter = true
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("hideDory") private var hideDory = true
+    @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
     @AppStorage(DCNotify.enabledKey) private var notifyEnabled = false
     @State private var notifyResult: String?
     @State private var notifyChecking = false
@@ -220,6 +221,15 @@ struct SettingsView: View {
                 } footer: {
                     Text("앱이 백그라운드에 있을 때 iOS가 정한 간격(보통 15분~몇 시간)으로 디시 알림을 확인해요. 로그인 상태여야 하고, 앱을 위로 쓸어 완전히 종료하면 확인하지 않아요.")
                 }
+                }
+
+                // 디시 알림 (앱 안)
+                Section {
+                    Toggle("앱 사용 중 알림 배너 띄우기", isOn: $alarmBanner)
+                } header: {
+                    Text("알림")
+                } footer: {
+                    Text("내 글·댓글에 새 댓글이 달리면 화면 위에 배너로 잠깐 보여 줘요. 누르면 그 글로 가요. 받은 알림은 하단 바 '갤러리' → '알림' 탭에 쌓여요.")
                 }
 
                 // 디시콘

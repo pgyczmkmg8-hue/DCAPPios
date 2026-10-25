@@ -23,7 +23,7 @@ struct BackupFile: Codable {
 @MainActor
 enum BackupManager {
     /// 앱 설정 스위치들 (UserDefaults)
-    static let prefKeys = ["autoLogin", "dockComment", "fullSwipeBack", "hideSiteHeader", "homeRankOnly", "showFloatingBar", "adFilter", "hideDory"]
+    static let prefKeys = ["autoLogin", "dockComment", "fullSwipeBack", "hideSiteHeader", "homeRankOnly", "showFloatingBar", "adFilter", "hideDory", "alarmBanner"]
     /// 문자열 설정들 (UserDefaults)
     static let stringPrefKeys = ["appTheme"]
 

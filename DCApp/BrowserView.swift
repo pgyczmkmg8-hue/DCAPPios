@@ -222,6 +222,7 @@ struct BrowserView: View {
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var autoImages = AutoImageStore.shared
     @ObservedObject private var savedPosts = SavedPostStore.shared
+    @ObservedObject private var alarms = AlarmStore.shared
     @AppStorage("compactMode") private var compactMode = false
     /// 오른쪽 세로 버튼 막대 (끄면 ⋮ 메뉴가 상단바로 감)
     @AppStorage("showFloatingBar") private var showFloatingBar = true
@@ -870,6 +871,12 @@ struct BrowserView: View {
             barItem("square.stack", "square.stack.fill", "갤러리", selected: false) {
                 router.sheet = .library
             }
+            .overlay(alignment: .top) {
+                // 안 읽은 알림이 있으면 빨간 점 (갤러리 창 → 알림 탭)
+                if alarms.unreadCount > 0 {
+                    Circle().fill(.red).frame(width: 8, height: 8).offset(x: 12, y: 6).allowsHitTesting(false)
+                }
+            }
             // 가운데: 전체글 보는 중 → "개념글" / 개념글 보는 중 → "전체글"(≡)로 바뀜
             if section == .recommend {
                 barItem("line.3.horizontal", "line.3.horizontal", "전체글", selected: true, enabled: g != nil) {
@@ -943,6 +950,11 @@ struct BrowserView: View {
                 Button { toggleFavorite() } label: {
                     Label(isFavorite ? "갤러리 즐겨찾기 해제" : "갤러리 즐겨찾기 추가",
                           systemImage: isFavorite ? "star.fill" : "star")
+                }
+            }
+            if currentGallery != nil {
+                Button { model.openManageLog() } label: {
+                    Label("갤러리 관리 내역", systemImage: "list.bullet.clipboard")
                 }
             }
             Button { router.sheet = .posts } label: {

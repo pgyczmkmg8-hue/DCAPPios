@@ -493,6 +493,17 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - 갤러리 관리 내역
+
+    func openManageLog() {
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.openManageLog() : 'none';") as? String
+            if r == "none" || r == nil {
+                showToast("관리 내역이 없는 갤러리예요 (갤러리 목록 화면에서 눌러 주세요)")
+            }
+        }
+    }
+
     // MARK: - 말머리
 
     /// 지금 갤러리 페이지의 말머리 탭 (이름, 주소)
@@ -616,6 +627,8 @@ extension WebViewModel: WKScriptMessageHandler {
             if body["kind"] as? String == "pw" { AnonStore.password = v } else { AnonStore.nick = v }
             // 페이지 스크립트에 넣어 둔 설정은 설치할 때 값이라, 다시 설치해야 다음 페이지(로그아웃 후 등)에서 새 값으로 채움
             installUserScript()
+        case "alarms":   // 디시 알림 응답(/alarm/notification) → 갤러리 창의 알림 탭에 쌓기
+            if let list = body["items"] as? [[String: Any]] { AlarmStore.shared.add(list) }
         case "pwskip":
             showToast("비밀번호 변경 안내를 건너뛰었어요")
         case "blockmiss":

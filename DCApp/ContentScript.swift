@@ -681,6 +681,22 @@ enum ContentScript {
   document.addEventListener('input', onAnonInput, true);
   document.addEventListener('change', onAnonInput, true);
 
+  // ---------- 갤러리 관리 내역 (사이트 상단을 숨겨서 'ⓘ 갤러리 정보' 창의 링크를 못 누르므로 대신 열기) ----------
+  function manageLogLink() {
+    return Array.prototype.filter.call(document.querySelectorAll('a, button'), function (x) {
+      return /관리\s*내역/.test(txt(x));
+    })[0] || null;
+  }
+  function openManageLog() {
+    var a = manageLogLink();
+    if (!a) return 'none';
+    var h = a.getAttribute('href') || '';
+    if (h && !/^\s*(#|javascript:)/i.test(h)) { location.href = a.href; return 'nav'; }
+    var inner = a.querySelector('[onclick]');
+    (inner || a).click();
+    return 'clicked';
+  }
+
   function clearSelection() {
     try {
       var sel = window.getSelection();
@@ -1464,7 +1480,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v46-nicklp', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v47-managelog', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -1563,6 +1579,8 @@ enum ContentScript {
       var b = document.getElementById(id);
       return b ? b.outerHTML.replace(/\s+/g, ' ').slice(0, 160) + ' vis=' + visible(b) : id + '(없음)';
     }).join(' , ') + ' | 채우기 기록: ' + (anonLog.join(' → ') || '(없음)') + ' | 앱에 저장: 닉' + ((cfg.anon || {}).nick ? '있음' : '없음') + ' 비번' + ((cfg.anon || {}).pw ? '있음' : '없음'));
+    var ml = manageLogLink();
+    out.push('관리 내역 링크: ' + (ml ? ml.outerHTML.replace(/\s+/g, ' ').slice(0, 250) : '(없음)'));
     var mineLi = document.querySelector('li.comment.dcapp-mine');
     if (mineLi) {
       var cs = getComputedStyle(mineLi), ca = getComputedStyle(mineLi, '::before');
@@ -1617,6 +1635,7 @@ enum ContentScript {
     },
     clearSelection: function () { clearSelection(); return true; },
     loginState: loginState,
+    openManageLog: openManageLog,
     setPickMode: function (on) { pick.on = !!on; clearPick(); return true; },
     setBlockPickMode: function (on) {
       blockPick = !!on;
@@ -1683,6 +1702,15 @@ enum ContentScript {
       var text = '';
       try { text = (x.responseType === '' || x.responseType === 'text') ? x.responseText : '[' + x.responseType + ']'; } catch (e) {}
       add('xhr', info.m, info.u + (reqBody ? '  <BODY ' + reqBody.slice(0, 200) + '>' : '') + (info.h ? '  <H' + info.h + '>' : ''), x.status, text);
+      // 디시 알림(내 글·댓글에 달린 댓글 등) → 앱의 알림 탭으로 전달
+      try {
+        if (/\/alarm\/notification(\?|$)/.test(String(info.u)) && text) {
+          var j = JSON.parse(text);
+          if (j && j.result && j.data && j.data.length) {
+            window.webkit.messageHandlers.dcapp.postMessage({ type: 'alarms', items: j.data });
+          }
+        }
+      } catch (e) {}
     });
     return XS.apply(this, arguments);
   };

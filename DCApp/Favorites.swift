@@ -122,6 +122,7 @@ final class FavoritesStore: ObservableObject {
 enum LibrarySection: String, CaseIterable, Identifiable {
     case visited = "방문한 갤러리"
     case galleries = "즐겨찾기"
+    case alarms = "알림"
     var id: Self { self }
 }
 
@@ -238,6 +239,7 @@ struct FavoritesView: View {
                     switch section {
                     case .visited: VisitedGalleriesList()
                     case .galleries: galleriesList
+                    case .alarms: AlarmsList()
                     }
                 }
             }
@@ -259,6 +261,14 @@ struct FavoritesView: View {
                 if section == .galleries {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showingAdd = true } label: { Image(systemName: "plus") }
+                    }
+                }
+                if section == .alarms && !AlarmStore.shared.items.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button("모두 읽음으로") { AlarmStore.shared.markAllRead() }
+                            Button("전체 삭제", role: .destructive) { AlarmStore.shared.removeAll() }
+                        } label: { Image(systemName: "ellipsis.circle") }
                     }
                 }
                 if section == .visited && !VisitedStore.shared.items.isEmpty {
