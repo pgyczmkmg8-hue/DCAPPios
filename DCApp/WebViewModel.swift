@@ -176,18 +176,28 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 기본 조작
 
     func load(_ url: URL) { webView.load(URLRequest(url: url)) }
-    /// 뒤로가기. 글을 올린 뒤처럼 "바로 앞 페이지가 글쓰기 화면"이면 글쓰기 화면들을 건너뛰고 그 전 페이지로 감
+    /// 뒤로가기: 지나온 페이지를 거꾸로 짚어서 '돌아갈 만한' 가장 최근 페이지로 바로 감
     func goBack() {
+        if let target = backTarget() { _ = webView.go(to: target) } else { _ = webView.goBack() }
+    }
+
+    /// 돌아갈 페이지 — 건너뛰는 것: 로그인 창(msign), 지금과 같은 주소(로그인 뒤 되돌아온 같은 글 등),
+    /// 글쓰기 화면(글을 올린 뒤에 뒤로 가면 다시 글쓰기가 뜨지 않게, 지금이 글쓰기 화면이 아닐 때만)
+    private func backTarget() -> WKBackForwardListItem? {
         func isWrite(_ url: URL) -> Bool { AutoImageStore.writeGalleryID(from: url) != nil }
-        let backList = webView.backForwardList.backList          // 오래된 것 → 최근 것
-        if let current = webView.url, !isWrite(current),
-           let previous = backList.last, isWrite(previous.url) {
-            if let target = backList.reversed().first(where: { !isWrite($0.url) }) {
-                _ = webView.go(to: target)
-                return
-            }
+        func plain(_ url: URL) -> String {
+            var c = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            c?.fragment = nil
+            return c?.string ?? url.absoluteString
         }
-        _ = webView.goBack()
+        let current = webView.url
+        let skipWrite = current.map { !isWrite($0) } ?? true
+        return webView.backForwardList.backList.reversed().first { item in       // 최근 것부터
+            if item.url.host == DC.loginHost { return false }
+            if let current, plain(item.url) == plain(current) { return false }
+            if skipWrite && isWrite(item.url) { return false }
+            return true
+        }
     }
     func goForward() { webView.goForward() }
     func reload() { webView.reload() }
@@ -252,11 +262,14 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터는 뒤로가기)
     private var opensGalleriesOnBack: Bool {
-        isGalleryListPage && listPageNumber <= 1 && onGallerySwipe != nil &&
+        // 검색 결과 목록은 제외 (검색 전 목록으로 돌아가야 하므로 보통 뒤로가기)
+        let q = webView.url?.query ?? ""
+        let isSearch = q.contains("serval=") || q.contains("s_keyword=")
+        return isGalleryListPage && !isSearch && listPageNumber <= 1 && onGallerySwipe != nil &&
             (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
     }
 
-    /// 글 보는 중이면 → 뒤로가기 대신 그 갤러리 목록 1페이지로 (로그인한 뒤 뒤로 가면 로그인 창이 다시 뜨는 문제 방지)
+    /// 글 보는 중인지 (그 갤러리) — 돌아갈 페이지가 없을 때 목록 1페이지로 보내기 위함
     private var postGalleryOnBack: Gallery? {
         webView.url.flatMap { url -> Gallery? in
             guard SavedPostStore.postInfo(url) != nil, let g = Gallery.parse(url) else { return nil }
@@ -266,7 +279,7 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 지금 '뒤로' 할 수 있는 게 있는지
     var canSwipeBack: Bool {
-        opensGalleriesOnBack || postGalleryOnBack != nil || webView.canGoBack
+        opensGalleriesOnBack || postGalleryOnBack != nil || backTarget() != nil
     }
 
     func swipeBack() {
@@ -277,9 +290,13 @@ final class WebViewModel: NSObject, ObservableObject {
         } else if opensGalleriesOnBack {
             onGallerySwipe?()
         } else if let g = postGalleryOnBack {
-            // 개념글에서 들어온 글이면 개념글 목록 1페이지로
-            let fromRecommend = webView.url?.query?.contains("recommend=1") == true
-            load(fromRecommend ? g.recommendURL : g.url)
+            if backTarget() != nil {
+                goBack()      // 글 보기 → 지나온 페이지 중 로그인 창 등을 건너뛴 곳으로 (보던 목록 페이지 등)
+            } else {
+                // 돌아갈 곳이 없으면 (알림·링크로 바로 열었을 때 등) 갤러리 목록 1페이지로, 개념글에서 온 글이면 개념글로
+                let fromRecommend = webView.url?.query?.contains("recommend=1") == true
+                load(fromRecommend ? g.recommendURL : g.url)
+            }
         } else {
             goBack()
         }

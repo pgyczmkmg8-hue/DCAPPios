@@ -73,10 +73,13 @@ struct DCApp: App {
             RootView()
                 .environmentObject(favorites)
                 .environmentObject(router)
+                .overlay { LockCover() }                    // 잠겨 있으면 첫 화면부터 가림 (가림막 창이 뜨기 전 깜빡임 방지)
+                .task { await AppLock.shared.startup() }    // 잠금이 켜져 있으면 켜자마자 인증
         }
         // 백그라운드로 갈 때 알림 확인 예약 → iOS가 깨우면 디시 알림 확인
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { DCNotify.schedule() }
+            AppLock.shared.scenePhaseChanged(phase)      // 앱 잠금 / 전환 화면 가리기
         }
         .backgroundTask(.appRefresh(DCNotify.refreshTaskID)) {
             await DCNotify.backgroundRefresh()

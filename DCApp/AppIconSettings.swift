@@ -27,20 +27,9 @@ struct AppIconSettingsView: View {
                 ForEach(alternates, id: \.self) { name in
                     row(name: name, label: displayName(name))
                 }
-            } footer: {
-                if alternates.isEmpty {
-                    Text("아직 추가된 대체 아이콘이 없어요. 아래 방법으로 Xcode에서 추가하면 여기에 자동으로 나타나요.")
-                }
             }
-
-            Section("아이콘 추가하는 방법 (Xcode)") {
-                Text("1. Assets → 왼쪽 아래 + → iOS → iOS App Icon")
-                Text("2. 이름을 AppIcon-Navy 처럼 바꾸고 1024×1024 PNG를 넣기")
-                Text("3. 타깃 → Build Settings → 'Include All App Icon Assets'를 Yes로")
-                Text("4. (선택) 미리보기용으로 같은 PNG를 Image Set 'AppIcon-Navy-Preview'로 추가")
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
+            // (아이콘 추가 방법: Assets에 'AppIcon-이름' iOS App Icon + 미리보기용 'AppIcon-이름-Preview' Image Set,
+            //  Build Settings → Include All App Icon Assets = Yes)
         }
         .navigationTitle("앱 아이콘")
         .alert("아이콘을 바꾸지 못했어요",

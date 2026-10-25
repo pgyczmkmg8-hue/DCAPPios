@@ -266,6 +266,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = DCAPP;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "사진 첨부에 사용";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "앱 잠금 해제에 사용";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "캡쳐 이미지 저장에 사용";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -277,7 +278,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.5;
+				MARKETING_VERSION = 0.7.7;
 				PRODUCT_BUNDLE_IDENTIFIER = MACHU.DCApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -308,6 +309,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = DCAPP;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "사진 첨부에 사용";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "앱 잠금 해제에 사용";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "캡쳐 이미지 저장에 사용";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -319,7 +321,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.7.5;
+				MARKETING_VERSION = 0.7.7;
 				PRODUCT_BUNDLE_IDENTIFIER = MACHU.DCApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

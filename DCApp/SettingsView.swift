@@ -28,6 +28,9 @@ struct SettingsView: View {
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("hideDory") private var hideDory = true
     @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
+    @AppStorage(AppLock.lockKey) private var appLock = false
+    @AppStorage(AppLock.blurKey) private var privacyBlur = false
+    @State private var lockMessage: String?
     @AppStorage(DCNotify.enabledKey) private var notifyEnabled = false
     @State private var notifyResult: String?
     @State private var notifyChecking = false
@@ -221,6 +224,31 @@ struct SettingsView: View {
                 } footer: {
                     Text("앱이 백그라운드에 있을 때 iOS가 정한 간격(보통 15분~몇 시간)으로 디시 알림을 확인해요. 로그인 상태여야 하고, 앱을 위로 쓸어 완전히 종료하면 확인하지 않아요.")
                 }
+                }
+
+                // 보안: 앱 잠금 / 전환 화면 가리기
+                Section {
+                    Toggle("\(AppLock.biometryName)로 앱 잠금", isOn: $appLock)
+                        .onChange(of: appLock) { _, on in
+                            guard on else { lockMessage = nil; return }
+                            Task {
+                                // 켤 때 한 번 인증해서 되는지 확인
+                                if await AppLock.verifyForEnabling() {
+                                    lockMessage = nil
+                                } else {
+                                    appLock = false
+                                    lockMessage = "인증하지 못해서 켜지 않았어요. 기기 암호가 설정돼 있어야 해요."
+                                }
+                            }
+                        }
+                    Toggle("앱 전환 화면에서 가리기", isOn: $privacyBlur)
+                    if let lockMessage {
+                        Text(lockMessage).font(.caption).foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("보안")
+                } footer: {
+                    Text("앱 잠금을 켜면 앱을 켜거나 다른 앱에서 돌아올 때 \(AppLock.biometryName)(안 되면 기기 암호)로 잠금을 풀어야 해요. '가리기'를 켜면 앱 전환 화면(멀티태스킹)에서 내용이 흐리게 보여요.")
                 }
 
                 // 디시 알림 (앱 안)

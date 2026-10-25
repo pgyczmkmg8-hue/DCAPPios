@@ -1,8 +1,35 @@
 import SwiftUI
 
 /// 설정 → 버전 정보/업데이트 확인
-/// 사진은 Assets에 "AboutImage"라는 이름의 Image Set으로 넣으면 표시돼요.
+/// 사진은 아래 aboutImages 목록에서 확률(가중치)에 따라 하나를 골라 보여 줘요. (화면에 들어올 때마다 새로 뽑음)
 struct AboutView: View {
+    /// ★ 버전 정보 사진 목록: (Assets의 Image Set 이름, 뽑힐 비율)
+    /// 비율은 합이 100이 아니어도 돼요 — 예) 70, 20, 10 이면 70% / 20% / 10%
+    /// 사진을 추가하려면: Assets에 Image Set을 만들고 이름을 정한 뒤 여기에 한 줄 추가
+    /// (Assets에 없는 이름은 자동으로 빠짐)
+    static let aboutImages: [(name: String, weight: Double)] = [
+        ("AboutImage1", 0.25),
+        ("AboutImage2", 1),
+        ("AboutImage3", 0.25),
+        ("AboutImage4", 0.25),
+        ("AboutImage5", 0.25),
+    ]
+
+    /// 확률에 따라 하나 뽑기
+    static func pickImage() -> UIImage? {
+        let pool = aboutImages.compactMap { item -> (UIImage, Double)? in
+            guard item.weight > 0, let img = UIImage(named: item.name) else { return nil }
+            return (img, item.weight)
+        }
+        let total = pool.reduce(0) { $0 + $1.1 }
+        guard total > 0 else { return nil }
+        var r = Double.random(in: 0..<total)
+        for (img, w) in pool {
+            if r < w { return img }
+            r -= w
+        }
+        return pool.last?.0
+    }
     static var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
     }
@@ -83,6 +110,7 @@ struct AboutView: View {
     }
 
     @State private var confetti = 0
+    @State private var image: UIImage? = AboutView.pickImage()
     @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
     @State private var checking = false
     @State private var checkResult: String?
@@ -91,7 +119,7 @@ struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if let image = UIImage(named: "AboutImage") {
+                if let image {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
