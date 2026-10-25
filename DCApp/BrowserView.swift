@@ -223,6 +223,7 @@ struct BrowserView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
     @ObservedObject private var savedPosts = SavedPostStore.shared
     @ObservedObject private var alarms = AlarmStore.shared
+    @ObservedObject private var hwKeyboard = HardwareKeyboard.shared
     @AppStorage("compactMode") private var compactMode = false
     /// 오른쪽 세로 버튼 막대 (끄면 ⋮ 메뉴가 상단바로 감)
     @AppStorage("showFloatingBar") private var showFloatingBar = true
@@ -708,6 +709,7 @@ struct BrowserView: View {
             if model.isWritePage {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 16) {
+                        if !showFloatingBar && hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
                         if !showFloatingBar { topMoreMenu }
                         accountMenu
                     }
@@ -741,7 +743,12 @@ struct BrowserView: View {
             } else {
                 // 다른 화면: 왼쪽에 로그인/로그아웃(계정) 버튼 — 글쓰기 화면과 같은 메뉴
                 ToolbarItem(placement: .topBarLeading) {
-                    accountMenu.foregroundStyle(.white)
+                    HStack(spacing: 16) {
+                        // 세로 막대를 껐고 하드웨어 키보드가 있으면 뒤로가기는 여기에
+                        if !showFloatingBar && hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
+                        accountMenu
+                    }
+                    .foregroundStyle(.white)
                 }
                 .noGlassBackground()
                 if !showFloatingBar {
@@ -827,9 +834,24 @@ struct BrowserView: View {
                     floatIcon("arrow.clockwise.circle", tint: .primary)
                 }
             }
+            // 4. 뒤로가기 — 하드웨어 키보드(트랙패드)를 쓸 때만 (쓸어서 뒤로가기를 못 쓰므로). ⌘[ 단축키도
+            if hwKeyboard.connected {
+                backButton { floatIcon("chevron.backward", tint: .primary) }
+            }
         }
         .padding(4)
         .glassBar()
+    }
+
+    /// 뒤로가기 버튼 (⌘[ 단축키 포함) — 화면 쓸기와 같은 동작
+    /// (글 보기 → 갤러리 1페이지, 갤러리 1페이지 → 갤러리 창, 개념글 목록 → 전체글, 그 밖에는 뒤로가기)
+    private func backButton<L: View>(@ViewBuilder label: () -> L) -> some View {
+        let _ = model.canGoBack      // 뒤로 갈 수 있는 상태가 바뀌면 다시 그리기
+        let enabled = model.canSwipeBack
+        return Button { model.swipeBack() } label: { label() }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.35)
+            .keyboardShortcut("[", modifiers: .command)
     }
 
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }

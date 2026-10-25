@@ -238,33 +238,50 @@ final class WebViewModel: NSObject, ObservableObject {
         let th = Self.swipeThresholds
         guard t.x > abs(t.y) * th.ratio,
               t.x > th.distance || (t.x > th.distance / 2 && v.x > th.flickSpeed) else { return }
-        // 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터·글 보는 중에는 뒤로가기)
-        let openGalleries = isGalleryListPage && listPageNumber <= 1 && onGallerySwipe != nil &&
-            (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
-        // 글 보는 중이면 → 뒤로가기 대신 그 갤러리 목록 1페이지로 (로그인한 뒤 뒤로 가면 로그인 창이 다시 뜨는 문제 방지)
-        let postGallery: Gallery? = webView.url.flatMap { url -> Gallery? in
-            guard SavedPostStore.postInfo(url) != nil, let g = Gallery.parse(url) else { return nil }
-            return Gallery(galleryID: g.id, name: g.id, kind: g.kind)
-        }
-        guard openGalleries || postGallery != nil || webView.canGoBack else { return }
+        guard canSwipeBack else { return }
         Task {
             // 말머리 탭처럼 가로로 스크롤되는 곳에서 시작한 스와이프는 무시
             let inHScroll = await call("return window.__dcapp ? window.__dcapp.lastTouchInHScroll() : false;") as? Bool ?? false
             guard !inHScroll else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            if let url = webView.url, url.query?.contains("recommend=1") == true,
-               let g = Gallery.parse(url), SavedPostStore.postInfo(url) == nil {
-                // 개념글 목록에서 쓸면 → 같은 갤러리의 전체글로
-                load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
-            } else if openGalleries {
-                onGallerySwipe?()
-            } else if let g = postGallery {
-                // 개념글에서 들어온 글이면 개념글 목록 1페이지로
-                let fromRecommend = webView.url?.query?.contains("recommend=1") == true
-                load(fromRecommend ? g.recommendURL : g.url)
-            } else {
-                goBack()
-            }
+            swipeBack()
+        }
+    }
+
+    // MARK: - '뒤로' 동작 (화면 쓸기와 키보드 모드의 뒤로가기 버튼·⌘[ 가 똑같이 씀)
+
+    /// 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터는 뒤로가기)
+    private var opensGalleriesOnBack: Bool {
+        isGalleryListPage && listPageNumber <= 1 && onGallerySwipe != nil &&
+            (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
+    }
+
+    /// 글 보는 중이면 → 뒤로가기 대신 그 갤러리 목록 1페이지로 (로그인한 뒤 뒤로 가면 로그인 창이 다시 뜨는 문제 방지)
+    private var postGalleryOnBack: Gallery? {
+        webView.url.flatMap { url -> Gallery? in
+            guard SavedPostStore.postInfo(url) != nil, let g = Gallery.parse(url) else { return nil }
+            return Gallery(galleryID: g.id, name: g.id, kind: g.kind)
+        }
+    }
+
+    /// 지금 '뒤로' 할 수 있는 게 있는지
+    var canSwipeBack: Bool {
+        opensGalleriesOnBack || postGalleryOnBack != nil || webView.canGoBack
+    }
+
+    func swipeBack() {
+        if let url = webView.url, url.query?.contains("recommend=1") == true,
+           let g = Gallery.parse(url), SavedPostStore.postInfo(url) == nil {
+            // 개념글 목록에서 → 같은 갤러리의 전체글로
+            load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+        } else if opensGalleriesOnBack {
+            onGallerySwipe?()
+        } else if let g = postGalleryOnBack {
+            // 개념글에서 들어온 글이면 개념글 목록 1페이지로
+            let fromRecommend = webView.url?.query?.contains("recommend=1") == true
+            load(fromRecommend ? g.recommendURL : g.url)
+        } else {
+            goBack()
         }
     }
 

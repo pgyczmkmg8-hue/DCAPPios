@@ -697,6 +697,24 @@ enum ContentScript {
     return 'clicked';
   }
 
+  // ---------- 오른쪽 세로 버튼 막대가 댓글 '등록' 버튼을 가리지 않도록 등록 버튼을 왼쪽으로 비켜 둠 ----------
+  function avoidFloatBar() {
+    var on = cfg.floatBar !== false;
+    var form = document.getElementById('comment_write') || (document.getElementById('comment_memo') || {}).form;
+    if (!form) return;
+    Array.prototype.forEach.call(form.querySelectorAll('button, a, input[type="submit"], input[type="button"]'), function (b) {
+      var isSubmit = b.type === 'submit' || /^\s*(등록|작성)\s*$/.test(txt(b) || b.value || '');
+      if (!isSubmit) return;
+      if (on && !b.hasAttribute('data-dcapp-avoid')) {
+        b.setAttribute('data-dcapp-avoid', '1');
+        b.style.setProperty('margin-right', '64px', 'important');
+      } else if (!on && b.hasAttribute('data-dcapp-avoid')) {
+        b.removeAttribute('data-dcapp-avoid');
+        b.style.removeProperty('margin-right');
+      }
+    });
+  }
+
   function clearSelection() {
     try {
       var sel = window.getSelection();
@@ -706,6 +724,7 @@ enum ContentScript {
 
   function apply() {
     ensureStyle();
+    try { avoidFloatBar(); } catch (e) {}
     try { fillAnon(); } catch (e) {}
     if (cfg.tint || tintKey) scheduleTint();
     try { sizeReplyBoxes(); } catch (e) {}
@@ -1480,7 +1499,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v47-managelog', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v48-floatavoid', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
