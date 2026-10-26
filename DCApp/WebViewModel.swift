@@ -175,6 +175,14 @@ final class WebViewModel: NSObject, ObservableObject {
 
     // MARK: - 기본 조작
 
+    /// 페이지 위에 떠 있는 하단 바 높이만큼 아래 스크롤 여백 (화면 아래 안전 영역은 웹뷰가 따로 더함)
+    func setBottomBarInset(_ h: CGFloat) {
+        let sv = webView.scrollView
+        guard abs(sv.contentInset.bottom - h) > 0.5 else { return }
+        sv.contentInset.bottom = h
+        sv.verticalScrollIndicatorInsets.bottom = h
+    }
+
     func load(_ url: URL) { webView.load(URLRequest(url: url)) }
     /// 뒤로가기: 지나온 페이지를 거꾸로 짚어서 '돌아갈 만한' 가장 최근 페이지로 바로 감
     func goBack() {

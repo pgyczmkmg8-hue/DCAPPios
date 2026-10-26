@@ -271,6 +271,10 @@ struct BrowserView: View {
     // 키보드가 떠 있는 동안에는 앱 툴바를 숨겨서, 디시 댓글창(유동 닉/비번/코드, 디시콘 버튼)이
     // 사파리처럼 키보드 바로 위에 붙도록 함
     @State private var keyboardVisible = false
+    /// 웹페이지 위에 떠 있는 하단 바(+안내 배너) 높이 → 그만큼 페이지 아래에 스크롤 여백
+    @State private var bottomBarHeight: CGFloat = 0
+    /// 아이패드: 하단 바를 없애고 오른쪽 세로 막대 하나로 합침 (가로·세로 모두)
+    private var usesSideBar: Bool { showsMenuButton && UIDevice.current.userInterfaceIdiom == .pad }
 
     init(startURL: URL, fallbackTitle: String) {
         _model = StateObject(wrappedValue: WebViewModel(url: startURL))
@@ -334,8 +338,8 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
-            // 듀오를 펼쳤을 때 오른쪽(시계·카메라 줄) 안전 영역까지 웹페이지가 쓰도록
-            .ignoresSafeArea(.container, edges: .horizontal)
+            // 듀오를 펼쳤을 때 오른쪽(시계·카메라 줄) 안전 영역까지, 그리고 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록
+            .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
             // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
             // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
             .background {
@@ -343,7 +347,11 @@ struct BrowserView: View {
             }
             .overlay(alignment: .top) { topOverlay }
             .overlay(alignment: .bottomTrailing) {
-                if showsMenuButton && showFloatingBar && !keyboardVisible { floatingButtonsPlaced }
+                if usesSideBar {
+                    if !keyboardVisible { sideBar }
+                } else if showsMenuButton && showFloatingBar && !keyboardVisible {
+                    floatingButtonsPlaced
+                }
             }
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
@@ -351,15 +359,25 @@ struct BrowserView: View {
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {   // 탭바 바로 위에 붙는 툴바
+            // 하단 바: 페이지를 잘라내지 않고 그 위에 띄움 (리퀴드 글래스 너머로 페이지가 비침)
+            .overlay(alignment: .bottom) {
                 if !keyboardVisible {
                     VStack(spacing: 0) {
                         modeBanner
-                        if showsMenuButton { galleryBar }
+                        if showsMenuButton && !usesSideBar { galleryBar }
+                    }
+                    .background {
+                        GeometryReader { g in
+                            Color.clear
+                                .onAppear { bottomBarHeight = g.size.height }
+                                .onChange(of: g.size.height) { _, h in bottomBarHeight = h }
+                        }
                     }
                     .transition(.opacity)
                 }
             }
+            .onChange(of: bottomBarHeight) { _, _ in updateBottomInset() }
+            .onChange(of: keyboardVisible) { _, _ in updateBottomInset() }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = true }
             }
@@ -802,7 +820,7 @@ struct BrowserView: View {
             } else {
                 floatingButtons
                     .padding(.trailing, 12)
-                    .padding(.bottom, 16)
+                    .padding(.bottom, 16 + bottomBarHeight)      // 페이지 위에 떠 있는 하단 바 위로
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
         }
@@ -816,7 +834,13 @@ struct BrowserView: View {
     }
 
     private var floatingButtons: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 2) { floatingButtonItems }
+            .padding(4)
+            .glassBar()
+    }
+
+    @ViewBuilder
+    private var floatingButtonItems: some View {
             // 1. 한손 모드 켜기/끄기
             Button { compactMode.toggle() } label: {
                 floatIcon(compactMode ? "rectangle.expand.vertical" : "rectangle.bottomhalf.inset.filled",
@@ -838,9 +862,6 @@ struct BrowserView: View {
             if hwKeyboard.connected {
                 backButton { floatIcon("chevron.backward", tint: .primary) }
             }
-        }
-        .padding(4)
-        .glassBar()
     }
 
     /// 뒤로가기 버튼 (⌘[ 단축키 포함) — 화면 쓸기와 같은 동작
@@ -884,8 +905,38 @@ struct BrowserView: View {
     // MARK: - 하단 바 (리퀴드 글라스): 홈 / 보관함 / 개념글 / 검색 / 글쓰기
 
     private var galleryBar: some View {
+        HStack(spacing: 2) { galleryBarItems }
+            .padding(6)
+            .glassBar()
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
+    }
+
+    /// 아이패드: 오른쪽 세로 막대 하나에 하단 바 칸들 + 기존 세로 버튼(한손·⋮·댓글 새로고침·뒤로)을 모음
+    private var sideBar: some View {
+        VStack(spacing: 2) {
+            galleryBarItems
+            if showFloatingBar {
+                Divider().frame(width: 36).padding(.vertical, 4)
+                floatingButtonItems
+            }
+        }
+        .frame(width: 64)
+        .padding(.vertical, 6)
+        .glassBar()
+        .padding(.trailing, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)   // 오른쪽 가운데 (손에 쥐었을 때 엄지 닿는 곳)
+    }
+
+    /// 웹페이지 아래에 하단 바 높이만큼 스크롤 여백 (바에 가려지지 않게)
+    private func updateBottomInset() {
+        model.setBottomBarInset(keyboardVisible ? 0 : bottomBarHeight)
+    }
+
+    @ViewBuilder
+    private var galleryBarItems: some View {
         let g = gallery
-        return HStack(spacing: 2) {
             // 홈: 언제나 디시 첫 화면
             barItem("house", "house.fill", "홈", selected: isDCHome) {
                 model.load(DC.home)
@@ -925,12 +976,6 @@ struct BrowserView: View {
                     model.load(g.writeURL)
                 }
             }
-        }
-        .padding(6)
-        .glassBar()
-        .padding(.horizontal, 14)
-        .padding(.top, 4)
-        .padding(.bottom, 2)
     }
 
     private func barItem(_ icon: String, _ selectedIcon: String, _ title: String, selected: Bool, enabled: Bool = true,

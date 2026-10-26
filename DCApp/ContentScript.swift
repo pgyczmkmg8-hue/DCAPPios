@@ -699,7 +699,7 @@ enum ContentScript {
 
   // ---------- 오른쪽 세로 버튼 막대가 댓글 '등록' 버튼을 가리지 않도록 등록 버튼을 왼쪽으로 비켜 둠 ----------
   function avoidFloatBar() {
-    var on = cfg.floatBar !== false;
+    var on = false;   // 등록 버튼은 원래 자리(오른쪽)에 두기로 함 — 예전에 비켜 둔 것만 되돌림
     var form = document.getElementById('comment_write') || (document.getElementById('comment_memo') || {}).form;
     if (!form) return;
     Array.prototype.forEach.call(form.querySelectorAll('button, a, input[type="submit"], input[type="button"]'), function (b) {
@@ -715,6 +715,24 @@ enum ContentScript {
     });
   }
 
+  // ---------- 갤닉네임 안내 말풍선 숨기기 ("'해갤러'는 갤러리에서 권장하는 비회원 전용 갤닉네임입니다") ----------
+  // 유동 닉네임을 채우려고 갤닉네임을 끌 때 디시가 띄우는 초록 말풍선
+  function hideGallNickTip() {
+    var RE = /비회원\s*전용\s*갤닉/;
+    Array.prototype.forEach.call(document.querySelectorAll('div, p, span, section, aside'), function (el) {
+      if (el.classList.contains('dcapp-hide') || !RE.test(txt(el)) || txt(el).length > 160) return;
+      if (Array.prototype.some.call(el.children, function (c) { return RE.test(txt(c)); })) return;   // 가장 안쪽 것만
+      // 말풍선 상자(닫기 X 포함)까지 넓히되, 입력칸이 든 댓글 폼 전체는 넘지 않게
+      var box = el;
+      while (box.parentElement && box.parentElement !== document.body &&
+             RE.test(txt(box.parentElement)) && txt(box.parentElement).length <= 160 &&
+             !box.parentElement.querySelector('input, textarea')) {
+        box = box.parentElement;
+      }
+      box.classList.add('dcapp-hide');
+    });
+  }
+
   function clearSelection() {
     try {
       var sel = window.getSelection();
@@ -724,6 +742,7 @@ enum ContentScript {
 
   function apply() {
     ensureStyle();
+    try { hideGallNickTip(); } catch (e) {}
     try { avoidFloatBar(); } catch (e) {}
     try { fillAnon(); } catch (e) {}
     if (cfg.tint || tintKey) scheduleTint();
@@ -1499,7 +1518,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v48-floatavoid', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v49-overlaybar', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
