@@ -66,6 +66,9 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var imageViewer: ImageViewerItem?
     @Published var isBlockPickMode = false
     @Published var isWritePage = false
+    /// 페이지를 스크롤하는 동안 true → 컨트롤바를 화면 밖으로 넣음, 멈추면 다시 false
+    @Published var isScrolling = false
+    private var scrollStopTask: Task<Void, Never>?
     var pendingDraft: Draft?
     /// 하단 바 '글쓰기'로 들어왔으면, 글쓰기 화면이 열린 뒤 제목 칸에 커서+키보드
     var focusTitleOnWrite = false
@@ -170,7 +173,48 @@ final class WebViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
 
+        // 손가락으로 끌거나 관성으로 움직이는 동안만 '스크롤 중' (페이지 로드·키보드 때문에 움직이는 건 제외)
+        webView.scrollView.publisher(for: \.contentOffset)
+            .sink { [weak self] _ in self?.scrollMoved() }
+            .store(in: &cancellables)
+
         webView.load(URLRequest(url: url))
+    }
+
+    private func scrollMoved() {
+        let sv = webView.scrollView
+        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { return }
+        if !isScrolling { isScrolling = true }
+        scrollStopTask?.cancel()
+        scrollStopTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled, let self else { return }
+            // 아직 손가락을 대고 있으면 계속 숨김 (손을 떼고 멈추면 다음 움직임 없이도 다시 확인)
+            if self.webView.scrollView.isTracking { self.scrollMoved(); return }
+            self.isScrolling = false
+        }
+    }
+
+    // MARK: - 공유
+
+    /// 공유 창 띄우기. 아이패드에서는 화면 오른쪽 위(⋮ 버튼 근처)를 가리키는 말풍선으로
+    func share(_ url: URL) {
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))   // ⋮ 메뉴가 다 닫힌 뒤에 띄움
+            presentShare(url)
+        }
+    }
+
+    private func presentShare(_ url: URL) {
+        guard let vc = presenter() else { return }
+        let ac = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        if let pop = ac.popoverPresentationController {
+            let host = vc.view!
+            pop.sourceView = host
+            pop.sourceRect = CGRect(x: host.bounds.maxX - 40, y: host.safeAreaInsets.top, width: 1, height: 1)
+            pop.permittedArrowDirections = .up
+        }
+        vc.present(ac, animated: true)
     }
 
     // MARK: - 기본 조작
@@ -331,10 +375,8 @@ final class WebViewModel: NSObject, ObservableObject {
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         // 웹페이지가 화면 옆 안전 영역(듀오의 시계·카메라 줄)을 비워두지 않고 끝까지 쓰도록
         controller.addUserScript(WKUserScript(source: Self.viewportFitCover, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        // 광고 차단 (애드가드 갤러리 필터의 디시 규칙) — 광고가 잠깐 보이지 않도록 페이지 맨 처음에
-        if UserDefaults.standard.object(forKey: "adFilter") as? Bool ?? true {
-            controller.addUserScript(WKUserScript(source: ContentScript.adFilter, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
+        // 앱 자체 광고 차단 (광고 서버 요청 막기)
+        AdBlock.apply(to: controller)
     }
 
     private static let viewportFitCover = #"""

@@ -23,10 +23,9 @@ struct SettingsView: View {
     }
     @AppStorage("hideSiteHeader") private var hideSiteHeader = true
     @AppStorage("homeRankOnly") private var homeRankOnly = true
-    @AppStorage("showFloatingBar") private var showFloatingBar = true
-    @AppStorage("adFilter") private var adFilter = true
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("hideDory") private var hideDory = true
+    @AppStorage(AdBlock.key) private var adBlock = true
     @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
     @AppStorage(AppLock.lockKey) private var appLock = false
     @AppStorage(AppLock.blurKey) private var privacyBlur = false
@@ -170,19 +169,16 @@ struct SettingsView: View {
                         .onChange(of: homeRankOnly) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }
-                    Toggle("광고 차단 (애드가드 갤러리 필터)", isOn: $adFilter)
-                        .onChange(of: adFilter) { _, _ in
+                    Toggle("광고 차단", isOn: $adBlock)
+                        .onChange(of: adBlock) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }
                     Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)
                         .onChange(of: hideDory) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }
-                    Toggle("오른쪽 세로 버튼 막대 보기", isOn: $showFloatingBar)
-                    if !showFloatingBar {
-                        Text("⋮ 메뉴는 상단바 오른쪽(글쓰기 화면은 왼쪽)으로 옮겨져요. 한손 모드는 상단 갤러리 이름을 0.5초 누르면 켜져요.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    NavigationLink { ControlBarOrderView() } label: {
+                        Label("컨트롤바 버튼", systemImage: "arrow.up.arrow.down")
                     }
                     NavigationLink { AppIconSettingsView() } label: {
                         Label("앱 아이콘", systemImage: "app.badge")
@@ -590,5 +586,66 @@ struct AnonInfoView: View {
             AnonStore.password = password
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 페이지 스크립트에 새 값 반영
         }
+    }
+}
+
+
+/// 설정 → 컨트롤바 버튼 순서 (끌어서 바꾸기)
+struct ControlBarOrderView: View {
+    @AppStorage(ControlBarItem.storageKey) private var raw = ""
+    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = false
+    @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
+    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
+    @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
+
+    private var items: [ControlBarItem] { ControlBarItem.order(from: raw) }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(items) { item in
+                    Label(item.label, systemImage: item.icon)
+                        .foregroundStyle(menuInTopBar && item == .menu ? .secondary : .primary)
+                }
+                .onMove { from, to in
+                    var list = items
+                    list.move(fromOffsets: from, toOffset: to)
+                    raw = ControlBarItem.raw(from: list)
+                }
+            } footer: {
+                Text("오른쪽 손잡이(≡)를 끌어서 순서를 바꿔요. 위쪽이 가로 배치에서는 왼쪽, 세로 배치에서는 위쪽이에요. 글을 볼 때 나오는 댓글 새로고침 버튼은 따로 떠요.")
+            }
+            // 모든 기기에 적용 (가로로 쓸 때 / 세로로 쓸 때 따로)
+            Section {
+                Picker("가로로 쓸 때", selection: $verticalInLandscape) {
+                    Text("가로").tag(false)
+                    Text("세로").tag(true)
+                }
+                Picker("세로로 쓸 때", selection: $verticalInPortrait) {
+                    Text("가로").tag(false)
+                    Text("세로").tag(true)
+                }
+            } header: {
+                Text("배치")
+            } footer: {
+                Text("가로: 화면 아래쪽에 가로로. 세로: 화면 오른쪽 가운데에 세로로.\n휴대폰을 가로로 쓸 때 세로 막대는 아이콘만 보여요.")
+            }
+            Section {
+                Toggle("스크롤할 때 숨기기", isOn: $autoHideBar)
+            } footer: {
+                Text("페이지를 스크롤하는 동안 컨트롤바가 화면 아래(세로 막대는 오른쪽)로 들어가고, 멈추면 다시 나와요.")
+            }
+            Section {
+                Toggle("⋮ 메뉴를 상단바 오른쪽에 두기", isOn: $menuInTopBar)
+            } footer: {
+                Text("켜면 ⋮ 메뉴가 상단바 오른쪽 위에 나오고 컨트롤바에서는 빠져요. (글쓰기 화면에서는 상단바 왼쪽)")
+            }
+            Section {
+                Button("기본 순서로") { raw = "" }
+            }
+        }
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("컨트롤바 버튼")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

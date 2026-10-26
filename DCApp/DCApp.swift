@@ -100,6 +100,8 @@ struct RootView: View {
     /// 앱 사용 중 새 디시 알림 배너
     @ObservedObject private var alarms = AlarmStore.shared
     @State private var bannerTask: Task<Void, Never>?
+    /// 듀오 오른쪽 빈 줄 (상단바가 그 줄까지 늘어나지 않게 위쪽을 바탕색으로 덮음)
+    @ObservedObject private var sideColumn = SideColumnLayout.shared
     @AppStorage("compactTopRatio") private var topRatio = 0.34
     @State private var keyboardVisible = false
     @State private var dragStartRatio: Double?      // 핸들을 끌기 시작할 때의 높이
@@ -139,6 +141,15 @@ struct RootView: View {
             // 앱 화면이 상태바·홈 바 영역까지 덮도록 (남색 상단바가 위 끝까지, 아래 검은 띠 없음)
             // 키보드 처리는 그대로 두기 위해 .container만 무시
             .ignoresSafeArea(.container, edges: .all)
+
+            // 듀오: 상단바가 오른쪽 빈 줄(안전 영역)까지 늘어난 부분을 바탕색으로 덮어 사파리처럼
+            if sideColumn.width > 0 && !compactMode {
+                Color(uiColor: .systemBackground)
+                    .frame(width: sideColumn.width, height: sideColumn.topBarBottom + 2)   // +2: 상단바 아래 회색 구분선까지 덮기
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
 
             // 한손 모드: 앱 화면 바로 위에 있는 핸들을 위아래로 끌어 높이 조절
             if compactMode {

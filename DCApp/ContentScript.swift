@@ -30,6 +30,9 @@ enum ContentScript {
   function buildCSS() {
     var rules = [
       '.dcapp-hide{display:none!important}',
+      '.dcapp-cmt{margin-left:.3em;color:rgb(41,121,255)!important;font-weight:600;white-space:nowrap}',
+      // 오른쪽 댓글 칸을 없앤 자리까지 제목이 쓰도록
+      '.gall-detail-lnk:has(> .rt.dcapp-hide) > .lt{width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important}',
       '.dcapp-collapsed{position:relative!important;height:30px!important;min-height:0!important;max-height:30px!important;overflow:hidden!important;padding-top:0!important;padding-bottom:0!important}',
       '.dcapp-collapsed>*{visibility:hidden!important}',
       // 안내 문구는 회색 칸 한가운데 (가로·세로 가운데 정렬)
@@ -740,8 +743,72 @@ enum ContentScript {
     } catch (e) {}
   }
 
+  // ---------- 광고 자리 숨기기 (광고 서버 요청은 앱이 따로 막음 → 남은 빈 칸·광고 틀을 가림) ----------
+  var AD_SELECTORS = [
+    'ins.adsbygoogle', '[id^="div-gpt-ad"]', '[id^="google_ads"]', 'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
+    '[class^="dable"]', '[class*=" dable"]', '[id^="dable"]', '[id^="mobon"]', '[class*="mobon"]', '[id*="adfit"]', '[class*="adfit"]',
+    "li:has(> a[href*='ads.dcinside.com'])", "a[href*='addc.dcinside.com']", "a[href*='ads.dcinside.com']",
+    '.ad-view', '.adv-area', '.ad_box', '.ad-box', '.adbox', '.banner_m', '.powerlink', '[class*="power-link"]',
+    // 디시 모바일에서 확인한 것: 파워링크 광고 줄, 글 목록 맨 위 설문·AD 줄, 하단 '앱 다운로드' 배너, 상단 빈 검색 칸
+    '.adv-group', '.pwlink', 'li:not(.notice):has(> .detail-top-lnk)', '#app_down_pop', '.layer-bottom-popup',
+    '.outside-search-box',
+    // 글 본문 아래 'AD | 더 알아보기' 광고 칸 (회색 띠째로)
+    '[class*="adv-group"]', '[id^="rtbx-ad"]', '[id*="rtbx"]', '[class*="rtbx"]'
+  ];
+  /// 글 목록 맨 위의 'AD' / '설문' 줄 (선택자로 못 잡는 경우 글자로)
+  function hideListPromos() {
+    if (cfg.adBlock === false) return;
+    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+      if (/^(AD|설문)\s/.test(txt(li))) li.classList.add('dcapp-hide');
+    });
+    // 광고 칸을 감싼 회색 띠: 광고 말고 다른 내용이 없을 때만 같이 숨김
+    document.querySelectorAll('.adv-groupin, [id^="rtbx-ad"]').forEach(function (ad) {
+      var box = ad.parentElement;
+      for (var i = 0; i < 3 && box && box !== document.body; i++) {
+        var other = Array.prototype.some.call(box.children, function (c) {
+          return !c.contains(ad) && c.offsetHeight > 0 && txt(c) !== '';
+        });
+        if (other || box.querySelector('textarea, .comment, .gallview-tit-box, .btn-list, .gall-detail-lst')) break;
+        box.classList.add('dcapp-hide');
+        box = box.parentElement;
+      }
+    });
+  }
+  /// 글 목록: 오른쪽 회색 칸의 댓글 수를 없애고 제목 옆에 파란 [댓글수]로
+  function listCommentCount() {
+    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+      var ct = li.querySelector('.ct');
+      if (!ct) return;
+      var box = ct.closest('a.rt') || ct.closest('.rt') || ct;
+      var title = li.querySelector('.subjectin') || li.querySelector('.subject-add') || li.querySelector('.subject');
+      if (!title) return;
+      var n = (ct.textContent || '').replace(/[^0-9]/g, '');
+      var tag = li.querySelector('.dcapp-cmt');
+      if (n && n !== '0') {
+        if (!tag) {
+          tag = document.createElement('span');
+          tag.className = 'dcapp-cmt';
+          title.parentNode.insertBefore(tag, title.nextSibling);
+        }
+        if (tag.textContent !== '[' + n + ']') tag.textContent = '[' + n + ']';
+      } else if (tag) tag.parentNode.removeChild(tag);
+      box.classList.add('dcapp-hide');
+    });
+  }
+  function adBlockCSS() {
+    var st = document.getElementById('dcapp-adblock');
+    if (cfg.adBlock === false) { if (st) st.parentNode.removeChild(st); return; }
+    if (st) return;
+    st = document.createElement('style');
+    st.id = 'dcapp-adblock';
+    st.textContent = AD_SELECTORS.map(function (s) { return s + '{display:none!important}'; }).join('\n');
+    (document.head || document.documentElement).appendChild(st);
+  }
+
   function apply() {
     ensureStyle();
+    try { adBlockCSS(); hideListPromos(); } catch (e) {}
+    try { listCommentCount(); } catch (e) {}
     try { hideGallNickTip(); } catch (e) {}
     try { avoidFloatBar(); } catch (e) {}
     try { fillAnon(); } catch (e) {}
@@ -1518,7 +1585,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v49-overlaybar', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v53-adblock3', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -1619,6 +1686,30 @@ enum ContentScript {
     }).join(' , ') + ' | 채우기 기록: ' + (anonLog.join(' → ') || '(없음)') + ' | 앱에 저장: 닉' + ((cfg.anon || {}).nick ? '있음' : '없음') + ' 비번' + ((cfg.anon || {}).pw ? '있음' : '없음'));
     var ml = manageLogLink();
     out.push('관리 내역 링크: ' + (ml ? ml.outerHTML.replace(/\s+/g, ' ').slice(0, 250) : '(없음)'));
+    // 광고로 보이는 것 (차단 규칙을 늘릴 때 참고): iframe 주소, id·class에 ad/banner/광고가 든 큰 칸
+    out.push('--- 페이지 맨 위 (화면 위쪽 200px 안의 칸) ---');
+    Array.prototype.filter.call(document.querySelectorAll('body *'), function (el) {
+      var r = el.getBoundingClientRect();
+      return r.top < 200 && r.bottom > 0 && r.height > 20 && r.width > 200 && visible(el) && el.children.length < 15;
+    }).slice(0, 20).forEach(function (el) {
+      var r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      out.push(el.tagName + '#' + (el.id || '') + '.' + clsOf(el).slice(0, 50) + ' y=' + Math.round(r.top) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+               ' bg=' + cs.backgroundColor + ' pad=' + cs.paddingTop + ' 글자=' + txt(el).slice(0, 20));
+    });
+    out.push('--- 광고 후보 ---');
+    Array.prototype.forEach.call(document.querySelectorAll('iframe'), function (f) {
+      var r = f.getBoundingClientRect();
+      out.push('iframe ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' src=' + (f.getAttribute('src') || '').slice(0, 120) + ' #' + (f.id || '') + '.' + clsOf(f));
+    });
+    Array.prototype.filter.call(document.querySelectorAll('div, section, aside, li, a'), function (el) {
+      var k = ((el.id || '') + ' ' + clsOf(el)).toLowerCase();
+      if (!/(^|[\s_-])(ad|ads|adv|advert|banner|bnr|sponsor|promotion|powerlink)([\s_-]|\d|$)|광고/.test(k)) return false;
+      var r = el.getBoundingClientRect();
+      return r.width > 80 && r.height > 30;
+    }).slice(0, 25).forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      out.push(el.tagName + '#' + (el.id || '') + '.' + clsOf(el).slice(0, 60) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' vis=' + visible(el));
+    });
     var mineLi = document.querySelector('li.comment.dcapp-mine');
     if (mineLi) {
       var cs = getComputedStyle(mineLi), ca = getComputedStyle(mineLi, '::before');

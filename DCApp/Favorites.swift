@@ -123,6 +123,7 @@ enum LibrarySection: String, CaseIterable, Identifiable {
     case visited = "방문한 갤러리"
     case galleries = "즐겨찾기"
     case alarms = "알림"
+    case posts = "보관함"
     var id: Self { self }
 }
 
@@ -240,6 +241,7 @@ struct FavoritesView: View {
                     case .visited: VisitedGalleriesList()
                     case .galleries: galleriesList
                     case .alarms: AlarmsList()
+                    case .posts: SavedPostsList()     // 글 보관함 (⋮ 메뉴에서 옮김)
                     }
                 }
             }
@@ -257,6 +259,12 @@ struct FavoritesView: View {
             .navigationTitle("갤러리")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // 디시 첫 화면으로 (하단 바의 홈 버튼을 이쪽으로 옮김)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { router.open(DC.home) } label: {
+                        Label("홈", systemImage: "house")
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) { EditButton() }
                 if section == .galleries {
                     ToolbarItem(placement: .topBarTrailing) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// 앱 테마 (설정 → 앱 → 테마). 상단바 색, 강조색(하단 바 선택 등), 웹페이지 속 디시 파란색 계열을 바꿀 색
 enum AppTheme: String, CaseIterable, Identifiable {
@@ -226,7 +227,12 @@ struct BrowserView: View {
     @ObservedObject private var hwKeyboard = HardwareKeyboard.shared
     @AppStorage("compactMode") private var compactMode = false
     /// 오른쪽 세로 버튼 막대 (끄면 ⋮ 메뉴가 상단바로 감)
-    @AppStorage("showFloatingBar") private var showFloatingBar = true
+    /// 오른쪽 세로 버튼 막대는 없앰 (⋮는 상단바, 한손 모드는 제목 길게 누르기, 글 볼 때만 댓글 새로고침 버튼)
+    private let showFloatingBar = false
+    /// 컨트롤바 버튼 순서 (설정에서 바꿈)
+    @AppStorage(ControlBarItem.storageKey) private var controlOrderRaw = ""
+    /// ⋮ 메뉴를 상단바 오른쪽에 둘지 (켜면 컨트롤바에서는 빠짐)
+    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = false
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -273,8 +279,59 @@ struct BrowserView: View {
     @State private var keyboardVisible = false
     /// 웹페이지 위에 떠 있는 하단 바(+안내 배너) 높이 → 그만큼 페이지 아래에 스크롤 여백
     @State private var bottomBarHeight: CGFloat = 0
-    /// 아이패드: 하단 바를 없애고 오른쪽 세로 막대 하나로 합침 (가로·세로 모두)
-    private var usesSideBar: Bool { showsMenuButton && UIDevice.current.userInterfaceIdiom == .pad }
+    /// 화면 오른쪽 안전 영역 폭 (듀오의 시계·카메라 줄 등) — 창(UIWindow)에서 직접 읽음
+    @State private var trailingInset: CGFloat = 0
+    /// 오른쪽 안전 영역이 버튼이 들어갈 만큼 넓은지 (듀오)
+    /// 듀오 오른쪽 빈 줄에 컨트롤바를 넣던 방식은 쓰지 않음 (가끔 바가 사라짐) → 일반 아이폰처럼 하단 바
+    private var hasSideColumn: Bool { false }
+    /// 듀오처럼 오른쪽 안전 영역이 넓으면 웹페이지가 그 줄까지 씀
+    private var fillsTrailing: Bool { trailingInset >= 56 }
+    @Environment(\.horizontalSizeClass) private var hSizeClass
+    @Environment(\.verticalSizeClass) private var vSizeClass
+    @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
+    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
+    /// 스크롤 중이라 컨트롤바를 화면 밖으로 넣었는지
+    private var barTucked: Bool { autoHideBar && model.isScrolling }
+    @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
+    /// 화면(이 브라우저 영역) 크기 — 가로로 쓰는지 판단
+    @State private var viewSize: CGSize = .zero
+    private var isLandscape: Bool { viewSize.width > viewSize.height }
+    /// 아이패드·듀오 펼친 화면 (가로·세로 모두 넓음) — 이때만 설정에서 고른 배치를 따름
+    private var isLargeScreen: Bool { hSizeClass == .regular && vSizeClass == .regular }
+    /// 컨트롤바를 오른쪽 세로 막대로 둘지 — 설정 → 컨트롤바에서 가로로 쓸 때 / 세로로 쓸 때 따로 선택 (모든 기기)
+    private var usesSideBar: Bool {
+        guard showsMenuButton else { return false }
+        return isLandscape ? verticalInLandscape : verticalInPortrait
+    }
+    /// 휴대폰 가로 + 세로 막대: 높이가 낮아서 글자 없이 아이콘만 (막대를 짧게)
+    private var compactSideBar: Bool { usesSideBar && !isLargeScreen && isLandscape }
+
+    /// 오른쪽 빈 줄 폭을 다시 읽고, 메인 화면이면 앱 전체(RootView)에도 알려 줌 → 상단바가 빈 줄을 침범하지 않게 가림
+    @State private var lastTopBarBottom: CGFloat = 0
+    private func updateSideColumn(top: CGFloat) {
+        lastTopBarBottom = top
+        applySideColumn()
+        // 접기·펴기·앱 전환 직후엔 안전 영역 값이 잠깐 0으로 읽힐 때가 있어서 조금 뒤에 한 번 더 읽음
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300)); applySideColumn()
+            try? await Task.sleep(for: .milliseconds(700)); applySideColumn()
+        }
+    }
+    private func applySideColumn() {
+        let inset = Self.windowTrailingInset
+        if inset != trailingInset { trailingInset = inset }
+        guard showsMenuButton else { return }
+        SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
+    }
+
+    /// 앱 화면이 그려지는 일반 창에서 읽음 (앱 잠금·가림 화면 같은 덧씌운 창은 제외 — 그쪽이 키 창이면 0이 나올 수 있음)
+    private static var windowTrailingInset: CGFloat {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { $0.windowLevel == .normal && !$0.isHidden }
+        return windows.map(\.safeAreaInsets.right).max() ?? 0
+    }
 
     init(startURL: URL, fallbackTitle: String) {
         _model = StateObject(wrappedValue: WebViewModel(url: startURL))
@@ -338,24 +395,57 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
-            // 듀오를 펼쳤을 때 오른쪽(시계·카메라 줄) 안전 영역까지, 그리고 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록
-            .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
+            // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
+            .ignoresSafeArea(.container, edges: fillsTrailing ? [.bottom, .trailing] : .bottom)
             // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
             // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
+            // 웹페이지 위쪽(상단바 뒤 ~ 화면 맨 위)만 남색으로, 오른쪽 빈 줄(듀오)의 위쪽까지 포함.
+            // 웹페이지 위쪽 안전 영역 높이(상단바+그 위 띠)를 재서 그만큼만 위로 그림 → 상단바 아래 빈 줄은 칠하지 않음
             .background {
-                DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .horizontal])
+                GeometryReader { g in
+                    let top = g.safeAreaInsets.top
+                    DCTheme.navy
+                        .frame(width: g.size.width + g.safeAreaInsets.leading, height: top + 1)   // 오른쪽 빈 줄은 칠하지 않음
+                        .offset(x: -g.safeAreaInsets.leading, y: -top)
+                }
+            }
+            .background {
+                // 예비: 웹페이지 폭만큼은 화면 맨 위까지 (위 방법이 안 먹히는 경우 대비)
+                DCTheme.navy.ignoresSafeArea(.container, edges: .top)
             }
             .overlay(alignment: .top) { topOverlay }
-            .overlay(alignment: .bottomTrailing) {
-                if usesSideBar {
-                    if !keyboardVisible { sideBar }
-                } else if showsMenuButton && showFloatingBar && !keyboardVisible {
-                    floatingButtonsPlaced
+            .overlay {
+                // 화면 크기가 바뀔 때마다(접기·펴기·회전) 오른쪽 안전 영역 폭을 다시 읽음
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { viewSize = g.size; updateSideColumn(top: g.frame(in: .global).minY) }
+                        .onChange(of: g.size) { _, sz in viewSize = sz; updateSideColumn(top: g.frame(in: .global).minY) }
+                        .onChange(of: g.frame(in: .global).minY) { _, y in updateSideColumn(top: y) }
+                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                            updateSideColumn(top: g.frame(in: .global).minY)
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                            updateSideColumn(top: g.frame(in: .global).minY)
+                        }
                 }
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Group {
+                    if usesSideBar {
+                        if !keyboardVisible { sideBar }
+                    } else if showsMenuButton && isPostPage && !keyboardVisible {
+                        refreshButtonPlaced        // 글 볼 때만: 댓글 새로고침 버튼 하나
+                    }
+                }
+                // 스크롤하는 동안 오른쪽 밖으로 들어갔다가 멈추면 다시 나옴
+                .offset(x: barTucked ? 220 : 0)
+                .animation(.easeOut(duration: 0.2), value: barTucked)
             }
             .navigationTitle(titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
+            .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -364,7 +454,12 @@ struct BrowserView: View {
                 if !keyboardVisible {
                     VStack(spacing: 0) {
                         modeBanner
-                        if showsMenuButton && !usesSideBar { galleryBar }
+                        if showsMenuButton && !usesSideBar {
+                            galleryBar
+                                // 스크롤하는 동안 화면 아래로 들어갔다가 멈추면 다시 나옴
+                                .offset(y: barTucked ? 160 : 0)
+                                .animation(.easeOut(duration: 0.2), value: barTucked)
+                        }
                     }
                     .background {
                         GeometryReader { g in
@@ -378,13 +473,36 @@ struct BrowserView: View {
             }
             .onChange(of: bottomBarHeight) { _, _ in updateBottomInset() }
             .onChange(of: keyboardVisible) { _, _ in updateBottomInset() }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-                withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = true }
+            // 키보드가 정말 화면에 올라와 있는지는 키보드 위치로 판단 (화면을 돌릴 때 오는 알림만 보고 바를 숨기지 않게)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { n in
+                keyboardFrameChanged(n)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
+                keyboardFrameChanged(n)
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-                withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = false }
+                setKeyboardVisible(false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                setKeyboardVisible(false)
             }
             // 길게 누르기 → 차단 메뉴
+    }
+
+    private func setKeyboardVisible(_ v: Bool) {
+        guard keyboardVisible != v else { return }
+        withAnimation(.easeOut(duration: 0.2)) { keyboardVisible = v }
+    }
+
+    /// 키보드 알림의 끝 위치가 화면 안에 충분히(80pt 이상) 올라와 있을 때만 '키보드 떠 있음'
+    private func keyboardFrameChanged(_ n: Notification) {
+        guard let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        let screen = (n.object as? UIScreen)?.bounds
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .first(where: { $0.activationState == .foregroundActive })?.screen.bounds
+            ?? .zero
+        let overlap = end.intersection(screen)
+        setKeyboardVisible(!overlap.isNull && overlap.height > 80)
     }
 
     /// 차단 메뉴 / 요소 숨기기 확인
@@ -608,9 +726,37 @@ struct BrowserView: View {
 
     // MARK: - 글쓰기 화면 계정 버튼 (로그인 / 계정 전환 / 로그아웃)
 
+    /// 하단 바(또는 세로 막대)의 로그인 칸 — 누르면 계정 메뉴
+    private var accountBarItem: some View {
+        let compact = compactSideBar
+        return Menu { accountMenuItems } label: {
+            VStack(spacing: 2) {
+                Image(systemName: currentAccount == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
+                    .font(.system(size: 19, weight: .medium))
+                    .frame(height: 24)
+                if !compact {
+                    Text(currentAccount == nil ? "로그인" : "계정").font(.system(size: 11, weight: .semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, compact ? 10 : 7)
+            .foregroundStyle(currentAccount == nil ? Color.primary : DCTheme.accent)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
     private var accountMenu: some View {
+        Menu { accountMenuItems } label: {
+            Image(systemName: currentAccount == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
+                .font(.system(size: 19))
+        }
+    }
+
+    @ViewBuilder
+    private var accountMenuItems: some View {
         let others = CredentialStore.all().filter { $0.id != currentAccount }
-        return Menu {
+        Group {
             if let cur = currentAccount {
                 Section("현재 계정: \(cur)") {
                     Button(role: .destructive) { model.logoutHere() } label: {
@@ -630,10 +776,6 @@ struct BrowserView: View {
             Button { model.loginHere(nil) } label: {
                 Label("로그인 페이지 열기", systemImage: "person.badge.key")
             }
-        } label: {
-            // 상단바 자리를 아끼려고 아이콘만 (계정 이름은 메뉴 안 '현재 계정'에 표시)
-            Image(systemName: currentAccount == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
-                .font(.system(size: 19))
         }
     }
 
@@ -713,6 +855,8 @@ struct BrowserView: View {
                 .font(.headline)
                 .foregroundStyle(.white)
                 .lineLimit(1)
+                // 제목이 길면(디시 첫 화면 제목 등) 넓은 화면에서 양옆 버튼 자리를 밀어내 로그인 버튼이 사라짐 → 폭 제한
+                .frame(maxWidth: 240)
                 .contentShape(Rectangle())
                 // 갤러리 이름을 0.5초 누르면 한손 모드 켜기/끄기
                 .onLongPressGesture(minimumDuration: 0.5) {
@@ -727,9 +871,8 @@ struct BrowserView: View {
             if model.isWritePage {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 16) {
-                        if !showFloatingBar && hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
-                        if !showFloatingBar { topMoreMenu }
-                        accountMenu
+                        if hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
+                        if menuInTopBar { topMoreMenu }     // 글쓰기 화면은 오른쪽이 임시저장·등록이라 ⋮는 왼쪽
                     }
                     .foregroundStyle(.white)
                 }
@@ -759,17 +902,16 @@ struct BrowserView: View {
                 }
                 .noGlassBackground()
             } else {
-                // 다른 화면: 왼쪽에 로그인/로그아웃(계정) 버튼 — 글쓰기 화면과 같은 메뉴
-                ToolbarItem(placement: .topBarLeading) {
-                    HStack(spacing: 16) {
-                        // 세로 막대를 껐고 하드웨어 키보드가 있으면 뒤로가기는 여기에
-                        if !showFloatingBar && hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
-                        accountMenu
+                // 다른 화면: 왼쪽은 (하드웨어 키보드일 때) 뒤로가기, 오른쪽 위에 ⋮ 고정
+                if hwKeyboard.connected {
+                    ToolbarItem(placement: .topBarLeading) {
+                        backButton { Image(systemName: "chevron.backward") }
+                            .foregroundStyle(.white)
                     }
-                    .foregroundStyle(.white)
+                    .noGlassBackground()
                 }
-                .noGlassBackground()
-                if !showFloatingBar {
+                // ⋮ 메뉴: 설정에서 '상단바에 두기'를 켰을 때만 오른쪽 위 (아니면 컨트롤바 안)
+                if menuInTopBar {
                     ToolbarItem(placement: .topBarTrailing) { topMoreMenu.foregroundStyle(.white) }
                         .noGlassBackground()
                 }
@@ -805,25 +947,16 @@ struct BrowserView: View {
 
     /// 세로 버튼 위치: 보통은 웹페이지 오른쪽 아래.
     /// 듀오처럼 오른쪽에 넓은 안전 영역(시계·카메라 줄)이 있으면 그 빈 줄의 맨 아래(하단 바 옆)에 넣음
-    private var floatingButtonsPlaced: some View {
-        GeometryReader { g in
-            let side = g.safeAreaInsets.trailing
-            if side >= 56 {
-                ZStack(alignment: .bottom) {
-                    Color.clear.allowsHitTesting(false)
-                    floatingButtons
-                        .padding(.bottom, Self.windowBottomInset + 6)
-                }
-                .frame(width: side)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .ignoresSafeArea(.container, edges: [.trailing, .bottom])
-            } else {
-                floatingButtons
-                    .padding(.trailing, 12)
-                    .padding(.bottom, 16 + bottomBarHeight)      // 페이지 위에 떠 있는 하단 바 위로
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            }
+    /// 글 볼 때 오른쪽 아래(하단 바 위)에 떠 있는 댓글 새로고침 버튼
+    private var refreshButtonPlaced: some View {
+        Button { model.refreshComments() } label: {
+            floatIcon("arrow.clockwise", tint: .primary)
         }
+        .padding(4)
+        .glassBar()
+        .padding(.trailing, 12)
+            .padding(.bottom, 16 + bottomBarHeight)      // 페이지 위에 떠 있는 하단 바 위로
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
 
     /// 홈 인디케이터 등 기기 아래쪽 안전 영역 높이
@@ -914,19 +1047,40 @@ struct BrowserView: View {
     }
 
     /// 아이패드: 오른쪽 세로 막대 하나에 하단 바 칸들 + 기존 세로 버튼(한손·⋮·댓글 새로고침·뒤로)을 모음
+    @ViewBuilder
     private var sideBar: some View {
-        VStack(spacing: 2) {
+        let bar = VStack(spacing: 2) {
             galleryBarItems
+            if isPostPage {
+                // 글 볼 때만 댓글 새로고침
+                barItem("arrow.clockwise", "arrow.clockwise", "새로고침", selected: false) { model.refreshComments() }
+            }
             if showFloatingBar {
-                Divider().frame(width: 36).padding(.vertical, 4)
+                if hasSideColumn {
+                    Spacer().frame(height: 6)
+                } else {
+                    Divider().frame(width: 36).padding(.vertical, 4)
+                }
                 floatingButtonItems
             }
         }
-        .frame(width: 64)
         .padding(.vertical, 6)
-        .glassBar()
-        .padding(.trailing, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)   // 오른쪽 가운데 (손에 쥐었을 때 엄지 닿는 곳)
+        if hasSideColumn {
+            // 듀오: 오른쪽 빈 줄(안전 영역) 안, 맨 아래부터 세로로 (웹페이지는 그 줄을 쓰지 않음)
+            // 리퀴드 글래스 없이 빈 줄 바탕에 그대로 (애플 시계·카메라 UI와 겹쳐 보이지 않게, 빈 줄과 한 몸처럼)
+            bar
+                .frame(width: trailingInset)
+                .padding(.bottom, Self.windowBottomInset + 6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .ignoresSafeArea(.container, edges: [.trailing, .bottom])
+        } else {
+            // 아이패드: 오른쪽 가운데 (손에 쥐었을 때 엄지 닿는 곳)
+            bar
+                .frame(width: 64)
+                .glassBar()
+                .padding(.trailing, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        }
     }
 
     /// 웹페이지 아래에 하단 바 높이만큼 스크롤 여백 (바에 가려지지 않게)
@@ -934,13 +1088,21 @@ struct BrowserView: View {
         model.setBottomBarInset(keyboardVisible ? 0 : bottomBarHeight)
     }
 
-    @ViewBuilder
+    /// 컨트롤바 버튼들 — 순서는 설정 → 컨트롤바 버튼 순서에서 바꿀 수 있음
     private var galleryBarItems: some View {
+        ForEach(ControlBarItem.order(from: controlOrderRaw).filter { !(menuInTopBar && $0 == .menu) }) { item in
+            controlItem(item)
+        }
+    }
+
+    @ViewBuilder
+    private func controlItem(_ item: ControlBarItem) -> some View {
         let g = gallery
-            // 홈: 언제나 디시 첫 화면
-            barItem("house", "house.fill", "홈", selected: isDCHome) {
-                model.load(DC.home)
-            }
+        switch item {
+        case .account:
+            // 로그인 / 계정
+            accountBarItem
+        case .gallery:
             barItem("square.stack", "square.stack.fill", "갤러리", selected: false) {
                 router.sheet = .library
             }
@@ -950,7 +1112,8 @@ struct BrowserView: View {
                     Circle().fill(.red).frame(width: 8, height: 8).offset(x: 12, y: 6).allowsHitTesting(false)
                 }
             }
-            // 가운데: 전체글 보는 중 → "개념글" / 개념글 보는 중 → "전체글"(≡)로 바뀜
+        case .recommend:
+            // 전체글 보는 중 → "개념글" / 개념글 보는 중 → "전체글"(≡)로 바뀜
             if section == .recommend {
                 barItem("line.3.horizontal", "line.3.horizontal", "전체글", selected: true, enabled: g != nil) {
                     if let g { model.load(g.url) }
@@ -960,6 +1123,7 @@ struct BrowserView: View {
                     if let g { model.load(g.recommendURL) }
                 }
             }
+        case .search:
             barItem("magnifyingglass", "magnifyingglass", "검색", selected: section == .search) {
                 if g != nil {
                     Task {
@@ -970,12 +1134,30 @@ struct BrowserView: View {
                     router.sheet = .search
                 }
             }
+        case .write:
             barItem("square.and.pencil", "square.and.pencil", "글쓰기", selected: section == .write, enabled: g != nil) {
                 if let g {
                     model.focusTitleOnWrite = true      // 열리면 제목 칸에 바로 키보드
                     model.load(g.writeURL)
                 }
             }
+        case .menu:
+            // ⋮ 메뉴 (상단바에서 컨트롤바로 옮김)
+            let compact = compactSideBar
+            Menu { moreMenu } label: {
+                VStack(spacing: 2) {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 19, weight: .medium))
+                        .frame(height: 24)
+                    if !compact { Text("메뉴").font(.system(size: 11, weight: .semibold)) }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, compact ? 10 : 7)
+                .foregroundStyle(Color.primary)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private func barItem(_ icon: String, _ selectedIcon: String, _ title: String, selected: Bool, enabled: Bool = true,
@@ -985,10 +1167,13 @@ struct BrowserView: View {
                 Image(systemName: selected ? selectedIcon : icon)
                     .font(.system(size: 19, weight: .medium))
                     .frame(height: 24)
-                Text(title).font(.system(size: 11, weight: .semibold))
+                // 듀오 빈 줄 안에서는 글자를 빼서 막대를 짧게 (위쪽 애플 시계·와이파이 표시와 겹치지 않게)
+                if !compactSideBar {
+                    Text(title).font(.system(size: 11, weight: .semibold))
+                }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
+            .padding(.vertical, compactSideBar ? 8 : 7)
             .foregroundStyle(selected ? DCTheme.accent : Color.primary)
             .background {
                 if selected {
@@ -1006,7 +1191,13 @@ struct BrowserView: View {
 
     @ViewBuilder
     private var moreMenu: some View {
-        // 화면에 따라 바뀌는 첫 칸: 글 보기 중 → 글 보관 / 갤러리 목록 → 갤러리 즐겨찾기
+        // 맨 위: 설정 (따로 한 칸)
+        Section {
+            Button { router.sheet = .settings } label: {
+                Label("설정", systemImage: "gearshape")
+            }
+        }
+        // 화면에 따라 바뀌는 칸: 글 보기 중 → 글 보관 / 갤러리 목록 → 갤러리 즐겨찾기
         Section {
             if isPostPage {
                 Button { bookmarkTapped() } label: {
@@ -1024,12 +1215,7 @@ struct BrowserView: View {
                     Label("갤러리 관리 내역", systemImage: "list.bullet.clipboard")
                 }
             }
-            Button { router.sheet = .posts } label: {
-                Label("글 보관함", systemImage: "bookmark.square")
-            }
-            Button { router.sheet = .settings } label: {
-                Label("설정", systemImage: "gearshape")
-            }
+            // (글 보관함은 갤러리 창의 '보관함' 탭으로)
         }
         Section {
             Button { model.goForward() } label: { Label("앞으로", systemImage: "chevron.forward") }
@@ -1047,7 +1233,8 @@ struct BrowserView: View {
             }
         }
         if let url = model.url {
-            ShareLink(item: url) { Label("링크 공유", systemImage: "link") }
+            // ShareLink를 메뉴 안에 두면 아이패드에서 공유 창이 상단바 제목에 붙어 화면이 깨짐 → 직접 띄움
+            Button { model.share(url) } label: { Label("링크 공유", systemImage: "link") }
         }
         Section("캡처") {
             Button { Task { await model.captureVisible() } } label: {
@@ -1276,6 +1463,95 @@ extension View {
                 .background(.regularMaterial, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.12), radius: 14, y: 4)
+        }
+    }
+}
+
+
+/// 듀오의 오른쪽 빈 줄 정보 (폭, 상단바 아래 끝 위치) — 앱 전체에서 그 줄 위쪽을 가리는 데 씀
+@MainActor
+final class SideColumnLayout: ObservableObject {
+    static let shared = SideColumnLayout()
+    @Published private(set) var width: CGFloat = 0
+    @Published private(set) var topBarBottom: CGFloat = 0
+
+    func update(width w: CGFloat, topBarBottom t: CGFloat) {
+        if abs(width - w) > 0.5 { width = w }
+        if abs(topBarBottom - t) > 0.5 { topBarBottom = t }
+    }
+}
+
+
+/// 컨트롤바(하단 바 / 아이패드·듀오 세로 바)에 들어가는 버튼 — 순서는 설정에서 바꿀 수 있음
+enum ControlBarItem: String, CaseIterable, Identifiable {
+    case account, gallery, recommend, search, write, menu
+    var id: String { rawValue }
+    static let storageKey = "controlBarOrder"
+    static let menuInTopBarKey = "menuInTopBar"
+    /// 아이패드·듀오 펼친 화면: 가로로 쓸 때 / 세로로 쓸 때 컨트롤바를 세로 막대로 (false면 하단 가로)
+    static let verticalLandscapeKey = "controlBarVerticalLandscape"
+    static let verticalPortraitKey = "controlBarVerticalPortrait"
+    /// 스크롤하는 동안 컨트롤바 숨기기
+    static let autoHideKey = "controlBarAutoHide"
+    /// 기본값: 가로로 쓸 때는 세로 막대, 세로로 쓸 때는 아이패드만 세로 막대 (아이폰·듀오는 하단 가로)
+    static var defaultVerticalInPortrait: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    /// 아이패드, 또는 지금 앱 창이 가로·세로 모두 넓은 화면(듀오 펼침)인지
+    /// (설정 시트 안에서는 크기 분류가 좁게 바뀌어서 시트 밖 앱 창 기준으로 봄)
+    static var isLargeScreenDevice: Bool {
+        if UIDevice.current.userInterfaceIdiom == .pad { return true }
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { $0.windowLevel == .normal }
+        return windows.contains {
+            $0.traitCollection.horizontalSizeClass == .regular && $0.traitCollection.verticalSizeClass == .regular
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .account: "로그인 / 계정"
+        case .gallery: "갤러리"
+        case .recommend: "개념글 / 전체글"
+        case .search: "검색"
+        case .write: "글쓰기"
+        case .menu: "메뉴 (⋮)"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .account: "person.crop.circle"
+        case .gallery: "square.stack"
+        case .recommend: "star"
+        case .search: "magnifyingglass"
+        case .write: "square.and.pencil"
+        case .menu: "ellipsis"
+        }
+    }
+
+    /// 저장된 순서 ("account,gallery,…") → 목록. 빠진 버튼은 뒤에 붙이고, 모르는 이름은 버림
+    static func order(from raw: String) -> [ControlBarItem] {
+        var list: [ControlBarItem] = []
+        for part in raw.split(separator: ",") {
+            if let item = ControlBarItem(rawValue: String(part)), !list.contains(item) { list.append(item) }
+        }
+        for item in allCases where !list.contains(item) { list.append(item) }
+        return list
+    }
+
+    static func raw(from list: [ControlBarItem]) -> String { list.map(\.rawValue).joined(separator: ",") }
+}
+
+// MARK: - 듀오 세로 줄 끄기
+extension View {
+    /// iPhone Duo는 iOS 27.1 SDK로 빌드한 앱의 시계·상단바 버튼을 화면 옆 세로 줄에 세움.
+    /// 이걸 끄면 서드파티 브라우저처럼 시계는 위쪽(카메라 왼쪽)에, 화면은 옆 여백 없이 꽉 차게.
+    @ViewBuilder
+    func keepsTopStatusBar() -> some View {
+        if #available(iOS 27.1, *) {
+            self.toolbarVerticalBehavior(.disabled)
+        } else {
+            self
         }
     }
 }

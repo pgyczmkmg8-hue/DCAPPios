@@ -13,3 +13,6 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# 비교용으로 꺼낸 예전 버전 (깃에 안 올림)
+_비교용*/
