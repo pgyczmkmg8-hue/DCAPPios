@@ -588,6 +588,17 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - 갤러리 공지
+
+    func openNotice() {
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.openNotice() : 'none';") as? String
+            if r == "none" || r == nil {
+                showToast("공지를 열 수 없는 화면이에요 (갤러리 목록 화면에서 눌러 주세요)")
+            }
+        }
+    }
+
     // MARK: - 말머리
 
     /// 지금 갤러리 페이지의 말머리 탭 (이름, 주소)

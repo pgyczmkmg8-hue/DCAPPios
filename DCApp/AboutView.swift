@@ -85,6 +85,18 @@ struct AboutView: View {
         .frame(maxWidth: 420)
     }
 
+    /// 광고 차단 (설정 화면에서 옮겨 옴)
+    private var adBlockBox: some View {
+        Toggle("광고 차단", isOn: $adBlock)
+            .onChange(of: adBlock) { _, _ in
+                NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(maxWidth: 420)
+    }
+
     /// 수동 확인: 패치 버전이라도 새것이면 알려 줌
     private func checkNow() async {
         checking = true
@@ -112,6 +124,7 @@ struct AboutView: View {
     @State private var confetti = 0
     @State private var image: UIImage? = AboutView.pickImage()
     @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
+    @AppStorage(AdBlock.key) private var adBlock = true
     @State private var checking = false
     @State private var checkResult: String?
     @State private var foundRelease: AppRelease?
@@ -141,6 +154,7 @@ struct AboutView: View {
                 }
 
                 updateBox
+                adBlockBox
 
             }
             .frame(maxWidth: .infinity)

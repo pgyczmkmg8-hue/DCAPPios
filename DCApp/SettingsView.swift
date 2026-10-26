@@ -25,7 +25,6 @@ struct SettingsView: View {
     @AppStorage("homeRankOnly") private var homeRankOnly = true
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @AppStorage("hideDory") private var hideDory = true
-    @AppStorage(AdBlock.key) private var adBlock = true
     @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
     @AppStorage(AppLock.lockKey) private var appLock = false
     @AppStorage(AppLock.blurKey) private var privacyBlur = false
@@ -167,10 +166,6 @@ struct SettingsView: View {
                         }
                     Toggle("홈 화면 대신 실북갤 순위 보기", isOn: $homeRankOnly)
                         .onChange(of: homeRankOnly) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
-                    Toggle("광고 차단", isOn: $adBlock)
-                        .onChange(of: adBlock) { _, _ in
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }
                     Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)

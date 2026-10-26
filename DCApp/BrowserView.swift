@@ -1211,6 +1211,9 @@ struct BrowserView: View {
                 }
             }
             if currentGallery != nil {
+                Button { model.openNotice() } label: {
+                    Label("갤러리 공지 보기", systemImage: "megaphone")
+                }
                 Button { model.openManageLog() } label: {
                     Label("갤러리 관리 내역", systemImage: "list.bullet.clipboard")
                 }
@@ -1377,7 +1380,11 @@ struct BrowserView: View {
         let existing = MemoStore.shared.memo(kind: kind, value: value, gallery: currentGallery?.id)
         return Button(label + (existing == nil ? "메모 남기기…" : "메모 고치기…")) {
             memoInput = existing?.text ?? ""
-            memoTarget = (kind, value, nick, existing)
+            // 메뉴가 닫힌 뒤에 메모 창을 띄움 (바로 띄우면 무시될 때가 있음)
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                memoTarget = (kind, value, nick, existing)
+            }
         }
     }
 
@@ -1387,7 +1394,11 @@ struct BrowserView: View {
             filters.addUser(kind: kind, value: value, memo: nick)
             model.showToast("\(label) 차단했어요")
         } else {
-            pendingBlock = (kind, value, nick, label)
+            // 차단 메뉴(확인 창)가 닫히는 중에 바로 다음 창을 띄우면 iOS가 무시해서 범위 질문이 안 뜸 → 닫힌 뒤에 띄움
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                pendingBlock = (kind, value, nick, label)
+            }
         }
     }
 
