@@ -1727,7 +1727,10 @@ enum ContentScript {
 
   // 알림 거르기용: 그 글을 불러와 해당 댓글의 작성자(닉네임·IP·아이디)를 알려줌 (못 찾으면 null)
   function alarmAuthor(gid, no, cno) {
-    return fetch('/board/' + encodeURIComponent(gid) + '/' + encodeURIComponent(no), { credentials: 'include' })
+    // 알림의 미니 갤러리는 mi$갤ID, 인물은 pr$갤ID
+    var sec = /^mi\$/.test(gid) ? 'mini' : (/^pr\$/.test(gid) ? 'person' : 'board');
+    var bare = String(gid).replace(/^(mi|pr)\$/, '');
+    return fetch('/' + sec + '/' + encodeURIComponent(bare) + '/' + encodeURIComponent(no), { credentials: 'include' })
       .then(function (r) { return r.ok ? r.text() : ''; })
       .then(function (html) {
         if (!html) return null;
@@ -2251,7 +2254,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v92-richtext', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v93-miniid', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

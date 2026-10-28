@@ -3,6 +3,20 @@ import Combine
 
 // MARK: - 모델
 
+/// 디시 알림 등은 미니 갤러리를 "mi$갤ID", 인물 갤러리를 "pr$갤ID"로 줌 → 모바일 주소로 바꾸기
+enum DCGalleryID {
+    /// 앞머리(mi$·pr$)를 뗀 진짜 갤러리 ID
+    nonisolated static func bare(_ id: String) -> String {
+        for p in ["mi$", "pr$"] where id.hasPrefix(p) { return String(id.dropFirst(p.count)) }
+        return id
+    }
+    /// 글 주소 (일반·마이너 /board, 미니 /mini, 인물 /person)
+    nonisolated static func postURL(_ id: String, no: Int, comments: Bool) -> URL {
+        let section = id.hasPrefix("mi$") ? "mini" : (id.hasPrefix("pr$") ? "person" : "board")
+        return URL(string: "https://m.dcinside.com/\(section)/\(bare(id))/\(no)" + (comments ? "#comment_box" : ""))!
+    }
+}
+
 enum GalleryKind: String, Codable, CaseIterable, Identifiable {
     case board   // 일반 + 마이너 갤러리 (모바일에서는 둘 다 /board/{id})
     case mini    // 미니 갤러리
@@ -38,10 +52,10 @@ struct Gallery: Codable, Identifiable, Hashable {
         if host == "m.dcinside.com" {
             guard parts.count >= 2 else { return nil }
             // 미니 갤러리 글쓰기·수정 주소(/mini/write/갤ID 등)에서 'write'를 갤러리로 잘못 읽지 않게
-            var id = parts[1]
+            var id = DCGalleryID.bare(parts[1])
             if ["write", "modify", "delete"].contains(id) {
                 guard parts.count >= 3 else { return nil }
-                id = parts[2]
+                id = DCGalleryID.bare(parts[2])
             }
             switch parts[0] {
             case "board": return (id, .board)
@@ -152,7 +166,7 @@ final class VisitedStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: key),
            let saved = try? JSONDecoder().decode([VisitedGallery].self, from: data) {
             // 예전에 미니 갤러리 글쓰기 주소를 잘못 읽어 생긴 'write' 같은 가짜 갤러리 지우기
-            items = saved.filter { !["write", "modify", "delete"].contains($0.gallery.galleryID) }
+            items = saved.filter { !["write", "modify", "delete"].contains($0.gallery.galleryID) && !$0.gallery.galleryID.contains("$") }
             if items.count != saved.count { save() }
         }
     }

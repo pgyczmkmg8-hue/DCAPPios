@@ -15,7 +15,7 @@ struct AlarmItem: Codable, Identifiable, Hashable {
     var id: String { "\(galleryID)-\(postNo)-\(commentNo ?? 0)-\(type)" }
 
     var url: URL {
-        URL(string: "https://m.dcinside.com/board/\(galleryID)/\(postNo)" + (commentNo != nil ? "#comment_box" : ""))!
+        DCGalleryID.postURL(galleryID, no: postNo, comments: commentNo != nil)   // 미니(mi$)·인물(pr$) 갤러리 주소도
     }
 
     var title: String { commentNo != nil ? "새 댓글" : "알림" }
@@ -116,10 +116,11 @@ final class AlarmStore: ObservableObject {
 
     /// 이 글에 달린 알림 전부 읽음으로 (배너를 눌러 들어가거나, 다른 길로 그 글을 열었을 때)
     func markRead(galleryID: String, postNo: Int) {
-        guard items.contains(where: { !$0.read && $0.galleryID == galleryID && $0.postNo == postNo }) else { return }
+        let g = DCGalleryID.bare(galleryID)       // 알림은 mi$갤ID, 글 주소는 갤ID
+        guard items.contains(where: { !$0.read && DCGalleryID.bare($0.galleryID) == g && $0.postNo == postNo }) else { return }
         items = items.map { a in
             var x = a
-            if a.galleryID == galleryID && a.postNo == postNo { x.read = true }
+            if DCGalleryID.bare(a.galleryID) == g && a.postNo == postNo { x.read = true }
             return x
         }
     }

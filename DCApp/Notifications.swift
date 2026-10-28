@@ -28,7 +28,7 @@ enum DCNotify {
         let subject: String
         var key: String { "\(galleryID)-\(postNo)-\(commentNo ?? 0)-\(type)" }
         var url: URL {
-            URL(string: "https://m.dcinside.com/board/\(galleryID)/\(postNo)" + (commentNo != nil ? "#comment_box" : ""))!
+            DCGalleryID.postURL(galleryID, no: postNo, comments: commentNo != nil)
         }
     }
 

@@ -1054,7 +1054,7 @@ final class WebViewModel: NSObject, ObservableObject {
                 let a = await call("return window.__dcapp ? await window.__dcapp.alarmAuthor(g, n, c) : null;",
                                    ["g": item.galleryID, "n": item.postNo, "c": cno]) as? [String: Any]
                 let nick = a?["nick"] as? String ?? "", ip = a?["ip"] as? String ?? "", id = a?["id"] as? String ?? ""
-                if a != nil, FilterStore.shared.isBlocked(nick: nick, ip: ip, id: id, gallery: item.galleryID) {
+                if a != nil, FilterStore.shared.isBlocked(nick: nick, ip: ip, id: id, gallery: DCGalleryID.bare(item.galleryID)) {
                     skip.append(item)
                 } else {
                     keep.append(item)      // 못 찾으면(댓글이 다른 페이지 등) 그냥 보여줌
