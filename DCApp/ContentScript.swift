@@ -1994,6 +1994,14 @@ enum ContentScript {
     return 'clicked';
   }
 
+  // ---------- 디시 '외부 링크 이동' 안내 끄기 (앱이 대신 물어보고 기본 브라우저로 엶) ----------
+  // 디시 설정의 '외부 링크 경고'와 같은 쿠키(m_dcinside_externalLink=OFF)
+  try {
+    if (!/(^|;\s*)m_dcinside_externalLink=OFF/.test(document.cookie)) {
+      document.cookie = 'm_dcinside_externalLink=OFF; path=/; domain=.dcinside.com; max-age=31536000';
+    }
+  } catch (e) {}
+
   // ---------- 앱 글쓰기 화면 ↔ 디시 글쓰기 양식 ----------
   // 앱 화면에 필요한 정보: 유동인지, 저장된 닉네임·비번, 말머리, 코드(캡차), 갤러리 이름
   async function writeInfo() {
@@ -2274,7 +2282,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v94-cmtmissing', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v95-extlink', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

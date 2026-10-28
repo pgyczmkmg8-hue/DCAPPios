@@ -1221,7 +1221,32 @@ extension WebViewModel: WKNavigationDelegate {
             _ = await UIApplication.shared.open(url)
             return .cancel
         }
+        // 디시 밖 링크(본 화면 이동만 — 광고·유튜브 같은 칸 안 이동은 그대로) → 물어보고 기본 브라우저로
+        if ["http", "https"].contains(scheme), navigationAction.targetFrame?.isMainFrame ?? true, !Self.isDCURL(url) {
+            askOpenExternal(url)
+            return .cancel
+        }
         return .allow
+    }
+
+    /// 디시 주소인지 (m.dcinside.com, msign.dcinside.com, dcimg*.dcinside.co.kr 등)
+    nonisolated static func isDCURL(_ url: URL) -> Bool {
+        guard let h = url.host?.lowercased() else { return true }
+        return ["dcinside.com", "dcinside.co.kr", "dcinside.kr"].contains { h == $0 || h.hasSuffix("." + $0) }
+    }
+
+    /// "외부 링크를 열까요?" → 열기면 기본 웹브라우저(사파리 등)로
+    private func askOpenExternal(_ url: URL) {
+        guard let vc = presenter() else { return }
+        if vc is UIAlertController { return }      // 이미 묻는 중 (연달아 오는 이동)
+        var shown = url.absoluteString
+        if shown.count > 120 { shown = String(shown.prefix(120)) + "…" }
+        let alert = UIAlertController(title: "외부 링크 열기", message: "\(url.host ?? "")\n\n\(shown)\n\n기본 웹브라우저에서 열까요?", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "취소", style: .cancel))
+        alert.addAction(UIAlertAction(title: "링크 복사", style: .default) { _ in UIPasteboard.general.url = url })
+        alert.addAction(UIAlertAction(title: "열기", style: .default) { _ in UIApplication.shared.open(url) })
+        alert.preferredAction = alert.actions.last
+        vc.present(alert, animated: true)
     }
 
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
@@ -1370,7 +1395,12 @@ extension WebViewModel: WKUIDelegate {
                  for navigationAction: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? {
         if navigationAction.targetFrame == nil {
-            webView.load(navigationAction.request)
+            // 새 창으로 여는 디시 밖 링크도 물어보고 기본 브라우저로
+            if let url = navigationAction.request.url, ["http", "https"].contains(url.scheme?.lowercased() ?? ""), !Self.isDCURL(url) {
+                askOpenExternal(url)
+            } else {
+                webView.load(navigationAction.request)
+            }
         }
         return nil
     }
