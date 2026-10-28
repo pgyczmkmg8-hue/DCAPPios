@@ -171,7 +171,8 @@ final class AutoImageStore: ObservableObject {
     nonisolated static func writeGalleryID(from url: URL) -> String? {
         guard let host = url.host?.lowercased(), host.hasSuffix("dcinside.com") else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
-        guard let i = parts.firstIndex(of: "write") else { return nil }
+        // 일반·마이너는 /write/갤ID, 미니는 /writemini/갤ID, 인물은 /writepr/갤ID (수정은 뒤에 /modify/글번호)
+        guard let i = parts.firstIndex(where: { ["write", "writemini", "writepr"].contains($0) }) else { return nil }
         if i + 1 < parts.count { return parts[i + 1] }
         return URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first(where: { $0.name == "id" })?.value ?? ""

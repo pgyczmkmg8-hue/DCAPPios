@@ -254,33 +254,52 @@ struct DraftPickerSheet: View {
     @State private var selection = Set<UUID>()
     @State private var confirmDelete = false
 
-    private var list: [Draft] { store.sorted(for: galleryID) }
+    private var list: [Draft] { here + others }
+    /// 이 갤러리 글 (최신순)
+    private var here: [Draft] {
+        guard let galleryID else { return [] }
+        return store.drafts.filter { $0.galleryID == galleryID }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+    /// 다른 갤러리 글 (최신순)
+    private var others: [Draft] {
+        store.drafts.filter { galleryID == nil || $0.galleryID != galleryID }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    @ViewBuilder
+    private func draftRows(_ drafts: [Draft]) -> some View {
+        ForEach(drafts) { d in
+            Group {
+                if editing {
+                    DraftRow(draft: d)        // 선택 중에는 눌러도 불러오지 않고 체크만
+                } else {
+                    Button {
+                        onPick(d)
+                        dismiss()
+                    } label: {
+                        DraftRow(draft: d)
+                    }
+                }
+            }
+            .tag(d.id)
+        }
+        .onDelete { offsets in
+            for i in offsets { store.remove(drafts[i]) }
+        }
+    }
     private var editing: Bool { editMode.isEditing }
     private var allSelected: Bool { !list.isEmpty && selection.count == list.count }
 
     var body: some View {
         NavigationStack {
             List(selection: $selection) {
+                // 이 갤러리 글 / 다른 갤러리 글을 나눠서 (다른 갤러리 글이 아래에 묻혀 안 보이던 문제)
+                if !here.isEmpty {
+                    Section("이 갤러리") { draftRows(here) }
+                }
                 Section {
-                    ForEach(list) { d in
-                        Group {
-                            if editing {
-                                DraftRow(draft: d)        // 선택 중에는 눌러도 불러오지 않고 체크만
-                            } else {
-                                Button {
-                                    onPick(d)
-                                    dismiss()
-                                } label: {
-                                    DraftRow(draft: d)
-                                }
-                            }
-                        }
-                        .tag(d.id)
-                    }
-                    .onDelete { offsets in
-                        let current = list
-                        for i in offsets { store.remove(current[i]) }
-                    }
+                    draftRows(others)
+                } header: {
+                    if !others.isEmpty && !here.isEmpty { Text("다른 갤러리") }
                 } footer: {
                     if !store.drafts.isEmpty && !editing {
                         Text("불러오면 지금 쓰고 있는 제목과 본문이 덮어써져요.")
@@ -337,7 +356,7 @@ struct DraftPickerSheet: View {
                 Button("취소", role: .cancel) {}
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 }
 

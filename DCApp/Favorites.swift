@@ -37,9 +37,15 @@ struct Gallery: Codable, Identifiable, Hashable {
 
         if host == "m.dcinside.com" {
             guard parts.count >= 2 else { return nil }
+            // 미니 갤러리 글쓰기·수정 주소(/mini/write/갤ID 등)에서 'write'를 갤러리로 잘못 읽지 않게
+            var id = parts[1]
+            if ["write", "modify", "delete"].contains(id) {
+                guard parts.count >= 3 else { return nil }
+                id = parts[2]
+            }
             switch parts[0] {
-            case "board": return (parts[1], .board)
-            case "mini":  return (parts[1], .mini)
+            case "board": return (id, .board)
+            case "mini":  return (id, .mini)
             default:      return nil
             }
         }
@@ -145,7 +151,9 @@ final class VisitedStore: ObservableObject {
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
            let saved = try? JSONDecoder().decode([VisitedGallery].self, from: data) {
-            items = saved
+            // 예전에 미니 갤러리 글쓰기 주소를 잘못 읽어 생긴 'write' 같은 가짜 갤러리 지우기
+            items = saved.filter { !["write", "modify", "delete"].contains($0.gallery.galleryID) }
+            if items.count != saved.count { save() }
         }
     }
 

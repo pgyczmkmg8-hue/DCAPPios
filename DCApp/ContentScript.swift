@@ -189,6 +189,8 @@ enum ContentScript {
   }
 
   function blockedReason(u, idn, dset) {
+    // 디시 자체 차단창으로 막은 사람: 디시는 block-disable 표시만 붙여 흐리게 보여줌 → 앱 차단처럼 가림
+    if (u.el.classList.contains('block-disable')) return '디시 차단';
     var users = cfg.users || [], gid = currentGalleryId();
     for (var i = 0; i < users.length; i++) {
       var b = users[i];
@@ -773,8 +775,11 @@ enum ContentScript {
     document.querySelectorAll('.adv-groupin, [id^="rtbx-ad"]').forEach(function (ad) {
       var box = ad.parentElement;
       for (var i = 0; i < 3 && box && box !== document.body; i++) {
+        // 글 본문 칸·글 영역은 절대 숨기지 않음 (사진만 있는 글은 글자가 없어서 빈 칸처럼 보임)
+        if (box.matches('.thum-txt, .thum-txtin, .gall-thum-btm, .gall-thum-btm-inner, section, article') ||
+            box.querySelector('.thum-txtin, .thum-txt')) break;
         var other = Array.prototype.some.call(box.children, function (c) {
-          return !c.contains(ad) && c.offsetHeight > 0 && txt(c) !== '';
+          return !c.contains(ad) && c.offsetHeight > 0 && (txt(c) !== '' || !!c.querySelector('img, video, iframe') || /^(IMG|VIDEO|IFRAME)$/.test(c.tagName));
         });
         if (other || box.querySelector('textarea, .comment, .gallview-tit-box, .btn-list, .gall-detail-lst')) break;
         box.classList.add('dcapp-hide');
@@ -989,6 +994,15 @@ enum ContentScript {
     }, delay || 0);
   }
 
+  // ---------- 글쓰기: 위쪽 갤러리 이름을 눌러도 갤러리로 이동하지 않음 ----------
+  window.addEventListener('click', function (e) {
+    if (!isWritePage()) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (!t || !t.closest || !t.closest('.gall-tit-box a, a.gall-tit-lnk, a.gall-tit-lnkempty')) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+  }, true);
+
   // ---------- 클릭 처리 (길게누르기 후 클릭 무시 / 접힌 글 펼치기 / 선택모드 / 로그인 저장) ----------
   document.addEventListener('click', function (e) {
     var target = e.target.nodeType === 1 ? e.target : e.target.parentElement;
@@ -1017,18 +1031,7 @@ enum ContentScript {
       apply();
       return;
     }
-    // 닉네임(또는 메모) 탭 → 디시 자체 차단 창 대신 앱 차단·메모 메뉴
-    // (글 목록의 닉네임은 글로 가는 링크 안에 있어서 그대로 둠 — 탭하면 글 열기)
-    var nickHit = target && target.closest ? (target.closest('.dcapp-lp-nick, .dcapp-memo') || nickArea(target)) : null;
-    if (nickHit && !nickHit.closest('a[href]')) {
-      var nu = nickHit.closest('[data-dcapp-unit]');
-      if (nu) {
-        e.preventDefault(); e.stopPropagation();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        post('longpress', describe(nu, target));
-        return;
-      }
-    }
+    // (닉네임 탭은 디시 원래 동작(답글 등) 그대로 — 앱 차단·메모 메뉴는 길게 누르기로만)
     // 글 속 사진 탭 → 앱 사진 보기 (아래로 쓸어 닫기 / 확대 / 넘기기)
     var tapped = target && target.closest ? target.closest('img') : null;
     var abody = tapped ? articleBody() : null;
@@ -1194,6 +1197,24 @@ enum ContentScript {
     try { f.title.scrollIntoView({ block: 'center' }); } catch (e) {}
     return 'focused';
   }
+  /// 글쓰기 < > : 제목 ⇄ 내용 (내용 칸은 글 끝에 커서)
+  function moveWriteFocus(forward) {
+    var f = writeFields();
+    var el = forward ? f.body : f.title;
+    if (!el) return 'nofield';
+    if (document.activeElement === el || (el.contains && el.contains(document.activeElement))) return 'same';
+    el.focus();
+    if (f.html && el === f.body) {
+      try {
+        var r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      } catch (e) {}
+    } else if (el.setSelectionRange) {
+      try { var n = el.value.length; el.setSelectionRange(n, n); } catch (e) {}
+    }
+    try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
+    return 'moved';
+  }
   function getDraft() {
     var f = writeFields();
     return {
@@ -1254,6 +1275,13 @@ enum ContentScript {
     var lab = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('placeholder') || '') + ' ' + clsOf(el)).toLowerCase();
     return /comment|cmt|reply|memo|댓글/.test(lab) || !!el.closest('[class*="comment"],[id*="comment"],[class*="cmt"]');
   }
+  // 댓글 칸을 누르면 → 앱이 광고 차단을 끔 (등록 요청이 끝나거나 페이지를 벗어나면 다시 켬)
+  var adPauseAt = 0;
+  document.addEventListener('focusin', function (e) {
+    if (!isCommentField(e.target) || Date.now() - adPauseAt < 3000) return;
+    adPauseAt = Date.now();
+    post('adpause', {});
+  }, true);
   // 닉네임/비번/코드 칸을 눌렀을 때도 같은 댓글창으로 인식
   function commentFieldNear(el) {
     if (isCommentField(el)) return el;
@@ -1441,10 +1469,19 @@ enum ContentScript {
     }
     return best;
   }
+  // 키보드 위에 붙인 글쓰기 도구줄 높이를 앱에 알림 (앱의 < > 버튼을 그 위로 올리려고)
+  var tdockReported = -1;
+  function reportTDock(h) {
+    h = Math.round(h || 0);
+    if (h === tdockReported) return;
+    tdockReported = h;
+    post('tdock', { h: h });
+  }
   function positionTDock() {
-    if (!tdock.el) return;
+    if (!tdock.el) { reportTDock(0); return; }
     var vv = window.visualViewport;
     var h = tdock.el.offsetHeight;
+    reportTDock(h);
     var top = vv ? vv.offsetTop + vv.height - h : window.innerHeight - h;
     tdock.el.style.setProperty('top', Math.max(0, Math.round(top)) + 'px', 'important');
   }
@@ -1469,6 +1506,7 @@ enum ContentScript {
     tdock.el.style.removeProperty('background-color');
     if (tdock.ph && tdock.ph.parentNode) tdock.ph.parentNode.removeChild(tdock.ph);
     tdock.el = null; tdock.ph = null;
+    reportTDock(0);
   }
   document.addEventListener('focusin', function (e) {
     if (cfg.dockComment === false) return;
@@ -1509,7 +1547,19 @@ enum ContentScript {
   document.addEventListener('touchstart', function (e) {
     var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
     lastTouchInHScroll = inHScroll(t);
+    selAtTouch = hasSelection();
+    selChangedInTouch = false;
   }, { capture: true, passive: true });
+
+  // ---------- 글자 선택(드래그) 중에는 스와이프 뒤로가기 안 함 ----------
+  var selAtTouch = false, selChangedInTouch = false;
+  function hasSelection() {
+    var s = window.getSelection && window.getSelection();
+    return !!(s && !s.isCollapsed && String(s).trim());
+  }
+  // 선택 손잡이를 끄는 동안에는 터치 이벤트 대신 선택 변경만 들어옴
+  document.addEventListener('selectionchange', function () { if (hasSelection()) selChangedInTouch = true; });
+  function textSelecting() { return selAtTouch || selChangedInTouch || hasSelection(); }
 
   // ---------- 댓글 새로고침: 디시 댓글 머리글의 ⟳ 버튼을 대신 눌러줌 ----------
   function commentRefreshButton() {
@@ -1522,6 +1572,176 @@ enum ContentScript {
       if (/refresh|reload/.test(label) && (inComment || /comment|cmt/.test(label))) return c;
     }
     return null;
+  }
+  // ---------- 댓글 등록이 429로 막히면 → 등록될 때까지 0.1초마다 등록 버튼 다시 누르기 ----------
+  var cmtRetry = { form: null, memo: '', tries: 0, on: false, url: '', timer: null, watchdog: null };
+  function commentFormOf(el) {
+    var f = el && el.closest ? el.closest('form') : null;
+    return f && f.querySelector('textarea[name^="comment_memo"]') ? f : null;
+  }
+  // 사용자가 누른 댓글 등록 버튼의 양식을 기억 (본댓글·답글 어느 쪽인지)
+  document.addEventListener('click', function (e) {
+    if (cmtRetry.on || !e.isTrusted) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    var b = t && t.closest ? t.closest('button[type="submit"], .btn-comment-write') : null;
+    var f = b && commentFormOf(b);
+    if (f) cmtRetry.form = f;
+  }, true);
+  document.addEventListener('submit', function (e) {
+    if (!cmtRetry.on && e.isTrusted && commentFormOf(e.target)) cmtRetry.form = e.target;
+  }, true);
+  function stopCmtRetry() {
+    cmtRetry.on = false; cmtRetry.tries = 0;
+    clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
+    cmtRetry.timer = cmtRetry.watchdog = null;
+  }
+  // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
+  function scheduleCmtRetry() {
+    if (!cmtRetry.on || cmtRetry.timer) return;
+    cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
+  }
+  window.addEventListener('dcapp-cmtwrite', function (ev) {
+    var d = ev.detail || {};
+    if (d.status === 429) {
+      if (!cmtRetry.on) {
+        var memo = '';
+        try { memo = new URLSearchParams(d.body || '').get('comment_memo') || ''; } catch (e) {}
+        if (!memo || !cmtRetry.form || !document.body.contains(cmtRetry.form)) return;   // 디시콘 등 → 안 함
+        cmtRetry.on = true; cmtRetry.memo = memo; cmtRetry.tries = 0; cmtRetry.url = location.href;
+        post('cmtretry', { state: 'start' });
+      }
+      clearTimeout(cmtRetry.watchdog);
+      scheduleCmtRetry();
+      return;
+    }
+    if (cmtRetry.on) {
+      var ok = false;
+      try { var j = JSON.parse(d.text || '{}'); ok = d.status === 200 && j.result !== false && j.result !== 0; } catch (e) { ok = d.status === 200; }
+      if (ok) post('cmtretry', { state: 'done', tries: cmtRetry.tries });
+      stopCmtRetry();      // 429가 아닌 다른 이유로 실패하면 디시 안내를 보여주고 멈춤
+    }
+  });
+  function tsNeedsCheck() {
+    try {
+      return typeof dcTs !== 'undefined' && dcTs && dcTs.state === 'interactive' &&
+        !(typeof turnstile !== 'undefined' && dcTs.id !== null && turnstile.getResponse(dcTs.id));
+    } catch (e) { return false; }
+  }
+  function retryCommentOnce() {
+    if (!cmtRetry.on) return;
+    var f = cmtRetry.form;
+    if (location.href !== cmtRetry.url || !f || !document.body.contains(f)) { stopCmtRetry(); return; }
+    var ta = f.querySelector('textarea[name^="comment_memo"]');
+    if (ta && !ta.value.trim()) {
+      ta.value = cmtRetry.memo;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    // Cloudflare 체크박스가 뜬 상태 → 사용자가 체크할 때까지 누르지 않고 기다림 (체크되면 바로 이어서 누름)
+    if (tsNeedsCheck()) {
+      if (!cmtRetry.askedCheck) {
+        cmtRetry.askedCheck = true;
+        try { dcTs.host.scrollIntoView({ block: 'center' }); } catch (e) {}
+        post('cmtretry', { state: 'check' });
+      }
+      clearTimeout(cmtRetry.watchdog);
+      cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
+      return;
+    }
+    cmtRetry.askedCheck = false;
+    var btn = f.querySelector('button.btn-comment-write, button[type="submit"], input[type="submit"]');
+    cmtRetry.tries++;
+    if (btn) btn.click();
+    else if (f.requestSubmit) f.requestSubmit();
+    else { stopCmtRetry(); return; }
+    // 디시가 Cloudflare 체크를 기다리다 보내지 않는 등 응답이 안 오면 → 25초 뒤 다시 누름
+    clearTimeout(cmtRetry.watchdog);
+    cmtRetry.watchdog = setTimeout(scheduleCmtRetry, 25000);
+  }
+
+  // ---------- 남의 댓글을 눌러 답글 칸이 열리면 바로 키보드 ----------
+  var replyFocusTarget = null;
+  // 디시는 댓글·답글을 누르면 #comment_addDiv{ch} 안에 답글 칸을 새로 만듦 (댓글 = li.comment, 답글 = li.comment-add)
+  function openedReplyArea(li) {
+    var ch = li && li.getAttribute('ch');
+    var box = ch ? document.getElementById('comment_addDiv' + ch) : null;
+    if (!box) {
+      var n = li && li.nextElementSibling;
+      if (n && n.classList && n.classList.contains('comment-add') && /^comment_addDiv/.test(n.id || '')) box = n;
+    }
+    return box ? box.querySelector('textarea[name^="comment_memo"]') : null;
+  }
+  function focusReply() {
+    var ta = replyFocusTarget;
+    if (!ta || !document.body.contains(ta)) return false;
+    ta.focus();
+    // 내용 칸(편집기)이면 체크 전 커서 자리로
+    if (ta === tsRefocus.el && tsRefocus.range && ta.isContentEditable) {
+      try { var s = window.getSelection(); s.removeAllRanges(); s.addRange(tsRefocus.range); } catch (e) {}
+    }
+    return document.activeElement === ta;
+  }
+
+  // ---------- Cloudflare 체크박스를 눌러 통과하면 → 쓰던 칸에 다시 커서 (키보드 다시 올림) ----------
+  var tsRefocus = { el: null, range: null, prev: '' };
+  function typingField(el) {
+    if (!el || el.nodeType !== 1) return null;
+    if (isCommentField(el) || isWriteField(el)) return el;
+    var ce = el.closest && el.closest('[contenteditable="true"], [contenteditable=""]');
+    return ce && isWriteField(ce) ? ce : null;
+  }
+  document.addEventListener('focusin', function (e) {
+    var f = typingField(e.target);
+    if (f) { tsRefocus.el = f; tsRefocus.range = null; }
+  }, true);
+  document.addEventListener('focusout', function (e) {
+    if (e.target !== tsRefocus.el || !tsRefocus.el.isContentEditable) return;
+    try { var s = window.getSelection(); if (s.rangeCount) tsRefocus.range = s.getRangeAt(0).cloneRange(); } catch (x) {}
+  }, true);
+  setInterval(function () {
+    if (typeof dcTs === 'undefined' || !dcTs) return;
+    var st = dcTs.state || '';
+    if (tsRefocus.prev === 'interactive' && st !== 'interactive' && /^ok/.test(st)) {
+      var el = tsRefocus.el;
+      if (el && document.body.contains(el) && document.activeElement !== el) {
+        replyFocusTarget = el;
+        focusReply();
+        post('wantfocus', {});
+      }
+    }
+    tsRefocus.prev = st;
+  }, 300);
+  // 디시의 답글 열기(body에 걸린 click)가 끝난 뒤에 실행되도록 document의 버블 단계에서
+  document.addEventListener('click', function (e) {
+    if (!e.isTrusted) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    var li = t && t.closest ? t.closest('li.comment, li.comment-add') : null;
+    if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area')) return;   // 답글 칸 자체는 제외
+    var sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && String(sel).trim()) return;          // 꾹 눌러 글자 선택 중이면 제외
+    var ta = openedReplyArea(li);
+    if (!ta) return;
+    replyFocusTarget = ta;
+    focusReply();
+    post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
+  }, false);
+
+  // 알림 거르기용: 그 글을 불러와 해당 댓글의 작성자(닉네임·IP·아이디)를 알려줌 (못 찾으면 null)
+  function alarmAuthor(gid, no, cno) {
+    return fetch('/board/' + encodeURIComponent(gid) + '/' + encodeURIComponent(no), { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (html) {
+        if (!html) return null;
+        var d = new DOMParser().parseFromString(html, 'text/html');
+        var li = d.querySelector('li[no="' + String(cno).replace(/[^0-9]/g, '') + '"]');
+        if (!li) return null;
+        var nickEl = li.querySelector('.nick');
+        var nick = nickEl ? nickEl.textContent.replace(/\s+/g, ' ').trim() : '';
+        var ipEl = li.querySelector('.blockCommentIp, .ip');
+        var m = ipEl ? ipEl.textContent.match(/(\d{1,3}\.\d{1,3})/) : null;
+        var idEl = li.querySelector('.blockCommentId');
+        return { nick: nick, ip: m ? m[1] : '', id: idEl ? (idEl.getAttribute('data-info') || '') : '' };
+      })
+      .catch(function () { return null; });
   }
   function refreshComments() {
     var b = commentRefreshButton();
@@ -1751,9 +1971,287 @@ enum ContentScript {
     return 'clicked';
   }
 
+  // ---------- 앱 글쓰기 화면 ↔ 디시 글쓰기 양식 ----------
+  // 앱 화면에 필요한 정보: 유동인지, 저장된 닉네임·비번, 말머리, 코드(캡차), 갤러리 이름
+  async function writeInfo() {
+    if (!isWritePage()) return null;
+    for (var t = 0; t < 20 && !document.getElementById('subject'); t++) await sleep(250);
+    var name = document.getElementById('name'), pw = document.getElementById('password');
+    var heads = [];
+    document.querySelectorAll('#swiper-headtxt li[data-no], .malwrt-lst li[data-no]').forEach(function (li) {
+      var a = li.querySelector('a');
+      var oc = a && a.getAttribute('onclick') || '';
+      if (!/head_select/.test(oc)) return;                       // 관리자 전용 말머리 등은 못 고름
+      heads.push({ no: String(li.getAttribute('data-no')), name: txt(a) });
+    });
+    var ht = document.getElementById('headtext');
+    var cap = document.getElementById('dcblock'), capImg = null;
+    if (cap) {
+      var im = document.querySelector('.code-img img');
+      if (im && im.src) {
+        try {
+          var blob = await (await fetch(im.src, { credentials: 'include' })).blob();
+          capImg = await new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(blob); });
+        } catch (e) {}
+      }
+    }
+    var gname = document.querySelector('.gall-tit-lnk, .gall-tit');
+    // 글 수정 화면: 원래 내용을 글자 칸 / 그대로 둘 칸(사진·디시콘·동영상 등)으로 나눠 앱에 넘김
+    var mode = (document.getElementById('mode') || {}).value || '';
+    var blocks = [];
+    if (mode === 'modify') {
+      var ed = null;
+      for (var w = 0; w < 20 && !ed; w++) { ed = document.querySelector('.note-editable'); if (!ed) await sleep(250); }
+      if (ed) blocks = editorBlocks(ed);
+    }
+    var subjEl = document.getElementById('subject');
+    return {
+      mode: mode, title: subjEl ? subjEl.value : '', blocks: blocks,
+      ok: !!document.getElementById('subject'),
+      anon: !!(name || pw),
+      nick: name ? name.value : '', nickLocked: !!(name && (name.disabled || name.readOnly)),
+      pw: pw ? pw.value : '',
+      heads: heads, head: ht ? String(ht.value) : '',
+      captcha: !!cap, captchaImg: capImg,
+      gallery: gname ? txt(gname).trim() : ''
+    };
+  }
+  async function refreshCaptcha() {
+    var r = document.getElementById('captcha_reload');
+    if (r) r.click();
+    await sleep(700);
+    var info = await writeInfo();
+    return info ? info.captchaImg : null;
+  }
+  // 디시 편집기 내용 → 글자 칸 / 그대로 둘 칸(사진·디시콘·동영상·유튜브·투표 등)
+  function mediaLabel(n) {
+    var html = n.outerHTML || '';
+    var media = n.matches('img, iframe, video, embed, object') ? n : n.querySelector('img, iframe, video, embed, object');
+    var src = media ? (media.getAttribute('src') || media.getAttribute('data-src') || '') : '';
+    if (/dccon/i.test(src) || /written_dccon/.test(html)) return { label: '디시콘', src: src };   // 미리보기용 주소
+    if (/youtube|youtu\.be|ytimg/i.test(src + html)) {
+      // 미리보기: 영상 ID로 유튜브 썸네일 주소 만들기
+      var m = (src + ' ' + html).match(/(?:embed\/|watch\?v=|youtu\.be\/|\/vi\/|[?&]v=)([A-Za-z0-9_-]{11})/);
+      return { label: '유튜브', src: m ? 'https://i.ytimg.com/vi/' + m[1] + '/hqdefault.jpg' : '' };
+    }
+    if (/vote|poll/i.test(src + ' ' + (n.className || '') + html.slice(0, 300))) return { label: '투표', src: '' };
+    if (/movie|video/i.test(src + html.slice(0, 300)) || (media && media.tagName === 'VIDEO')) {
+      // 디시가 만든 동영상 칸에 썸네일 그림이 있으면 그걸로 미리보기
+      var th = n.querySelector('img') || (media && media.getAttribute('poster') ? { src: media.getAttribute('poster') } : null);
+      return { label: '동영상', src: th && th.src ? th.src : '' };
+    }
+    if (media && media.tagName === 'IMG') return { label: '사진', src: src };
+    return { label: '첨부', src: '' };
+  }
+  function editorBlocks(ed) {
+    var blocks = [], textBuf = [];
+    var flush = function () { if (textBuf.length) { blocks.push({ t: 'text', text: textBuf.join('\n') }); textBuf = []; } };
+    Array.prototype.forEach.call(ed.childNodes, function (n) {
+      if (n.nodeType === 3) { if (n.textContent.trim()) textBuf.push(n.textContent.trim()); return; }
+      if (n.nodeType !== 1) return;
+      var media = n.matches('img, iframe, video, embed, object') ? n : n.querySelector('img, iframe, video, embed, object');
+      var special = media || /vote|poll|movie|block/i.test(n.className || '');
+      if (special && (media || !(n.innerText || '').trim() || /vote|poll|movie/i.test(n.className || ''))) {
+        flush();
+        var m = mediaLabel(n);
+        blocks.push({ t: 'raw', html: n.outerHTML, src: m.src, label: m.label });
+        return;
+      }
+      var t = (n.innerText || n.textContent || '').replace(/\u00a0/g, ' ');
+      textBuf.push(t.replace(/\n$/, ''));
+    });
+    flush();
+    return blocks;
+  }
+
+  // 동영상·디시콘·유튜브·투표: 디시 기능을 그대로 써서 편집기에 넣게 한 뒤, 넣은 것을 앱 글쓰기로 가져옴
+  function editorEl() { return document.querySelector('.note-editable') || document.getElementById('textbox'); }
+  function clearEditor() {
+    var $ = window.jQuery, ed = $ && $('#textbox');
+    if (ed && ed.length && ed.summernote) ed.summernote('code', ''); else { var b = editorEl(); if (b) b.innerHTML = ''; }
+  }
+  function openWebFeature(kind) {
+    if (!isWritePage()) return 'notwrite';
+    clearEditor();                                  // 앱 글쓰기 내용은 앱이 들고 있음 → 편집기는 비워 두고 새로 넣은 것만 가져감
+    try {
+      var $ = window.jQuery, ed = $ && $('#textbox');
+      if (ed && ed.summernote) { ed.summernote('focus'); ed.summernote('editor.saveRange'); }
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    } catch (e) {}
+    try {
+      if (kind === 'video') { var b = document.getElementById('upload_mov'); if (!b) return 'nofeature'; b.click(); }
+      else if (kind === 'dccon') { if (typeof window.show_dccon !== 'function') return 'nofeature'; window.show_dccon('writeContent'); }
+      else if (kind === 'youtube') { if (typeof window.youtube_search_on !== 'function') return 'nofeature'; window.youtube_search_on(); }
+      else if (kind === 'vote') { if (typeof window.show_vote !== 'function') return 'nofeature'; window.show_vote(1); }
+      else return 'nofeature';
+    } catch (e) { return 'error:' + e.message; }
+    return 'opened';
+  }
+  // ---------- 디시콘 바로 넣기 (앱 화면에서 고름) ----------
+  // 디시 웹이 쓰는 그대로 목록을 받아(getDccon / getDccon_tab) 앱에 넘기고, 고르면 디시 방식(dccon_chk + insertDccon)으로 칸을 만듦
+  function dcconAjax(url, data) {
+    return new Promise(function (res) {
+      if (!window.jQuery) return res('');
+      window.jQuery.ajax({ type: 'POST', url: url, data: data || {}, dataType: 'html' })
+        .done(function (h) { res(h || ''); }).fail(function () { res(''); });
+    });
+  }
+  function parseDcconItems(root) {
+    var out = [];
+    root.querySelectorAll('a[data-dccon-detail][data-dccon-package]').forEach(function (a) {
+      var im = a.querySelector('img');
+      var src = im ? (im.getAttribute('data-src') || im.getAttribute('data-original') || '') : '';
+      if (/dccon_loading/.test(src)) src = '';
+      out.push({ pkg: String(a.getAttribute('data-dccon-package')), detail: String(a.getAttribute('data-dccon-detail')),
+                 src: src, alt: im ? (im.getAttribute('alt') || '') : '' });
+    });
+    return out;
+  }
+  var dcconBoxes = {};
+  async function dcconTabs() {
+    var html = typeof window.getDccon === 'function'
+      ? await new Promise(function (res) { window.getDccon({}).done(function (h) { res(h || ''); }).fail(function () { res(''); }); })
+      : await dcconAjax('/dccon/getDccon', {});
+    if (!html) return null;
+    var d = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+    var tabs = [], current = '';
+    d.querySelectorAll('#swiper-dccon-tab li a[onclick*="getDccon_tab"]').forEach(function (a) {
+      var m = (a.getAttribute('onclick') || '').match(/getDccon_tab\(this,\s*'([^']*)'(?:,\s*'([^']*)')?/);
+      if (!m) return;
+      var im = a.querySelector('img');
+      var thumb = im ? (im.getAttribute('data-original') || im.getAttribute('src') || '') : '';
+      tabs.push({ idx: m[1], folder: m[2] || '', name: im ? (im.getAttribute('alt') || '') : '', thumb: thumb });
+      if (a.closest('li').classList.contains('on')) current = m[1];
+    });
+    dcconBoxes = {};
+    d.querySelectorAll('[id^="d_box_"]').forEach(function (box) { dcconBoxes[box.id.replace('d_box_', '')] = parseDcconItems(box); });
+    return { tabs: tabs, current: current, items: dcconBoxes[current] || [] };
+  }
+  async function dcconItems(idx, folder) {
+    if (dcconBoxes[idx]) return dcconBoxes[idx];
+    var data = { idx: idx };
+    if (folder) data.folderName = folder;
+    var html = await dcconAjax('/dccon/getDccon_tab', data);
+    if (!html) return [];
+    var d = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+    dcconBoxes[idx] = parseDcconItems(d);
+    return dcconBoxes[idx];
+  }
+  // 고른 디시콘을 디시 방식 그대로 편집기에 넣어 칸(HTML)을 만들고 가져옴
+  function dcconMake(pkg, detail) {
+    if (typeof window.chk_dccon_insert !== 'function') return { error: 'nofeature' };
+    var chk = window.chk_dccon_insert(pkg, detail);
+    if (!chk || chk.result !== 'ok') return { error: 'denied' };
+    clearEditor();
+    try {
+      window.dcconMode = 'writeContent';
+      var $ = window.jQuery;
+      $('#textbox').summernote('focus');
+      $('#textbox').summernote('insertDccon', [chk], 1, '');
+      $('.written_dccon:not(.txtdccon)').addClass('dccon-img');
+    } catch (e) { return { error: 'insert:' + e.message }; }
+    var got = collectWebInserts();
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    return { blocks: got };
+  }
+
+  function collectWebInserts() {
+    var ed = editorEl();
+    if (!ed) return [];
+    var out = editorBlocks(ed).filter(function (b) { return b.t === 'raw' || (b.text || '').trim(); });
+    clearEditor();
+    return out;
+  }
+  function escHTML(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  var nativeWait = null;
+  // 앱에서 쓴 내용을 디시 양식에 채우고 등록 (사진은 업로드 칸에 넣어 디시가 올리게 한 뒤 글 앞쪽에)
+  async function nativeSubmit(p) {
+    if (!isWritePage()) return 'notwrite';
+    var $ = window.jQuery;
+    var name = document.getElementById('name'), pw = document.getElementById('password');
+    if (name && p.nick != null && !name.disabled && !name.readOnly) setField(name, p.nick);
+    if (pw && p.pw != null) setField(pw, p.pw);
+    var cap = document.getElementById('dcblock');
+    if (cap && p.captcha != null) setField(cap, p.captcha);
+    var ht = document.getElementById('headtext');
+    if (ht && p.head != null && p.head !== '') {
+      if (typeof window.head_select === 'function') window.head_select(p.head); else ht.value = p.head;
+      document.querySelectorAll('#swiper-headtxt li[data-no]').forEach(function (li) { li.classList.toggle('on', String(li.getAttribute('data-no')) === String(p.head)); });
+    }
+    var subj = document.getElementById('subject');
+    if (!subj) return 'nofield';
+    setField(subj, p.title || '');
+    var ed = $ && $('#textbox');
+    var useSN = !!(ed && ed.length && ed.summernote);
+    // 디시는 summernote 편집기를 써서 #textbox는 숨겨지고 실제 내용은 .note-editable에 있음
+    var box = document.querySelector('.note-editable') || document.getElementById('textbox');
+    if (useSN) ed.summernote('code', ''); else if (box) box.innerHTML = '';
+    var blocks = p.blocks || [];
+    var imgs = blocks.filter(function (b) { return b.t === 'image'; });
+    // 사진: 한꺼번에 업로드 칸에 넣어 디시가 올리게 함 (디시가 편집기에 넣은 사진 칸을 나중에 순서대로 다시 배치)
+    if (imgs.length) {
+      var input = null;
+      for (var t = 0; t < 15 && !input; t++) { input = document.getElementById('upload') || findFileInput(); if (!input) await sleep(300); }
+      if (!input) return 'noinput';
+      var before = box ? box.querySelectorAll('img').length : 0;
+      try {
+        var dt = new DataTransfer();
+        imgs.forEach(function (im, i) {
+          var bin = atob(im.b64), bytes = new Uint8Array(bin.length);
+          for (var k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+          dt.items.add(new File([bytes], 'image_' + Date.now() + '_' + i + '.' + (im.ext || 'jpg'), { type: im.mime || 'image/jpeg' }));
+        });
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) { return 'imgerror:' + e.message; }
+      // 디시가 다 올리고 본문에 넣을 때까지 기다림 (최대 60초)
+      var okImgs = false;
+      for (var w = 0; w < 240; w++) {
+        await sleep(250);
+        if (box && box.querySelectorAll('img').length >= before + imgs.length) { okImgs = true; break; }
+      }
+      if (!okImgs) return 'imgtimeout';
+    }
+    // 디시가 만든 사진 칸(업로드 순서대로)
+    var imgHTML = [];
+    if (box) box.querySelectorAll('img').forEach(function (im) {
+      var blk = im.closest('div.block') || im;
+      if (box.contains(blk) && imgHTML.indexOf(blk.outerHTML) < 0) imgHTML.push(blk.outerHTML);
+    });
+    // 앱에서 정한 순서대로 다시 짜기: 글자 칸은 줄마다 문단, 사진 칸은 디시가 만든 칸 그대로
+    var html = '', k = 0;
+    blocks.forEach(function (b) {
+      if (b.t === 'raw') {
+        html += b.html;                                   // 수정: 원래 있던 사진·디시콘 등은 그대로
+      } else if (b.t === 'image') {
+        if (k < imgHTML.length) html += imgHTML[k++] + '<p><br></p>';
+      } else {
+        html += b.html ? b.html : String(b.text || '').split('\n').map(function (l) { return l.length ? '<p>' + escHTML(l) + '</p>' : '<p><br></p>'; }).join('');
+      }
+    });
+    while (k < imgHTML.length) html += imgHTML[k++] + '<p><br></p>';   // 혹시 남은 사진
+    if (useSN) ed.summernote('code', html);
+    else if (box) box.innerHTML = html;
+    if (box) box.dispatchEvent(new Event('input', { bubbles: true }));
+    // Cloudflare 체크박스가 떠 있으면 → 앱이 디시 화면을 보여주고, 체크되면 여기서 이어서 등록
+    if (tsNeedsCheck()) {
+      clearInterval(nativeWait);
+      try { dcTs.host.scrollIntoView({ block: 'center' }); } catch (e) {}
+      nativeWait = setInterval(function () {
+        if (tsNeedsCheck()) return;
+        clearInterval(nativeWait); nativeWait = null;
+        post('nativewrite', { state: 'resumed' });
+        if (typeof window.write_submit === 'function') window.write_submit(); else submitWrite();
+      }, 200);
+      return 'needcheck';
+    }
+    if (typeof window.write_submit === 'function') window.write_submit(); else submitWrite();
+    return 'submitted';
+  }
+
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v62-noalarmpop', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v92-richtext', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -1797,7 +2295,11 @@ enum ContentScript {
     out = out.concat(fixed);
     var rb = commentRefreshButton();
     out.push('--- comment refresh --- ' + (rb ? rb.tagName + '.' + clsOf(rb) + ' onclick=' + (rb.getAttribute('onclick') || '') : '(못 찾음)'));
-    out.push('--- 알림 관련 요청 (최근) ---');
+    out.push('--- 알림 원본 (마지막으로 받은 것) ---');
+    var alarmRaw = window.__dcappAlarmRaw;
+    if (!alarmRaw) { try { alarmRaw = sessionStorage.getItem('dcappAlarmRaw'); } catch (e) {} }
+    out.push(alarmRaw || '(아직 없음 — 알림을 하나 받은 뒤 다시 진단해주세요)');
+    out.push('--- 알림·댓글 등록 요청 (최근) ---');
     var net = window.__dcappNet || [];
     if (!net.length) out.push('(아직 없음 — 로그인 상태에서 알림 종을 누르거나 잠시 기다린 뒤 다시 진단해주세요)');
     net.slice(-15).forEach(function (n) {
@@ -1998,11 +2500,23 @@ enum ContentScript {
     startAutosave: startAutosave,
     undock: function () { undock(); return true; },
     lastTouchInHScroll: function () { return lastTouchInHScroll; },
+    textSelecting: textSelecting,
     refreshComments: refreshComments,
+    alarmAuthor: alarmAuthor,
+    moveWriteFocus: moveWriteFocus,
+    focusReply: focusReply,
     headTabs: headTabs,
     openNotice: openNotice,
     focusTitle: focusTitle,
     submitWrite: submitWrite,
+    writeInfo: writeInfo,
+    refreshCaptcha: refreshCaptcha,
+    nativeSubmit: nativeSubmit,
+    openWebFeature: openWebFeature,
+    collectWebInserts: collectWebInserts,
+    dcconTabs: dcconTabs,
+    dcconItems: dcconItems,
+    dcconMake: dcconMake,
     scrollToComments: scrollToComments,
     prepareCapture: prepareCapture,
     diagnose: diagnose,
@@ -2018,7 +2532,17 @@ enum ContentScript {
 (function () {
   if (window.__dcappNet) return;
   var log = window.__dcappNet = [];
-  var RE = /alarm|noti|push|alim|bell|memo|recv|message/i;
+  var RE = /alarm|noti|push|alim|bell|memo|recv|message|comment-write|ts_state/i;
+  // 댓글·글 등록 요청에 실린 Cloudflare 체크 상태만 뽑기 (비밀번호 등 다른 값은 안 뽑음)
+  function tsSummary(body) {
+    if (!body || body.indexOf('ts_state') < 0) return '';
+    try {
+      var q = new URLSearchParams(body);
+      return '  <TS state=' + (q.get('ts_state') || '') +
+        ' token=' + ((q.get('cf-turnstile-response') || '').length ? 'O' : 'X') +
+        ' focus_ms=' + (q.get('ts_focus_ms') || '') + ' token_ms=' + (q.get('ts_token_ms') || '') + '>';
+    } catch (e) { return ''; }
+  }
   function add(kind, method, url, status, body) {
     try {
       if (!RE.test(String(url))) return;
@@ -2040,10 +2564,35 @@ enum ContentScript {
     x.addEventListener('loadend', function () {
       var text = '';
       try { text = (x.responseType === '' || x.responseType === 'text') ? x.responseText : '[' + x.responseType + ']'; } catch (e) {}
-      add('xhr', info.m, info.u + (reqBody ? '  <BODY ' + reqBody.slice(0, 200) + '>' : '') + (info.h ? '  <H' + info.h + '>' : ''), x.status, text);
+      add('xhr', info.m, info.u + tsSummary(reqBody) + (reqBody ? '  <BODY ' + reqBody.slice(0, 200) + '>' : '') + (info.h ? '  <H' + info.h + '>' : ''), x.status, text);
+      // 댓글 등록 결과 → content 스크립트(429 자동 재등록)로
+      try {
+        if (/\/ajax\/comment-write/.test(String(info.u))) {
+          window.dispatchEvent(new CustomEvent('dcapp-cmtwrite', { detail: { status: x.status, body: reqBody, text: text } }));
+        }
+      } catch (e) {}
+      // 댓글 등록 요청이 끝남 → 댓글 쓰는 동안 꺼 둔 광고 차단을 다시 켜도록
+      try {
+        if (/\/ajax\/comment-write/.test(String(info.u))) {
+          setTimeout(function () { window.webkit.messageHandlers.dcapp.postMessage({ type: 'cmtdone', status: x.status }); }, 0);
+        }
+      } catch (e) {}
+      // 댓글 등록이 429(Too Many Attempts)로 막히면 → 앱이 쓰던 내용을 복사
+      try {
+        if (x.status === 429 && /\/ajax\/comment-write/.test(String(info.u)) && reqBody) {
+          var q429 = new URLSearchParams(reqBody);
+          window.webkit.messageHandlers.dcapp.postMessage({ type: 'cmt429', memo: q429.get('comment_memo') || '',
+                                                             mode: q429.get('mode') || '', reply: q429.get('comment_no') || '' });
+        }
+      } catch (e) {}
       // 디시 알림(내 글·댓글에 달린 댓글 등) → 앱의 알림 탭으로 전달
       try {
         if (/\/alarm\/notification(\?|$)/.test(String(info.u)) && text) {
+          // 진단용: 알림 원본 (다른 페이지로 옮겨도 남게 sessionStorage에도)
+          if (/"data"\s*:\s*\[\s*\{/.test(text)) {
+            window.__dcappAlarmRaw = new Date().toISOString().slice(11, 19) + ' ' + text.slice(0, 3000);
+            try { sessionStorage.setItem('dcappAlarmRaw', window.__dcappAlarmRaw); } catch (e) {}
+          }
           var j = JSON.parse(text);
           if (j && j.result && j.data && j.data.length) {
             window.webkit.messageHandlers.dcapp.postMessage({ type: 'alarms', items: j.data });

@@ -146,6 +146,20 @@ final class FilterStore: ObservableObject {
         settings.hiddenElements.append(HiddenElement(selector: s, memo: memo))
     }
 
+    /// 앱 차단 목록에 걸리는 작성자인지 (알림 거르기용)
+    func isBlocked(nick: String, ip: String, id: String, gallery: String) -> Bool {
+        let s = settings
+        guard s.enabled else { return false }
+        return s.users.contains { b in
+            if let g = b.gallery, !g.isEmpty, g != gallery { return false }
+            switch b.kind {
+            case .id: return !id.isEmpty && id == b.value
+            case .ip: return !ip.isEmpty && ip == b.value
+            case .nick: return !nick.isEmpty && nick == b.value
+            }
+        }
+    }
+
     // MARK: 웹페이지로 넘길 설정(JSON)
 
     var scriptConfigJSON: String {

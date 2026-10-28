@@ -57,7 +57,10 @@ final class AppRouter: ObservableObject {
     /// 임시저장 글을 이어서 쓰기: 글쓰기 화면을 열고, 다 열리면 내용을 채움
     func openDraft(_ draft: Draft) {
         mainBrowser.pendingDraft = draft
-        open(draft.writeURL ?? URL(string: "https://m.dcinside.com/write/\(draft.galleryID)")!)
+        var url = draft.writeURL ?? URL(string: "https://m.dcinside.com/write/\(draft.galleryID)")!
+        // 예전에 잘못 저장된 미니 갤러리 글쓰기 주소(/mini/write/) 고치기
+        if let fixed = URL(string: url.absoluteString.replacingOccurrences(of: "m.dcinside.com/mini/write/", with: "m.dcinside.com/writemini/")) { url = fixed }
+        open(url)
     }
 }
 
@@ -95,6 +98,7 @@ struct RootView: View {
     @AppStorage("compactMode") private var compactMode = false
     /// 테마가 바뀌면 화면을 새로 그려 상단바·강조색에 바로 반영
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
+    @Environment(\.colorScheme) private var systemScheme
     /// GitHub에 새 버전이 있으면 알림창
     @State private var availableUpdate: AppRelease?
     /// 앱 사용 중 새 디시 알림 배너
@@ -142,6 +146,10 @@ struct RootView: View {
             // 키보드 처리는 그대로 두기 위해 .container만 무시
             .ignoresSafeArea(.container, edges: .all)
 
+            // 앱 글쓰기 화면: 디시 글쓰기 페이지 위에 덮음 (등록은 뒤의 디시 양식으로)
+            NativeWriteHost(model: router.mainBrowser)
+                .padding(.top, topGap)
+
             // 듀오: 상단바가 오른쪽 빈 줄(안전 영역)까지 늘어난 부분을 바탕색으로 덮어 사파리처럼
             if sideColumn.width > 0 && !compactMode {
                 Color(uiColor: .systemBackground)
@@ -179,6 +187,7 @@ struct RootView: View {
         .animation(.spring(duration: 0.35), value: compactMode)
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
         .onAppear {
+            StatusBarStyler.applySoon()   // 상태바(시계·배터리) 글씨: 유색 상단바면 흰색
             compactMode = false     // 앱을 새로 켜면 항상 일반 모드로 시작 (안전장치)
             if let url = DCNotify.pendingURL { DCNotify.pendingURL = nil; router.open(url) }   // 알림을 눌러서 켠 경우
         }
@@ -186,6 +195,7 @@ struct RootView: View {
             if let inc = alarms.incoming {
                 AlarmBanner(item: inc.item, more: inc.more, onTap: {
                     AlarmStore.shared.markRead(inc.item)
+                    AlarmStore.shared.markRead(galleryID: inc.item.galleryID, postNo: inc.item.postNo)
                     router.open(inc.item.url)
                     closeBanner()
                 }, onClose: closeBanner)
@@ -195,6 +205,11 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: alarms.incoming?.item.id)
+        .onChange(of: themeRaw) { _, _ in StatusBarStyler.applySoon() }          // 테마를 바꾸면 상태바 글씨 색도
+        .onChange(of: systemScheme) { _, _ in StatusBarStyler.applySoon() }      // 다크 모드 전환 (테마 색이 바뀔 수 있음)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            StatusBarStyler.apply()
+        }
         .onChange(of: alarms.incoming?.item.id) { _, newID in
             // 4초 뒤 자동으로 닫힘
             bannerTask?.cancel()
@@ -293,3 +308,5 @@ struct RootView: View {
     }
 
 }
+
+

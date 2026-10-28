@@ -10,6 +10,17 @@ enum AdBlock {
     static let key = "adBlock"
     static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
+    /// 댓글 등록하는 동안 잠시 끔 (설정값은 그대로, 앱을 다시 켜면 풀림)
+    private(set) static var paused = false
+    private static var active: Bool { enabled && !paused }
+
+    /// 잠시 끄기 / 다시 켜기 — 지금 열린 페이지의 다음 요청부터 적용
+    static func setPaused(_ p: Bool, controller: WKUserContentController) {
+        guard paused != p else { return }
+        paused = p
+        apply(to: controller)
+    }
+
     /// 막을 광고 서버 (도메인과 그 하위 주소 모두)
     static let domains = [
         // 구글 광고
@@ -49,7 +60,7 @@ enum AdBlock {
     /// 웹뷰에 차단 규칙 적용 (끄면 빼기). 처음 한 번은 규칙을 컴파일함
     static func apply(to controller: WKUserContentController) {
         controller.removeAllContentRuleLists()
-        guard enabled else { return }
+        guard active else { return }
         if let compiled {
             controller.add(compiled)
             return
@@ -59,7 +70,7 @@ enum AdBlock {
             Task { @MainActor in
                 if let list {
                     compiled = list
-                    if enabled { controller.add(list) }
+                    if active { controller.add(list) }
                 } else if let error {
                     print("[AdBlock] 규칙 컴파일 실패: \(error)")
                 }

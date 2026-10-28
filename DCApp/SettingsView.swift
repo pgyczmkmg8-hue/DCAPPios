@@ -8,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
     @AppStorage("autoLogin") private var autoLogin = false
     @AppStorage("dockComment") private var dockComment = true
+    @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
     @AppStorage("fullSwipeBack") private var fullSwipeBack = true
     @AppStorage("swipeSensitivity") private var swipeSensitivity = 3.0
     @AppStorage("gallerySwipeOpensList") private var gallerySwipeOpensList = true
@@ -93,6 +94,20 @@ struct SettingsView: View {
                     Text(accounts.isEmpty
                          ? "계정을 추가하거나, 로그인에 성공하면 저장할지 물어봐요. 비밀번호는 기기 키체인에 암호화돼요."
                          : "계정을 누르면 지금 로그인을 끝내고 그 계정으로 바로 로그인해요. 밀어서 삭제할 수 있어요. 맨 위 계정(가장 최근에 저장한 계정)이 로그인 화면에 자동으로 입력돼요.")
+                }
+
+                // 글쓰기
+                Section {
+                    Picker("글쓰기 화면", selection: $nativeWrite) {
+                        Text("앱 글쓰기").tag(true)
+                        Text("디시 원래 화면").tag(false)
+                    }
+                } header: {
+                    Text("글쓰기")
+                } footer: {
+                    Text(nativeWrite
+                         ? "앱이 만든 글쓰기 화면으로 써요. 등록은 디시 글쓰기 페이지로 그대로 보내져요. 동영상·디시콘·유튜브·투표는 ⋯ → 디시 원래 화면으로 쓰기에서 쓸 수 있어요."
+                         : "디시 모바일 웹 글쓰기 화면을 그대로 써요.")
                 }
 
                 // 댓글

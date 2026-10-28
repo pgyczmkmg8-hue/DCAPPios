@@ -18,8 +18,30 @@ final class AppLock: ObservableObject {
     static var lockEnabled: Bool { UserDefaults.standard.bool(forKey: lockKey) }
     static var blurEnabled: Bool { UserDefaults.standard.bool(forKey: blurKey) }
 
+    private var cancellables = Set<AnyCancellable>()
+
     private init() {
         locked = Self.lockEnabled          // 앱을 처음 켤 때도 잠긴 상태로 시작
+        // SwiftUI의 scenePhase는 돌아온 뒤 한참(1초 가까이) 늦게 바뀌어서 가림막이 오래 남음
+        // → iOS가 바로 보내는 '앞으로 옴 / 활성화' 알림에서 먼저 걷어냄 (잠금은 그대로 유지)
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .merge(with: NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.returnedToForeground() }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// 알림으로 먼저 걷어낸 시각 — 그 직후 늦게 오는 scenePhase '.inactive'로 다시 가리지 않게
+    private var foregroundAt: Date?
+
+    private func returnedToForeground() {
+        guard phase != .active else { return }
+        foregroundAt = Date()
+        phase = .active
+        updateOverlay()
+        Task { await unlock() }
     }
 
     /// 기기에서 쓰는 인증 이름 (설정 화면 표시용)
@@ -43,6 +65,8 @@ final class AppLock: ObservableObject {
     }
 
     func scenePhaseChanged(_ p: ScenePhase) {
+        if p == .inactive, let t = foregroundAt, Date().timeIntervalSince(t) < 2 { return }   // 돌아오는 중에 늦게 온 값
+        if p == .background { foregroundAt = nil }
         phase = p
         if p == .background, Self.lockEnabled { locked = true }
         updateOverlay()
@@ -92,7 +116,7 @@ final class AppLock: ObservableObject {
               let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         let w = UIWindow(windowScene: scene)
         w.windowLevel = .alert + 1
-        let host = UIHostingController(rootView: PrivacyOverlay())
+        let host = LightStatusBarHost(rootView: PrivacyOverlay())
         host.view.backgroundColor = .clear
         w.rootViewController = host
         w.isHidden = false
@@ -100,9 +124,30 @@ final class AppLock: ObservableObject {
     }
 
     private func dismissOverlay() {
-        window?.isHidden = true
+        guard let w = window else { return }
+        w.isHidden = true
         window = nil
+        // 가림막 창이 사라진 뒤 상태바(시계·배터리) 색을 앱 화면 기준(남색 상단바 → 흰색)으로 다시 계산하게
+        refreshStatusBar(in: w.windowScene)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            self.refreshStatusBar(in: w.windowScene)
+        }
     }
+
+    private func refreshStatusBar(in scene: UIWindowScene?) {
+        for win in scene?.windows ?? [] where !win.isHidden {
+            var vc = win.rootViewController
+            while let p = vc?.presentedViewController { vc = p }
+            vc?.setNeedsStatusBarAppearanceUpdate()
+            win.rootViewController?.setNeedsStatusBarAppearanceUpdate()
+        }
+    }
+}
+
+/// 가림막 창: 남색 바탕이라 상태바는 흰색 (기본값이면 검은 글씨가 되고, 창이 사라진 뒤에도 남는 경우가 있음)
+private final class LightStatusBarHost<Content: View>: UIHostingController<Content> {
+    override var preferredStatusBarStyle: UIStatusBarStyle { StatusBarStyler.style(for: traitCollection) }
 }
 
 /// 가림막: 흐리게 + (잠겨 있으면) 잠금 해제 버튼

@@ -216,7 +216,7 @@ struct ImageViewer: View {
     }
 
     /// 움짤(GIF)은 프레임을 모아 움직이는 이미지로
-    nonisolated private static func decode(_ data: Data) -> UIImage? {
+    nonisolated static func decode(_ data: Data) -> UIImage? {
         guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return UIImage(data: data) }
         let n = CGImageSourceGetCount(src)
         if n <= 1 { return UIImage(data: data) }

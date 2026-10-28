@@ -66,6 +66,12 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var imageViewer: ImageViewerItem?
     @Published var isBlockPickMode = false
     @Published var isWritePage = false
+    /// 앱 글쓰기 화면 (디시 글쓰기 페이지 위에 덮어서 보여줌, nil이면 디시 원래 화면)
+    @Published var nativeWrite: NativeWriteSession?
+    /// '디시 원래 화면으로 쓰기'를 고른 글쓰기 페이지 (이 페이지는 앱 화면을 덮지 않음)
+    private var nativeSkipURL: URL?
+    /// 키보드 위에 붙인 글쓰기 도구줄 높이 (그 위로 < > 버튼을 올림)
+    @Published var writeToolbarHeight: CGFloat = 0
     /// 페이지를 스크롤하는 동안 true → 컨트롤바를 화면 밖으로 넣음, 멈추면 다시 false
     @Published var isScrolling = false
     private var scrollStopTask: Task<Void, Never>?
@@ -82,8 +88,12 @@ final class WebViewModel: NSObject, ObservableObject {
     private var pendingCredential: LoginCredential?
     /// 계정 전환으로 로그인할 계정 (로그인 화면이 열리면 자동 입력 + 로그인)
     var pendingLogin: LoginCredential?
+    /// '로그인 페이지 열기'로 연 로그인 화면 → 저장된 계정을 자동으로 채우거나 로그인하지 않음 (다른 아이디로 로그인하려고)
+    private var manualLogin = false
     /// 새로고침 후 댓글 위치로 이동할지
     private var scrollToCommentsAfterLoad = false
+    /// 댓글 429로 마지막에 처리한 시각 (디시가 곧바로 한 번 더 보내 연달아 오는 429는 한 번만)
+    private var last429 = Date.distantPast
 
     init(url: URL) {
         let config = WKWebViewConfiguration()
@@ -302,9 +312,9 @@ final class WebViewModel: NSObject, ObservableObject {
               t.x > th.distance || (t.x > th.distance / 2 && v.x > th.flickSpeed) else { return }
         guard canSwipeBack else { return }
         Task {
-            // 말머리 탭처럼 가로로 스크롤되는 곳에서 시작한 스와이프는 무시
-            let inHScroll = await call("return window.__dcapp ? window.__dcapp.lastTouchInHScroll() : false;") as? Bool ?? false
-            guard !inHScroll else { return }
+            // 말머리 탭처럼 가로로 스크롤되는 곳에서 시작한 스와이프, 글자를 선택(드래그)하는 중의 스와이프는 무시
+            let skip = await call("return window.__dcapp ? (window.__dcapp.lastTouchInHScroll() || window.__dcapp.textSelecting()) : false;") as? Bool ?? false
+            guard !skip else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             swipeBack()
         }
@@ -312,7 +322,20 @@ final class WebViewModel: NSObject, ObservableObject {
 
     // MARK: - '뒤로' 동작 (화면 쓸기와 키보드 모드의 뒤로가기 버튼·⌘[ 가 똑같이 씀)
 
-    /// 갤러리 목록 1페이지면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터는 뒤로가기)
+    /// 말머리를 골라 본 글 목록이면 → 뒤로가기는 '전체' 말머리(1페이지)로
+    private var allHeadURLOnBack: URL? {
+        guard let url = webView.url, isGalleryListPage,
+              var c = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let items = c.queryItems ?? []
+        if items.contains(where: { $0.name == "serval" || $0.name == "s_keyword" }) { return nil }   // 검색 결과는 제외
+        guard let head = items.first(where: { $0.name == "headid" })?.value, !head.isEmpty else { return nil }
+        let rest = items.filter { $0.name != "headid" && $0.name != "page" }
+        c.queryItems = rest.isEmpty ? nil : rest
+        c.fragment = nil
+        return c.url
+    }
+
+    /// 갤러리 목록 1페이지('전체' 말머리)면 → 뒤로가기 대신 "갤러리" 창 열기 (2페이지부터는 뒤로가기)
     private var opensGalleriesOnBack: Bool {
         // 검색 결과 목록은 제외 (검색 전 목록으로 돌아가야 하므로 보통 뒤로가기)
         let q = webView.url?.query ?? ""
@@ -331,7 +354,7 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 지금 '뒤로' 할 수 있는 게 있는지
     var canSwipeBack: Bool {
-        opensGalleriesOnBack || postGalleryOnBack != nil || backTarget() != nil
+        allHeadURLOnBack != nil || opensGalleriesOnBack || postGalleryOnBack != nil || backTarget() != nil
     }
 
     func swipeBack() {
@@ -339,6 +362,8 @@ final class WebViewModel: NSObject, ObservableObject {
            let g = Gallery.parse(url), SavedPostStore.postInfo(url) == nil {
             // 개념글 목록에서 → 같은 갤러리의 전체글로
             load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+        } else if let all = allHeadURLOnBack {
+            load(all)         // 다른 말머리 → '전체' 말머리로
         } else if opensGalleriesOnBack {
             onGallerySwipe?()
         } else if let g = postGalleryOnBack {
@@ -510,12 +535,37 @@ final class WebViewModel: NSObject, ObservableObject {
         showToast("임시저장했어요")
     }
 
-    func restoreDraft(_ draft: Draft) {
+    func restoreDraft(_ draft: Draft, message: String = "임시저장 글을 불러왔어요") {
         Task {
             let r = await call("return window.__dcapp ? window.__dcapp.setDraft(t, b, h) : 'noscript';",
                                ["t": draft.title, "b": draft.body, "h": draft.isHTML]) as? String
-            showToast(r == "restored" ? "임시저장 글을 불러왔어요" : "글쓰기 칸을 찾지 못했어요")
+            showToast(r == "restored" ? message : "글쓰기 칸을 찾지 못했어요")
         }
+    }
+
+    /// 로그인·로그아웃으로 글쓰기 화면이 다시 열려도 쓰던 내용이 남도록: 지금 내용을 잡아 두었다가 다시 열리면 채움
+    private var keptWrite: (draft: Draft, at: Date)?
+
+    private func keepWriteBeforeReload() async {
+        if let s = nativeWrite {
+            if s.hasText {
+                keptWrite = (Draft(id: UUID(), galleryID: s.galleryID, title: s.title, body: s.body,
+                                   preview: String(s.body.prefix(200)), isHTML: false, isAuto: true,
+                                   updatedAt: Date(), writeURL: webView.url), Date())
+            }
+            return
+        }
+        guard let gid = currentWriteGalleryID,
+              let d = await call("return window.__dcapp ? window.__dcapp.getDraft() : null;") as? [String: Any],
+              (d["ok"] as? Bool) == true else { return }
+        let title = d["title"] as? String ?? "", body = d["body"] as? String ?? "", preview = d["text"] as? String ?? ""
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let isHTML = d["html"] as? Bool ?? false
+        // 혹시 몰라 자동 임시저장에도 남김 (불러오기에서 다시 꺼낼 수 있게)
+        DraftStore.shared.autosave(galleryID: gid, title: title, body: body, preview: preview, isHTML: isHTML, writeURL: webView.url)
+        keptWrite = (Draft(id: UUID(), galleryID: gid, title: title, body: body, preview: preview,
+                           isHTML: isHTML, isAuto: true, updatedAt: Date(), writeURL: webView.url), Date())
     }
 
     // MARK: - 지금 화면에서 로그인 / 로그아웃 (글쓰기 화면 계정 버튼)
@@ -532,10 +582,12 @@ final class WebViewModel: NSObject, ObservableObject {
     func loginHere(_ account: LoginCredential?) {
         let back = webView.url
         Task {
+            await keepWriteBeforeReload()
             if CredentialStore.currentAccountID != nil || account != nil {
                 await DCSession.clear(notify: false)      // 다른 계정으로 바꿀 때는 기존 로그인 지우기
             }
             pendingLogin = account
+            manualLogin = (account == nil)
             load(loginURL(returnTo: back))
             if let account { showToast("\(account.id) 계정으로 로그인하는 중…") }
         }
@@ -545,6 +597,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func logoutHere() {
         let back = webView.url
         Task {
+            await keepWriteBeforeReload()
             await DCSession.clear(notify: false)
             NotificationCenter.default.post(name: DC.sessionChanged, object: self)   // 다른 화면만 새로고침
             if let back { load(back) } else { reload() }
@@ -567,6 +620,348 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - 댓글 등록 중 광고 차단 잠시 끄기
+
+    private var adResumeTask: Task<Void, Never>?
+
+    private func pauseAdBlock() {
+        guard AdBlock.enabled else { return }
+        adResumeTask?.cancel()          // 다시 켜기로 한 게 있으면 취소
+        AdBlock.setPaused(true, controller: webView.configuration.userContentController)
+    }
+
+    private func resumeAdBlock(after seconds: Double) {
+        guard AdBlock.paused else { return }
+        adResumeTask?.cancel()
+        adResumeTask = Task {
+            if seconds > 0 { try? await Task.sleep(for: .seconds(seconds)) }
+            guard !Task.isCancelled else { return }
+            AdBlock.setPaused(false, controller: webView.configuration.userContentController)
+        }
+    }
+
+    // MARK: - 댓글 429 자동 재등록
+
+    /// 429: 쓰던 내용만 복사 (디시가 곧바로 한 번 더 보내 연달아 오는 429는 한 번만)
+    private func handleComment429(memo: String) {
+        guard Date().timeIntervalSince(last429) > 5 else { return }
+        last429 = Date()
+        guard !memo.isEmpty else { return }
+        UIPasteboard.general.string = memo        // 혹시 몰라 복사만 (안내는 자동 재등록 쪽에서)
+    }
+
+    // MARK: - 앱 글쓰기 화면
+
+    static let nativeWriteKey = "nativeWrite"
+    static var nativeWriteEnabled: Bool { UserDefaults.standard.object(forKey: nativeWriteKey) as? Bool ?? true }
+
+    /// 글쓰기 페이지가 열리면 앱 글쓰기 화면을 만들고, 디시 양식에서 유동 여부·말머리 등을 읽어 옴
+    private func startNativeWrite(_ gid: String) {
+        let s = NativeWriteSession(galleryID: gid)
+        nativeWrite = s
+        // 자짤 (자동 첨부로 설정된 갤러리)
+        let eff = AutoImageStore.shared.effective(for: gid)
+        if eff.enabled && eff.mode == .auto { addAutoImage(to: s, silent: true) }
+        // 이어쓰기 / 로그인 후 돌아옴
+        if let d = pendingDraft {
+            pendingDraft = nil; keptWrite = nil
+            s.apply(d)
+        } else if let k = keptWrite {
+            keptWrite = nil
+            if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft) }
+        }
+        Task {
+            let info = await call("return window.__dcapp ? await window.__dcapp.writeInfo() : null;") as? [String: Any]
+            guard nativeWrite === s else { return }
+            guard let info, (info["ok"] as? Bool) == true else {
+                nativeWrite = nil
+                showToast("글쓰기 양식을 못 읽어서 디시 화면으로 쓸게요")
+                return
+            }
+            s.galleryName = info["gallery"] as? String ?? ""
+            s.isAnon = info["anon"] as? Bool ?? false
+            s.nickLocked = info["nickLocked"] as? Bool ?? false
+            if s.isAnon {
+                let pageNick = info["nick"] as? String ?? ""
+                s.nick = !pageNick.isEmpty ? pageNick : (AnonStore.nick.isEmpty ? "ㅇㅇ" : AnonStore.nick)
+                let pagePw = info["pw"] as? String ?? ""
+                s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password
+            }
+            s.heads = (info["heads"] as? [[String: Any]] ?? []).compactMap { h in
+                guard let no = h["no"] as? String, let name = h["name"] as? String else { return nil }
+                return WriteHead(no: no, name: name)
+            }
+            s.head = info["head"] as? String ?? ""
+            // 글 수정: 원래 제목·내용(글자·사진 순서 그대로) 불러오기
+            if info["mode"] as? String == "modify" {
+                s.title = info["title"] as? String ?? ""
+                let parts = info["blocks"] as? [[String: Any]] ?? []
+                if !parts.isEmpty {
+                    s.blocks = parts.map { p in
+                        if p["t"] as? String == "raw" {
+                            return WriteBlock(image: WriteImage(data: Data(), mime: "", ext: "", preview: nil,
+                                                                rawHTML: p["html"] as? String ?? "",
+                                                                remoteURL: (p["src"] as? String).flatMap(URL.init(string:)),
+                                                                label: p["label"] as? String))
+                        }
+                        return WriteBlock(text: p["text"] as? String ?? "")
+                    }
+                    s.normalize()
+                    loadRemotePreviews(s)
+                }
+            }
+            s.hasCaptcha = info["captcha"] as? Bool ?? false
+            s.captchaImage = Self.imageFromDataURL(info["captchaImg"] as? String)
+            s.loaded = true
+            runNativeAutosave(s)
+        }
+    }
+
+    /// 글 수정: 원래 올라가 있던 사진 미리보기 (디시 이미지 서버는 Referer가 있어야 보여줌)
+    private func loadRemotePreviews(_ s: NativeWriteSession) {
+        let targets = s.images.filter { $0.preview == nil }.compactMap { img in img.remoteURL.map { (img.id, $0) } }
+        for (id, url) in targets {
+            Task {
+                var req = URLRequest(url: url)
+                req.setValue("https://m.dcinside.com/", forHTTPHeaderField: "Referer")
+                guard let (data, _) = try? await URLSession.shared.data(for: req) else { return }
+                // 움직이는 디시콘·움짤은 프레임을 모아 움직이게
+                guard let img = await Task.detached(operation: { ImageViewer.decode(data) }).value else { return }
+                s.setPreview(img, for: id)
+            }
+        }
+    }
+
+    private static func imageFromDataURL(_ s: String?) -> UIImage? {
+        guard let s, let comma = s.firstIndex(of: ",") else { return nil }
+        return Data(base64Encoded: String(s[s.index(after: comma)...])).flatMap(UIImage.init(data:))
+    }
+
+    /// 15초마다 바뀐 내용을 자동 임시저장 (사진은 빼고 제목·내용만)
+    private func runNativeAutosave(_ s: NativeWriteSession) {
+        Task {
+            var last = s.title + "\u{0}" + s.body
+            while nativeWrite === s {
+                try? await Task.sleep(for: .seconds(15))
+                guard nativeWrite === s, !s.submitting else { continue }
+                let sig = s.title + "\u{0}" + s.body
+                guard sig != last, s.hasText else { continue }
+                last = sig
+                DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+            }
+        }
+    }
+
+    func refreshNativeCaptcha() {
+        guard let s = nativeWrite else { return }
+        Task {
+            let img = await call("return window.__dcapp ? await window.__dcapp.refreshCaptcha() : null;") as? String
+            s.captchaImage = Self.imageFromDataURL(img)
+            s.captcha = ""
+        }
+    }
+
+    /// 자짤 하나를 앱 글쓰기 사진 목록에 넣기
+    func addAutoImage(to s: NativeWriteSession? = nil, silent: Bool = false) {
+        guard let s = s ?? nativeWrite else { return }
+        let store = AutoImageStore.shared
+        guard let img = store.pick(for: s.galleryID),
+              let data = try? Data(contentsOf: store.fileURL(img)) else {
+            if !silent { showToast("등록된 자짤이 없어요 (설정 → 자짤)") }
+            return
+        }
+        if silent, s.images.contains(where: \.isAuto) { return }
+        s.addImages([WriteImage(data: data, mime: img.mime, ext: img.ext,
+                                preview: UIImage(data: data) ?? UIImage(), isAuto: true)], atTop: true)
+    }
+
+    /// 앱 글쓰기 '임시' → 임시저장 목록에 새로 저장
+    func saveNativeDraft() {
+        guard let s = nativeWrite else { return }
+        guard s.hasText else { showToast("저장할 내용이 없어요"); return }
+        DraftStore.shared.addManual(galleryID: s.galleryID, title: s.title, body: s.body,
+                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+        showToast(s.images.isEmpty ? "임시저장했어요" : "임시저장했어요 (사진은 빼고 저장돼요)")
+    }
+
+    /// 앱 글쓰기 '등록' → 디시 양식에 채우고 등록
+    func submitNative() {
+        guard let s = nativeWrite, !s.submitting else { return }
+        let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.count < 2 { showToast("제목을 2자 이상 입력해 주세요"); return }
+        if title.count > 40 { showToast("제목은 40자까지 쓸 수 있어요"); return }
+        if s.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && s.images.isEmpty {
+            showToast("내용을 입력해 주세요"); return
+        }
+        if s.isAnon {
+            if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return }
+            if s.pw.count < 4 { showToast("비밀번호를 4자리 이상 입력해 주세요"); return }
+            if !s.nickLocked { AnonStore.nick = s.nick }
+            AnonStore.password = s.pw
+        }
+        if s.hasCaptcha && s.captcha.isEmpty { showToast("코드를 입력해 주세요"); return }
+        if !s.heads.isEmpty && s.head.isEmpty { showToast("말머리를 골라 주세요"); return }
+        // 쓰던 내용은 혹시 몰라 자동 저장에도
+        DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+        s.submitting = true
+        let payload: [String: Any] = [
+            "title": title,
+            "nick": s.isAnon && !s.nickLocked ? s.nick : NSNull(),
+            "pw": s.isAnon ? s.pw : NSNull(),
+            "captcha": s.hasCaptcha ? s.captcha : NSNull(),
+            "head": s.head,
+            // 본문 순서 그대로: 글자 칸 / 사진 칸
+            "blocks": s.blocks.compactMap { b -> [String: Any]? in
+                if let img = b.image {
+                    if let raw = img.rawHTML { return ["t": "raw", "html": raw] }      // 수정: 원래 있던 칸 그대로
+                    return ["t": "image", "b64": img.data.base64EncodedString(), "mime": img.mime, "ext": img.ext]
+                }
+                return b.text.isEmpty ? nil : ["t": "text", "text": b.text, "html": RichText.html(b.rich)]   // 꾸미기 포함
+            },
+        ]
+        Task {
+            let r = await call("return window.__dcapp ? await window.__dcapp.nativeSubmit(p) : 'noscript';", ["p": payload]) as? String ?? "error"
+            guard nativeWrite === s else { return }
+            switch r {
+            case "submitted":
+                // 디시가 등록하고 글 화면으로 넘어가면 닫힘. 안 넘어가면(오류) 잠시 뒤 다시 쓸 수 있게
+                try? await Task.sleep(for: .seconds(15))
+                if nativeWrite === s, s.submitting { s.submitting = false }
+            case "needcheck":
+                s.submitting = false
+                s.webFeature = nil
+                s.showingWeb = true
+                showToast("Cloudflare 체크박스를 눌러 주세요 (체크하면 이어서 등록돼요)")
+            case "imgtimeout":
+                s.submitting = false
+                showToast("사진을 올리는 데 실패했어요. 다시 등록해 주세요")
+            default:
+                s.submitting = false
+                showToast("등록하지 못했어요 (\(r))")
+            }
+        }
+    }
+
+    /// 동영상·디시콘·유튜브·투표: 디시 화면에서 그 기능을 열어 넣게 하고, 다 넣으면 앱 화면으로 가져옴
+    func openWebFeature(_ kind: String, name: String) {
+        guard let s = nativeWrite else { return }
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.openWebFeature(k) : 'none';", ["k": kind]) as? String
+            guard nativeWrite === s else { return }
+            if r == "opened" {
+                s.webFeature = name
+                s.showingWeb = true
+            } else {
+                showToast("이 갤러리에서는 \(name)을(를) 쓸 수 없어요")
+            }
+        }
+    }
+
+    /// 디시 화면에서 넣은 것(디시콘·동영상 등)을 앱 글쓰기 끝에 붙이고 앱 화면으로
+    func finishWebFeature() {
+        guard let s = nativeWrite else { return }
+        Task {
+            let added = Self.writeBlocks(from: await call("return window.__dcapp ? window.__dcapp.collectWebInserts() : [];"))
+            let name = s.webFeature ?? "첨부"
+            s.webFeature = nil
+            s.showingWeb = false
+            guard !added.isEmpty else { return }
+            appendBlocks(added, to: s)
+            showToast("\(name)을(를) 넣었어요")
+        }
+    }
+
+    // MARK: 디시콘 바로 넣기
+
+    /// 디시콘 목록 첫 화면: 탭(보유·최근 디시콘 묶음)과 지금 탭의 디시콘
+    func dcconTabs() async -> (tabs: [DcconTab], current: String, items: [DcconItem])? {
+        guard let r = await call("return window.__dcapp ? await window.__dcapp.dcconTabs() : null;") as? [String: Any] else { return nil }
+        let tabs = (r["tabs"] as? [[String: Any]] ?? []).map { t in
+            DcconTab(idx: t["idx"] as? String ?? "", folder: t["folder"] as? String ?? "",
+                     name: t["name"] as? String ?? "", thumb: (t["thumb"] as? String).flatMap(URL.init(string:)))
+        }
+        return (tabs, r["current"] as? String ?? "", Self.dcconItems(r["items"]))
+    }
+
+    func dcconItems(_ tab: DcconTab) async -> [DcconItem] {
+        Self.dcconItems(await call("return window.__dcapp ? await window.__dcapp.dcconItems(i, f) : [];",
+                                   ["i": tab.idx, "f": tab.folder]))
+    }
+
+    private static func dcconItems(_ any: Any?) -> [DcconItem] {
+        (any as? [[String: Any]] ?? []).map { d in
+            DcconItem(pkg: d["pkg"] as? String ?? "", detail: d["detail"] as? String ?? "",
+                      alt: d["alt"] as? String ?? "", src: (d["src"] as? String).flatMap(URL.init(string:)))
+        }
+    }
+
+    /// 고른 디시콘을 디시 방식 그대로 칸으로 만들어 글 끝에 붙임
+    func insertDccon(_ item: DcconItem, preview: UIImage?) async -> Bool {
+        guard let s = nativeWrite else { return false }
+        let r = await call("return window.__dcapp ? window.__dcapp.dcconMake(p, d) : {error:'noscript'};",
+                           ["p": item.pkg, "d": item.detail]) as? [String: Any] ?? [:]
+        if let err = r["error"] as? String {
+            showToast(err == "denied" ? "이 디시콘은 쓸 수 없어요" : "디시콘을 넣지 못했어요")
+            return false
+        }
+        var blocks = Self.writeBlocks(from: r["blocks"])
+        guard !blocks.isEmpty else { showToast("디시콘을 넣지 못했어요"); return false }
+        if let preview, blocks.count == 1 { blocks[0].image?.preview = preview }
+        appendBlocks(blocks, to: s)
+        return true
+    }
+
+    /// 페이지에서 받은 칸 목록 → 앱 글쓰기 칸
+    private static func writeBlocks(from any: Any?) -> [WriteBlock] {
+        (any as? [[String: Any]] ?? []).compactMap { p in
+            if p["t"] as? String == "raw" {
+                return WriteBlock(image: WriteImage(data: Data(), mime: "", ext: "", preview: nil,
+                                                    rawHTML: p["html"] as? String ?? "",
+                                                    remoteURL: (p["src"] as? String).flatMap { $0.isEmpty ? nil : URL(string: $0) },
+                                                    label: p["label"] as? String))
+            }
+            if let t = p["text"] as? String { return WriteBlock(text: t) }
+            return nil
+        }
+    }
+
+    /// 글 끝(마지막 빈 글자 칸 앞)에 칸 붙이기 → 길게 눌러 끌어서 옮길 수 있음
+    private func appendBlocks(_ added: [WriteBlock], to s: NativeWriteSession) {
+        guard !added.isEmpty else { return }
+        if let last = s.blocks.last, last.image == nil, last.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            s.blocks.insert(contentsOf: added, at: s.blocks.count - 1)
+        } else {
+            s.blocks.append(contentsOf: added)
+        }
+        s.normalize()
+        loadRemotePreviews(s)
+    }
+
+    /// 디시 원래 글쓰기 화면으로 (지금까지 쓴 제목·내용은 옮김)
+    func switchToWebWrite() {
+        guard let s = nativeWrite else { return }
+        nativeSkipURL = webView.url
+        let draft = Draft(id: UUID(), galleryID: s.galleryID, title: s.title, body: s.body, preview: "",
+                          isHTML: false, isAuto: true, updatedAt: Date(), writeURL: webView.url)
+        let hadImages = !s.images.isEmpty
+        nativeWrite = nil
+        if s.hasText { restoreDraft(draft, message: hadImages ? "제목·내용을 옮겼어요 (사진은 다시 첨부해 주세요)" : "디시 화면으로 옮겼어요") }
+    }
+
+    /// 앱 글쓰기 ← : 쓰던 게 있으면 자동 저장하고 뒤로
+    func closeNativeWrite() {
+        guard let s = nativeWrite else { return }
+        if s.hasText {
+            DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                       preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+            showToast("쓰던 글을 자동 임시저장했어요")
+        }
+        nativeWrite = nil
+        swipeBack()
+    }
+
     // MARK: - 글쓰기 등록
 
     /// 상단바 '등록' → 디시 글쓰기 화면의 등록 버튼을 대신 누름
@@ -575,6 +970,23 @@ final class WebViewModel: NSObject, ObservableObject {
             let r = await call("return window.__dcapp ? window.__dcapp.submitWrite() : 'none';") as? String
             if r != "clicked" { showToast("등록 버튼을 못 찾았어요 (페이지 구조 진단을 보내주세요)") }
         }
+    }
+
+    // MARK: - 글쓰기 제목 ⇄ 내용 이동
+
+    /// 키보드 위 < > : 제목 칸 ⇄ 내용 칸으로 커서 옮기기
+    func moveWriteFocus(forward: Bool) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        FocusUnlock.allow(for: 1.0)          // 앱 버튼으로 옮기는 거라 스크립트 focus로도 키보드 유지
+        Task { await call("return window.__dcapp ? window.__dcapp.moveWriteFocus(f) : 'none';", ["f": forward]) }
+    }
+
+    // MARK: - 키보드 내리기
+
+    /// 웹페이지 입력칸의 포커스를 풀어 키보드를 내림
+    func dismissKeyboard() {
+        webView.evaluateJavaScript("document.activeElement && document.activeElement.blur && document.activeElement.blur(); true", completionHandler: nil)
+        webView.endEditing(true)
     }
 
     // MARK: - 갤러리 관리 내역
@@ -629,11 +1041,35 @@ final class WebViewModel: NSObject, ObservableObject {
         Task { await call("if (window.__dcapp) window.__dcapp.clearPick(); return true;") }
     }
 
+    // MARK: - 알림: 차단한 사람이 보낸 것 거르기
+
+    /// 디시 알림에는 작성자가 없어서, 새 알림마다 그 글을 한 번 불러와 해당 댓글 작성자를 확인
+    private func addAlarmsSkippingBlocked(_ raw: [[String: Any]]) {
+        let cands = AlarmStore.shared.candidates(raw)
+        guard !cands.isEmpty else { return }
+        Task {
+            var keep: [AlarmItem] = [], skip: [AlarmItem] = []
+            for item in cands {
+                guard let cno = item.commentNo, !FilterStore.shared.settings.users.isEmpty else { keep.append(item); continue }
+                let a = await call("return window.__dcapp ? await window.__dcapp.alarmAuthor(g, n, c) : null;",
+                                   ["g": item.galleryID, "n": item.postNo, "c": cno]) as? [String: Any]
+                let nick = a?["nick"] as? String ?? "", ip = a?["ip"] as? String ?? "", id = a?["id"] as? String ?? ""
+                if a != nil, FilterStore.shared.isBlocked(nick: nick, ip: ip, id: id, gallery: item.galleryID) {
+                    skip.append(item)
+                } else {
+                    keep.append(item)      // 못 찾으면(댓글이 다른 페이지 등) 그냥 보여줌
+                }
+            }
+            AlarmStore.shared.finishCheck(keep: keep, skip: skip)
+        }
+    }
+
     // MARK: - 진단
 
     func diagnose() async -> String {
-        (await call("return window.__dcapp ? window.__dcapp.diagnose() : '스크립트가 로드되지 않았어요: ' + location.href;") as? String)
+        let page = (await call("return window.__dcapp ? window.__dcapp.diagnose() : '스크립트가 로드되지 않았어요: ' + location.href;") as? String)
             ?? "진단 정보를 가져오지 못했어요."
+        return StatusBarStyler.diagnostics() + "\n" + page
     }
 
     // MARK: - 캡처
@@ -657,6 +1093,7 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 로그인 자동 입력 / 저장
 
     private func autofillLogin() {
+        if manualLogin { return }
         let switching = pendingLogin != nil
         guard let cred = pendingLogin ?? CredentialStore.load() else { return }
         let auto = switching || UserDefaults.standard.bool(forKey: "autoLogin")
@@ -722,8 +1159,35 @@ extension WebViewModel: WKScriptMessageHandler {
             if body["kind"] as? String == "pw" { AnonStore.password = v } else { AnonStore.nick = v }
             // 페이지 스크립트에 넣어 둔 설정은 설치할 때 값이라, 다시 설치해야 다음 페이지(로그아웃 후 등)에서 새 값으로 채움
             installUserScript()
+        case "adpause":   // 댓글 칸을 누름 → 등록할 때까지 광고 차단 끄기
+            pauseAdBlock()
+        case "nativewrite":   // Cloudflare 체크가 끝나 디시 화면에서 이어서 등록함 → 앱 화면으로 돌아옴
+            if body["state"] as? String == "resumed" {
+                nativeWrite?.showingWeb = false
+                nativeWrite?.submitting = true
+            }
+        case "tdock":
+            let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
+            if writeToolbarHeight != h { writeToolbarHeight = h }
+        case "cmtdone":   // 댓글 등록 요청 끝 → 광고 차단 다시 켜기 (429면 자동으로 다시 누르는 중이라 그대로)
+            if (body["status"] as? NSNumber)?.intValue != 429 { resumeAdBlock(after: 1) }
+        case "cmtretry":   // 429 뒤 자동 재등록 상태
+            switch body["state"] as? String {
+            case "start": showToast("댓글이 막혀서 등록될 때까지 다시 누를게요")
+            case "check": showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)")
+            case "done": showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
+            default: break
+            }
+        case "wantfocus":   // 댓글을 눌러 답글 칸이 열림 → 키보드 띄우기 (스크립트 focus 허용)
+            FocusUnlock.allow(for: 1.5)
+            Task {
+                try? await Task.sleep(for: .milliseconds(60))
+                await call("return window.__dcapp ? window.__dcapp.focusReply() : false;")
+            }
+        case "cmt429":   // 댓글 등록이 429로 막힘 → 쓰던 내용 복사
+            handleComment429(memo: body["memo"] as? String ?? "")
         case "alarms":   // 디시 알림 응답(/alarm/notification) → 갤러리 창의 알림 탭에 쌓기
-            if let list = body["items"] as? [[String: Any]] { AlarmStore.shared.add(list) }
+            if let list = body["items"] as? [[String: Any]] { addAlarmsSkippingBlocked(list) }
         case "pwskip":
             showToast("비밀번호 변경 안내를 건너뛰었어요")
         case "blockmiss":
@@ -757,9 +1221,22 @@ extension WebViewModel: WKNavigationDelegate {
         return .allow
     }
 
+    /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if AdBlock.paused {
+            adResumeTask?.cancel()
+            AdBlock.setPaused(false, controller: webView.configuration.userContentController)
+        }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
+
+        // 알림이 온 글을 열면 → 알림 탭에서도 그 글 알림은 읽음으로
+        if let url = webView.url, let info = SavedPostStore.postInfo(url), let no = Int(info.no) {
+            AlarmStore.shared.markRead(galleryID: info.galleryID, postNo: no)
+        }
 
         // 방문한 갤러리 기록 (하단 바 "갤러리" → 방문한 갤러리)
         if let url = webView.url, let g = Gallery.parse(url) {
@@ -773,6 +1250,7 @@ extension WebViewModel: WKNavigationDelegate {
             NotificationCenter.default.post(name: DC.sessionChanged, object: self)
             offerToSaveCredential()
         }
+        if host != DC.loginHost { manualLogin = false }      // 로그인 화면을 벗어나면 원래대로
         if host == DC.loginHost {
             autofillLogin()
         }
@@ -788,6 +1266,7 @@ extension WebViewModel: WKNavigationDelegate {
         if isPickMode { setPickMode(true) }   // 새 페이지에도 선택 모드 유지
         if isBlockPickMode { setBlockPickMode(true) }
 
+
         if scrollToCommentsAfterLoad {
             scrollToCommentsAfterLoad = false
             Task {
@@ -799,19 +1278,41 @@ extension WebViewModel: WKNavigationDelegate {
 
         // 글쓰기 화면이면 자짤 자동 첨부
         let writeGID = webView.url.flatMap(AutoImageStore.writeGalleryID)
-        if let gid = writeGID {
+        // 앱 글쓰기 화면: 글쓰기 페이지면 덮고, 다른 페이지로 가면(등록 완료 등) 닫음
+        var nativeHandled = false
+        if let gid = writeGID, Self.nativeWriteEnabled, nativeSkipURL != webView.url {
+            if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true { startNativeWrite(gid) }
+            focusTitleOnWrite = false
+            nativeHandled = true      // 자짤·이어쓰기·자동 저장은 앱 화면에서 처리
+        }
+        if writeGID == nil { nativeSkipURL = nil }
+        if writeGID == nil, let s = nativeWrite {
+            if s.submitting { DraftStore.shared.removeAuto(galleryID: s.galleryID) }   // 등록됨 → 자동 저장본 지움
+            nativeWrite = nil
+        }
+        if let gid = writeGID, !nativeHandled {
             let eff = AutoImageStore.shared.effective(for: gid)   // 갤러리별 설정 반영
             if eff.enabled && eff.mode == .auto { attachAutoImage(force: false) }
         }
 
         // 글쓰기 화면: 15초마다 자동 임시저장 + 이어쓰기 요청이 있으면 내용 채우기
-        if writeGID != nil {
+        if writeGID != nil, !nativeHandled {
             Task { await call("if (window.__dcapp) window.__dcapp.startAutosave(); return true;") }
             if let d = pendingDraft {
                 pendingDraft = nil
+                keptWrite = nil
                 Task {
                     try? await Task.sleep(for: .milliseconds(700))
                     restoreDraft(d)
+                }
+            } else if let k = keptWrite {
+                keptWrite = nil
+                // 로그인·로그아웃 뒤 같은 갤러리 글쓰기로 돌아왔으면 (10분 안) 쓰던 내용 다시 채우기
+                if k.draft.galleryID == writeGID, Date().timeIntervalSince(k.at) < 600 {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(700))
+                        restoreDraft(k.draft, message: "쓰던 내용을 다시 채웠어요")
+                    }
                 }
             }
             if focusTitleOnWrite {
@@ -878,6 +1379,7 @@ extension WebViewModel: WKUIDelegate {
             showToast("비밀번호 변경 안내를 건너뛰었어요")
             return
         }
+        nativeWrite?.submitting = false      // 디시가 안내창을 띄우면(입력 누락 등) 앱 글쓰기 '등록 중' 풀기
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in cont.resume() })

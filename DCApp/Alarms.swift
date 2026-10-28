@@ -46,15 +46,40 @@ final class AlarmStore: ObservableObject {
         }
     }
 
-    /// 페이지에서 받은 알림 목록 (이미 있는 건 건너뜀, 새것은 맨 위에)
-    func add(_ raw: [[String: Any]]) {
+    /// 차단한 사람이 보낸 것이라 버린 알림 (디시가 같은 알림을 계속 다시 보내서, 다시 확인하지 않게 기억)
+    private let skippedKey = "alarmSkipped"
+    private lazy var skipped: [String] = UserDefaults.standard.stringArray(forKey: skippedKey) ?? []
+    /// 작성자를 확인하는 중인 알림
+    private var checking = Set<String>()
+
+    /// 받은 알림 중 아직 모르는 것(이미 쌓였거나, 버렸거나, 확인 중인 것 제외)
+    func candidates(_ raw: [[String: Any]]) -> [AlarmItem] {
+        let known = Set(items.map(\.id)).union(skipped).union(checking)
+        var out: [AlarmItem] = []
+        for item in parse(raw) where !known.contains(item.id) && !out.contains(where: { $0.id == item.id }) {
+            out.append(item)
+        }
+        checking.formUnion(out.map(\.id))
+        return out
+    }
+
+    /// 작성자 확인을 마친 알림: 통과한 건 쌓고, 차단된 건 기억해 두고 버림
+    func finishCheck(keep: [AlarmItem], skip: [AlarmItem]) {
+        checking.subtract(keep.map(\.id)); checking.subtract(skip.map(\.id))
+        if !skip.isEmpty {
+            skipped = Array((skip.map(\.id) + skipped).prefix(500))
+            UserDefaults.standard.set(skipped, forKey: skippedKey)
+        }
+        insert(keep)
+    }
+
+    private func parse(_ raw: [[String: Any]]) -> [AlarmItem] {
         func int(_ v: Any?) -> Int? {
             if let n = v as? NSNumber { return n.intValue }
             if let s = v as? String { return Int(s) }
             return nil
         }
-        let known = Set(items.map(\.id))
-        var new: [AlarmItem] = []
+        var out: [AlarmItem] = []
         for d in raw {
             guard let gid = d["gallery_id"] as? String, let no = int(d["gallery_no"]) else { continue }
             let subject = (d["subject"] as? String ?? "")
@@ -63,8 +88,20 @@ final class AlarmStore: ObservableObject {
                 .replacingOccurrences(of: "&amp;", with: "&")
             let item = AlarmItem(galleryID: gid, postNo: no, commentNo: int(d["comment_no"]),
                                  type: d["type"] as? String ?? "", subject: subject, receivedAt: Date())
-            if !known.contains(item.id), !new.contains(where: { $0.id == item.id }) { new.append(item) }
+            out.append(item)
         }
+        return out
+    }
+
+    /// 페이지에서 받은 알림 목록을 작성자 확인 없이 바로 쌓기 (이미 있는 건 건너뜀, 새것은 맨 위에)
+    func add(_ raw: [[String: Any]]) {
+        insert(candidates(raw))
+        checking.removeAll()
+    }
+
+    private func insert(_ incomingItems: [AlarmItem]) {
+        let known = Set(items.map(\.id))
+        let new = incomingItems.filter { !known.contains($0.id) }
         guard !new.isEmpty else { return }
         var list = new + items
         if list.count > 300 { list.removeLast(list.count - 300) }
@@ -75,6 +112,16 @@ final class AlarmStore: ObservableObject {
     func markRead(_ item: AlarmItem) {
         guard let i = items.firstIndex(where: { $0.id == item.id }), !items[i].read else { return }
         items[i].read = true
+    }
+
+    /// 이 글에 달린 알림 전부 읽음으로 (배너를 눌러 들어가거나, 다른 길로 그 글을 열었을 때)
+    func markRead(galleryID: String, postNo: Int) {
+        guard items.contains(where: { !$0.read && $0.galleryID == galleryID && $0.postNo == postNo }) else { return }
+        items = items.map { a in
+            var x = a
+            if a.galleryID == galleryID && a.postNo == postNo { x.read = true }
+            return x
+        }
     }
 
     func markAllRead() { items = items.map { var x = $0; x.read = true; return x } }

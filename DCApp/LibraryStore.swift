@@ -216,6 +216,12 @@ final class DraftStore: ObservableObject {
         save()
     }
 
+    /// 이 갤러리 자동 저장본 지우기 (글을 등록했을 때)
+    func removeAuto(galleryID: String) {
+        drafts.removeAll { $0.isAuto && $0.galleryID == galleryID }
+        save()
+    }
+
     func remove(_ d: Draft) {
         drafts.removeAll { $0.id == d.id }
         save()
