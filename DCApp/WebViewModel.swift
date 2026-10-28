@@ -1166,6 +1166,9 @@ extension WebViewModel: WKScriptMessageHandler {
                 nativeWrite?.showingWeb = false
                 nativeWrite?.submitting = true
             }
+        case "cmtmissing":   // 댓글은 등록됐는데 목록에 안 보임 → 글을 다시 불러와 댓글 위치로 (나갔다 들어온 것과 같게)
+            scrollToCommentsAfterLoad = true
+            reload()
         case "tdock":
             let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
             if writeToolbarHeight != h { writeToolbarHeight = h }

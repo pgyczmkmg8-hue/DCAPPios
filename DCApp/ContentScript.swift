@@ -1600,6 +1600,26 @@ enum ContentScript {
     if (!cmtRetry.on || cmtRetry.timer) return;
     cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
   }
+  // 댓글이 등록됐는데 목록에 안 나타나는 경우(가끔 디시가 새로 불러온 목록에 빠져 있음) → 앱이 글을 다시 불러오게
+  window.addEventListener('dcapp-cmtwrite', function (ev) {
+    var d = ev.detail || {};
+    if (d.status !== 200) return;
+    var ok = false;
+    try { var j = JSON.parse(d.text || '{}'); ok = j.result !== false && j.result !== 0 && j.result !== '0'; } catch (e) { return; }
+    if (!ok) return;
+    var memo = '';
+    try { memo = (new URLSearchParams(d.body || '').get('comment_memo') || '').replace(/\s+/g, ' ').trim(); } catch (e) {}
+    if (!memo) return;                                   // 디시콘만 단 댓글은 글자로 확인 못 함
+    var key = memo.slice(0, 20);
+    var page = location.href;
+    setTimeout(function () {
+      if (location.href !== page) return;
+      var found = Array.prototype.some.call(document.querySelectorAll('li.comment, li.comment-add'), function (li) {
+        return (li.textContent || '').replace(/\s+/g, ' ').indexOf(key) >= 0;
+      });
+      if (!found) post('cmtmissing', {});
+    }, 2500);
+  });
   window.addEventListener('dcapp-cmtwrite', function (ev) {
     var d = ev.detail || {};
     if (d.status === 429) {
@@ -2254,7 +2274,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v93-miniid', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v94-cmtmissing', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

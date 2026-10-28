@@ -11,10 +11,10 @@ nonisolated struct AppRelease: Identifiable, Sendable {
 }
 
 /// 앱을 열 때마다 GitHub Releases의 최신 버전을 확인해서, 판올림(0.6.x → 0.7.x)일 때만 알려 줌
-/// (저장소: github.com/pgyczmkmg8-hue/DCApp — 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
+/// (저장소: github.com/pgyczmkmg8-hue/DCAPPios — 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
 /// 버전 정보/업데이트 확인 화면에서 자동 확인 끄기 / 수동 확인 가능
 enum UpdateChecker {
-    nonisolated static let repo = "pgyczmkmg8-hue/DCApp"
+    nonisolated static let repo = "pgyczmkmg8-hue/DCAPPios"
     private static let skippedKey = "updateSkippedVersion"
     static let autoCheckKey = "updateAutoCheck"
 
