@@ -70,7 +70,7 @@ enum ContentScript {
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
       // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
-      '.dcapp-memo{display:inline;margin-left:4px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
+      '.dcapp-memo{display:inline;margin:0 8px 0 4px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
       'html.darkmode .dcapp-memo{color:#ffaa45}',
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
@@ -2576,7 +2576,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v110-namebox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v111-memogap', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
