@@ -237,6 +237,8 @@ struct BrowserView: View {
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
+    /// 차단·메모 버튼: 무엇을 할지 고르는 창
+    @State private var showBlockMemoChoice = false
     private var writeGalleryID: String? { model.url.flatMap(AutoImageStore.writeGalleryID) }
 
     // 글쓰기 화면의 계정 버튼에 표시할 현재 계정
@@ -1604,12 +1606,40 @@ struct BrowserView: View {
     /// 컨트롤바 둘째 칸 (설정 ⋮ 다음)
     @ViewBuilder
     private var extraBarItems: some View {
-        barItem("hand.tap", "hand.tap.fill", "차단", selected: model.isBlockPickMode) {
-            model.setBlockPickMode(!model.isBlockPickMode)
-            if model.isBlockPickMode { model.showToast("차단할 글이나 댓글의 작성자를 탭하세요") }
+        // 차단·메모: 누르면 무엇을 할지 고르고, 작성자를 탭해서 고름 (차단 모드·메모 모드 중이면 누르면 끔)
+        barItem("hand.raised", "hand.raised.fill", "차단·메모",
+                selected: model.isBlockPickMode || model.isMemoPickMode) {
+            if model.isBlockPickMode || model.isMemoPickMode {
+                model.setBlockPickMode(false)
+                model.setMemoPickMode(false)
+            } else {
+                showBlockMemoChoice = true
+            }
         }
-        barItem("note.text", "note.text", "메모하기", selected: model.isMemoPickMode) {
-            model.setMemoPickMode(!model.isMemoPickMode)
+        .confirmationDialog("무엇을 할까요?", isPresented: $showBlockMemoChoice, titleVisibility: .visible) {
+            Button("차단할 유저 고르기") {
+                model.setBlockPickMode(true)
+                model.showToast("차단할 글이나 댓글의 작성자를 탭하세요")
+            }
+            Button("메모할 유저 고르기") {
+                model.setMemoPickMode(true)
+                model.showToast("메모할 글이나 댓글의 작성자를 탭하세요")
+            }
+            Button("취소", role: .cancel) {}
+        }
+        // 빈 한 자리: 글 보기면 보관함, 갤러리 목록이면 즐겨찾기, 그 밖에는 새로고침
+        if isPostPage {
+            barItem("folder.badge.plus", "folder.fill.badge.plus", "보관함", selected: false) {
+                Task { await model.savePost() }
+            }
+        } else if currentGallery != nil {
+            barItem("star", "star.fill", "즐겨찾기", selected: isFavorite) {
+                toggleFavorite()
+            }
+        } else {
+            barItem("arrow.clockwise", "arrow.clockwise", "새로고침", selected: false) {
+                model.reload()
+            }
         }
         barItem("magnifyingglass.circle", "magnifyingglass.circle.fill", "전체 검색", selected: false) {
             router.sheet = .search                   // 홈 화면의 검색과 같은 전체 검색

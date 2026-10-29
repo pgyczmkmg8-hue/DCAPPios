@@ -8,11 +8,12 @@ struct AboutView: View {
     /// 사진을 추가하려면: Assets에 Image Set을 만들고 이름을 정한 뒤 여기에 한 줄 추가
     /// (Assets에 없는 이름은 자동으로 빠짐)
     static let aboutImages: [(name: String, weight: Double)] = [
-        ("AboutImage1", 0.25),
-        ("AboutImage2", 1),
-        ("AboutImage3", 0.25),
-        ("AboutImage4", 0.25),
-        ("AboutImage5", 0.25),
+        ("AboutImage0", 30),
+        ("AboutImage1", 25),
+        ("AboutImage2", 20),
+        ("AboutImage3", 15),
+        ("AboutImage4", 10),
+        ("AboutImage5", 100),
     ]
 
     /// 확률에 따라 하나 뽑기 (excluding: 방금 보던 사진은 빼고 — 다른 사진이 없으면 그대로)
