@@ -69,13 +69,28 @@ enum ContentScript {
       '.dcapp-lp-nick,.dcapp-memo,img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}',
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
-      '.dcapp-memo{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;font-size:11px;line-height:1.6;background:rgba(255,149,0,.16);color:#b86400;vertical-align:middle;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:normal}',
+      // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
+      '.dcapp-memo{display:inline;margin-left:4px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
+      'html.darkmode .dcapp-memo{color:#ffaa45}',
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
-      '.dcapp-mine-name{background:rgb(64,140,200)!important;color:#fff!important;padding:0 3px!important;border-radius:4px!important;line-height:1.2!important}',
+      // 연한 하늘색 상자에 글자가 위아래 가운데 오도록 (inline-flex로 상자 높이를 글자에 맞춤)
+      '.dcapp-mine-name{display:inline-flex!important;align-items:center!important;height:1.45em!important;padding:0 4px!important;vertical-align:middle!important;background:rgb(207,230,255)!important;color:#111!important;border-radius:3px!important;line-height:1!important;box-sizing:border-box!important}',
       // 디시는 내 댓글 li에 'on' 클래스를 붙여 파랗게 칠함 → 디시 쪽 규칙보다 우선하도록 클래스를 겹쳐 씀
       'li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine>*{background:none!important;background-color:transparent!important;box-shadow:none!important}',
       'li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine::before,li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine::after{background:none!important;box-shadow:none!important}',
+      // 글 목록 페이지 이동 (디시 페이지 번호 대신 앱이 만든 큰 버튼)
+      // 아래 여백: 맨 끝까지 내려도 앱의 떠 있는 버튼(새로고침 등)에 가리지 않게
+      '#dcapp-pager{display:flex;flex-direction:column;gap:8px;padding:14px 12px 84px;box-sizing:border-box}',
+      '#dcapp-pager .dcapp-pg-row{display:flex;gap:6px;justify-content:center}',
+      '#dcapp-pager a{flex:1 1 0;max-width:58px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:rgba(127,127,127,.12);color:#222;font-size:17px;font-weight:500;text-decoration:none;-webkit-tap-highlight-color:transparent}',
+      '#dcapp-pager a:active{background:rgba(127,127,127,.28)}',
+      '#dcapp-pager a.on{background:#3b4890;color:#fff;font-weight:700}',
+      '#dcapp-pager a.dcapp-pg-arw{font-size:24px;font-weight:600;line-height:1}',
+      '#dcapp-pager a.off{opacity:.3;pointer-events:none}',
+      '#dcapp-pager .dcapp-pg-sub a{max-width:none;height:38px;font-size:14px}',
+      'html.darkmode #dcapp-pager a{color:#ddd;background:rgba(255,255,255,.1)}',
+      'html.darkmode #dcapp-pager a.on{background:#5a6bc4;color:#fff}',
       '.dcapp-dock-head{display:flex!important;align-items:center!important;justify-content:space-between!important;height:44px!important;padding:0 6px 0 16px!important;border-bottom:1px solid rgba(127,127,127,.18)!important;font-size:15px!important;color:#888!important}',
       '.dcapp-dock-close{width:44px!important;height:44px!important;font-size:22px!important;line-height:44px!important;color:#888!important;background:none!important;border:0!important;padding:0!important}',
       '.dcapp-docked{position:fixed!important;left:0!important;right:0!important;bottom:auto!important;width:auto!important;max-width:none!important;margin:0!important;z-index:2147483000!important;max-height:60vh!important;overflow-y:auto!important;box-shadow:0 -4px 14px rgba(0,0,0,.14)!important;box-sizing:border-box!important;transform:none!important}'
@@ -198,6 +213,74 @@ enum ContentScript {
       if (b) { if (typeof window.list_more === 'function') window.list_more(); else b.click(); }
     }, { passive: true });
   })();
+
+  /// 글 목록 페이지 이동: 디시 페이지 번호는 숨기고 앱이 큰 버튼으로 다시 그림
+  /// « 처음 · ‹ 이전 · 지금 페이지 앞뒤 번호 · › 다음 · 이동(번호 입력). 검색 결과면 아래 줄에 이전/다음 검색·날짜 이동
+  function buildPager() {
+    var pg = document.getElementById('pagination_div');
+    if (!pg || !document.querySelector('ul.gall-detail-lst')) return;
+    var sig = location.href + '|' + pg.innerHTML.length;
+    var bar = document.getElementById('dcapp-pager');
+    if (bar && bar.getAttribute('data-sig') === sig) return;
+    var links = Array.prototype.slice.call(pg.querySelectorAll('.paging-inner a'));
+    var nums = links.map(function (a) { return parseInt(txt(a), 10); }).filter(function (n) { return n > 0; });
+    var curEl = pg.querySelector('.paging-inner strong');
+    var cur = parseInt(curEl ? txt(curEl) : '', 10);
+    var base = new URL(links.length ? links[0].href : location.href);
+    if (!(cur > 0)) cur = parseInt(new URL(location.href).searchParams.get('page'), 10) || 1;
+    var prev = pg.querySelector('a.prev'), next = pg.querySelector('a.next');
+    function isSearchJump(a) { return !!a && /[?&]s_pos=/.test(a.getAttribute('href') || '') && !/[?&]s_pos=/.test(base.search); }
+    // 일반 목록: 디시 '다음'이 있으면 뒤 페이지가 더 있음. 없으면 보이는 마지막 번호가 끝
+    var hasMore = !!next && !isSearchJump(next);
+    var last = hasMore ? Infinity : Math.max(cur, nums.length ? Math.max.apply(null, nums) : cur);
+    function pageURL(n) { var u = new URL(base.toString()); u.searchParams.set('page', String(n)); u.hash = ''; return u.toString(); }
+    function btn(label, href, cls, aria) {
+      var a = document.createElement('a');
+      a.textContent = label;
+      if (href) a.href = href; else a.className = 'off';
+      if (cls) a.className = (a.className ? a.className + ' ' : '') + cls;
+      if (aria) a.setAttribute('aria-label', aria);
+      return a;
+    }
+    var start = Math.max(1, cur - 2), end = start + 4;
+    if (end > last) { end = last; start = Math.max(1, end - 4); }
+    var row = document.createElement('div');
+    row.className = 'dcapp-pg-row';
+    row.appendChild(btn('«', cur > 1 ? pageURL(1) : null, 'dcapp-pg-arw', '처음'));
+    row.appendChild(btn('‹', cur > 1 ? pageURL(cur - 1) : null, 'dcapp-pg-arw', '이전 페이지'));
+    for (var n = start; n <= end; n++) row.appendChild(btn(String(n), n === cur ? null : pageURL(n), n === cur ? 'on' : null));
+    row.querySelectorAll('a.off.on').forEach(function (a) { a.classList.remove('off'); });
+    row.appendChild(btn('›', cur < last ? pageURL(cur + 1) : null, 'dcapp-pg-arw', '다음 페이지'));
+    var go = btn('이동', 'javascript:void(0)', null, '페이지 번호로 이동');
+    go.addEventListener('click', function (e) {
+      e.preventDefault();
+      var v = window.prompt('이동할 페이지 번호 (지금 ' + cur + '페이지)', '');
+      var to = parseInt((v || '').replace(/[^0-9]/g, ''), 10);
+      if (to > 0 && to !== cur) location.href = pageURL(isFinite(last) ? Math.min(to, last) : to);
+    });
+    row.appendChild(go);
+    var box = document.createElement('div');
+    box.id = 'dcapp-pager';
+    box.setAttribute('data-sig', sig);
+    box.appendChild(row);
+    // 검색 결과: 디시는 검색을 구간으로 나눠서 '이전/다음 검색'과 날짜 이동이 따로 있음
+    var dateBtn = pg.querySelector('button.sch-move');
+    if (isSearchJump(prev) || isSearchJump(next) || /[?&]s_pos=/.test(base.search)) {
+      var sub = document.createElement('div');
+      sub.className = 'dcapp-pg-row dcapp-pg-sub';
+      if (prev && /[?&]s_pos=/.test(prev.getAttribute('href') || '')) sub.appendChild(btn('이전 검색', prev.href));
+      if (dateBtn) {
+        var d = btn('날짜로 이동', 'javascript:void(0)');
+        d.addEventListener('click', function (e) { e.preventDefault(); dateBtn.click(); });
+        sub.appendChild(d);
+      }
+      if (next && /[?&]s_pos=/.test(next.getAttribute('href') || '')) sub.appendChild(btn('다음 검색', next.href));
+      if (sub.children.length) box.appendChild(sub);
+    }
+    if (bar) bar.parentNode.removeChild(bar);
+    pg.classList.add('dcapp-hide');
+    pg.parentNode.insertBefore(box, pg.nextSibling);
+  }
 
   /// 글 목록: 페이지 번호 아래(개념글보기·글쓰기 버튼, 검색칸, 디시 바닥글)는 전부 숨김 — 앱 컨트롤바에 다 있음
   function hideBelowPaging() {
@@ -983,6 +1066,7 @@ enum ContentScript {
     try { markReadRows(); } catch (e) {}
     try { listRowLayout(); } catch (e) {}
     try { applyListFilter(); } catch (e) {}
+    try { buildPager(); } catch (e) {}
     try { hideBelowPaging(); } catch (e) {}
     try { hideListTypeTabs(); } catch (e) {}
     try { buildHeadBar(); } catch (e) {}
@@ -2492,7 +2576,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v108-memos', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v110-namebox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

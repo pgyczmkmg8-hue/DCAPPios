@@ -182,6 +182,55 @@ struct Draft: Codable, Identifiable, Hashable {
     var isAuto: Bool          // 자동 저장(갤러리마다 1개, 계속 덮어씀)
     var updatedAt: Date
     var writeURL: URL?        // 저장할 때의 글쓰기 화면 주소 (불러올 때 이 화면을 다시 엶)
+    /// 앱 글쓰기 본문을 칸 순서대로 (글자 / 사진). 사진 파일은 DraftImageStore에 따로 보관. 예전 글은 nil
+    var parts: [DraftPart]? = nil
+
+    var imageCount: Int { parts?.filter { $0.text == nil }.count ?? 0 }
+}
+
+/// 임시저장 본문 한 칸: text가 있으면 글자 칸, 없으면 사진 칸
+struct DraftPart: Codable, Hashable {
+    var text: String?
+    var file: String?         // DraftImageStore 안 파일 이름
+    var mime: String?
+    var ext: String?
+    var isAuto: Bool?         // 자짤
+    // 글 수정·디시콘 등: 디시 편집기 칸(HTML) 그대로
+    var rawHTML: String?
+    var remoteURL: URL?
+    var label: String?
+}
+
+/// 임시저장 글의 사진 파일 (Application Support/DraftImages)
+enum DraftImageStore {
+    static let dir: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let d = base.appendingPathComponent("DraftImages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }()
+
+    /// 사진 하나 저장하고 파일 이름을 돌려줌 (같은 사진은 한 번만 씀)
+    static func store(id: UUID, data: Data, ext: String) -> String? {
+        let name = id.uuidString + "." + (ext.isEmpty ? "jpg" : ext)
+        let url = dir.appendingPathComponent(name)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            guard (try? data.write(to: url, options: .atomic)) != nil else { return nil }
+        }
+        return name
+    }
+
+    static func load(_ name: String) -> Data? {
+        try? Data(contentsOf: dir.appendingPathComponent(name))
+    }
+
+    /// 어느 임시저장 글에도 안 쓰이는 파일 지우기
+    static func cleanup(keeping names: Set<String>) {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        for f in files where !names.contains(f) {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(f))
+        }
+    }
 }
 
 @MainActor
@@ -202,20 +251,23 @@ final class DraftStore: ObservableObject {
         if let data = try? JSONEncoder().encode(drafts) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        DraftImageStore.cleanup(keeping: Set(drafts.flatMap { $0.parts ?? [] }.compactMap(\.file)))
     }
 
     /// 직접 저장 → 새 항목
-    func addManual(galleryID: String, title: String, body: String, preview: String, isHTML: Bool, writeURL: URL?) {
+    func addManual(galleryID: String, title: String, body: String, preview: String, isHTML: Bool, writeURL: URL?,
+                   parts: [DraftPart]? = nil) {
         drafts.insert(Draft(id: UUID(), galleryID: galleryID, title: title, body: body, preview: preview,
-                            isHTML: isHTML, isAuto: false, updatedAt: Date(), writeURL: writeURL), at: 0)
+                            isHTML: isHTML, isAuto: false, updatedAt: Date(), writeURL: writeURL, parts: parts), at: 0)
         save()
     }
 
     /// 자동 저장 → 갤러리별 자동 저장 칸 하나를 덮어씀
-    func autosave(galleryID: String, title: String, body: String, preview: String, isHTML: Bool, writeURL: URL?) {
+    func autosave(galleryID: String, title: String, body: String, preview: String, isHTML: Bool, writeURL: URL?,
+                  parts: [DraftPart]? = nil) {
         drafts.removeAll { $0.isAuto && $0.galleryID == galleryID }
         drafts.insert(Draft(id: UUID(), galleryID: galleryID, title: title, body: body, preview: preview,
-                            isHTML: isHTML, isAuto: true, updatedAt: Date(), writeURL: writeURL), at: 0)
+                            isHTML: isHTML, isAuto: true, updatedAt: Date(), writeURL: writeURL, parts: parts), at: 0)
         save()
     }
 

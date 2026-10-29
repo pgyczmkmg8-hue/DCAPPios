@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import Photos
 import UniformTypeIdentifiers
 import Combine
 
@@ -21,7 +22,7 @@ enum WriteImageSize: String, CaseIterable, Identifiable {
 }
 
 struct WriteImage: Identifiable {
-    let id = UUID()
+    var id = UUID()
     let data: Data
     let mime: String
     let ext: String
@@ -165,6 +166,8 @@ final class NativeWriteSession: ObservableObject {
     var images: [WriteImage] { blocks.compactMap(\.image) }
     /// 새로 올릴 사진이 있는지 (수정할 때 원래 있던 사진은 빼고)
     var hasNewImages: Bool { images.contains { $0.rawHTML == nil } }
+    /// 직접 넣은 사진이 있는지 (자짤 빼고) — 이것만 있어도 임시저장할 거리로 봄
+    var hasUserImages: Bool { images.contains { $0.rawHTML == nil && !$0.isAuto } }
 
     func setPreview(_ img: UIImage, for imageID: UUID) {
         guard let i = blocks.firstIndex(where: { $0.image?.id == imageID }) else { return }
@@ -234,10 +237,38 @@ final class NativeWriteSession: ObservableObject {
             || !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// 임시저장 글 불러오기 (HTML로 저장된 예전 글은 글자만)
+    /// 임시저장용: 본문을 칸 순서대로 (사진은 파일로 저장해 두고 이름만)
+    func draftParts() -> [DraftPart] {
+        blocks.compactMap { b -> DraftPart? in
+            guard let img = b.image else { return b.text.isEmpty ? nil : DraftPart(text: b.text) }
+            if let raw = img.rawHTML {
+                return DraftPart(rawHTML: raw, remoteURL: img.remoteURL, label: img.label)
+            }
+            guard let name = DraftImageStore.store(id: img.id, data: img.data, ext: img.ext) else { return nil }
+            return DraftPart(file: name, mime: img.mime, ext: img.ext, isAuto: img.isAuto ? true : nil)
+        }
+    }
+
+    /// 임시저장 글 불러오기 (사진이 든 글은 사진·순서까지, HTML로 저장된 예전 글은 글자만)
     func apply(_ d: Draft) {
         title = d.title
-        body = d.isHTML ? Self.plainText(fromHTML: d.body) : d.body
+        if let parts = d.parts, parts.contains(where: { $0.text == nil }) {
+            blocks = parts.compactMap { p -> WriteBlock? in
+                if let t = p.text { return WriteBlock(text: t) }
+                if let raw = p.rawHTML {
+                    return WriteBlock(image: WriteImage(data: Data(), mime: "", ext: "", preview: nil, rawHTML: raw,
+                                                        remoteURL: p.remoteURL, label: p.label))
+                }
+                guard let file = p.file, let data = DraftImageStore.load(file) else { return nil }
+                // 파일 이름 = 사진 id → 다시 저장할 때 같은 파일을 그대로 씀
+                let id = UUID(uuidString: String(file.split(separator: ".").first ?? "")) ?? UUID()
+                return WriteBlock(image: WriteImage(id: id, data: data, mime: p.mime ?? "image/jpeg", ext: p.ext ?? "jpg",
+                                                    preview: UIImage(data: data) ?? UIImage(), isAuto: p.isAuto ?? false))
+            }
+            normalize()
+        } else {
+            body = d.isHTML ? Self.plainText(fromHTML: d.body) : d.body
+        }
     }
 
     static func plainText(fromHTML html: String) -> String {
@@ -305,6 +336,8 @@ struct NativeWriteView: View {
     @FocusState private var focus: Field?
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showPhotoPicker = false
+    /// 앱 전용 사진 고르기 (한 장씩 눌러서만 선택)
+    @State private var showGridPicker = false
     @State private var showDraftPicker = false
     @State private var didFocus = false
     @State private var dropTarget: UUID?
@@ -325,6 +358,15 @@ struct NativeWriteView: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 20,
                       matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
         .onChange(of: photoItems) { _, items in loadPhotos(items) }
+        .sheet(isPresented: $showGridPicker) {
+            PhotoGridPicker(maxCount: 20, onPick: loadAssets) {
+                // 사진 접근이 막혀 있으면 iOS 기본 선택기로 (시트가 다 닫힌 뒤에)
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    showPhotoPicker = true
+                }
+            }
+        }
         .sheet(isPresented: $showDcconPicker) {
             DcconPickerSheet(model: model)
         }
@@ -619,7 +661,7 @@ struct NativeWriteView: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    tool("photo", "사진") { showPhotoPicker = true }
+                    tool("photo", "사진") { showGridPicker = true }
                     tool("photo.badge.plus", "자짤") {
                         let before = session.images.count
                         model.addAutoImage()
@@ -731,6 +773,23 @@ struct NativeWriteView: View {
     }
 
     // MARK: 사진 고르기
+
+    /// 앱 전용 사진 고르기에서 고른 사진 (고른 순서대로 글 끝에)
+    private func loadAssets(_ assets: [PHAsset]) {
+        guard !assets.isEmpty else { return }
+        let maxWidth = WriteImageSize.current.maxWidth
+        Task {
+            var added: [WriteImage] = []
+            for asset in assets {
+                guard let raw = await PhotoGridPicker.loadData(asset) else { continue }
+                let prepared = await Task.detached { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }.value
+                guard let p = prepared else { continue }
+                added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage()))
+            }
+            if added.count < assets.count { model.showToast("사진 \(assets.count - added.count)장을 불러오지 못했어요") }
+            withAnimation { session.addImages(added) }
+        }
+    }
 
     private func loadPhotos(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }

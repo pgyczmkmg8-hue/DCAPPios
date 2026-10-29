@@ -574,10 +574,14 @@ final class WebViewModel: NSObject, ObservableObject {
 
     private func keepWriteBeforeReload() async {
         if let s = nativeWrite {
-            if s.hasText {
+            if s.hasText || s.hasUserImages {
+                let parts = s.draftParts()
+                // 다시 열린 화면에 채울 것 + 혹시 몰라 자동 임시저장에도 (사진 파일이 지워지지 않게)
+                DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url, parts: parts)
                 keptWrite = (Draft(id: UUID(), galleryID: s.galleryID, title: s.title, body: s.body,
                                    preview: String(s.body.prefix(200)), isHTML: false, isAuto: true,
-                                   updatedAt: Date(), writeURL: webView.url), Date())
+                                   updatedAt: Date(), writeURL: webView.url, parts: parts), Date())
             }
             return
         }
@@ -780,15 +784,17 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 15초마다 바뀐 내용을 자동 임시저장 (사진은 빼고 제목·내용만)
     private func runNativeAutosave(_ s: NativeWriteSession) {
         Task {
-            var last = s.title + "\u{0}" + s.body
+            let signature = { @MainActor in s.title + "\u{0}" + s.body + "\u{0}" + s.images.map(\.id.uuidString).joined() }
+            var last = signature()
             while nativeWrite === s {
                 try? await Task.sleep(for: .seconds(15))
                 guard nativeWrite === s, !s.submitting else { continue }
-                let sig = s.title + "\u{0}" + s.body
-                guard sig != last, s.hasText else { continue }
+                let sig = signature()
+                guard sig != last, s.hasText || s.hasUserImages else { continue }
                 last = sig
                 DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
-                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
+                                           parts: s.draftParts())
             }
         }
     }
@@ -819,10 +825,11 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 앱 글쓰기 '임시' → 임시저장 목록에 새로 저장
     func saveNativeDraft() {
         guard let s = nativeWrite else { return }
-        guard s.hasText else { showToast("저장할 내용이 없어요"); return }
+        guard s.hasText || s.hasUserImages else { showToast("저장할 내용이 없어요"); return }
         DraftStore.shared.addManual(galleryID: s.galleryID, title: s.title, body: s.body,
-                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
-        showToast(s.images.isEmpty ? "임시저장했어요" : "임시저장했어요 (사진은 빼고 저장돼요)")
+                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
+                                    parts: s.draftParts())
+        showToast(s.images.isEmpty ? "임시저장했어요" : "임시저장했어요 (사진 \(s.images.count)장 포함)")
     }
 
     /// 앱 글쓰기 '등록' → 디시 양식에 채우고 등록
@@ -844,7 +851,8 @@ final class WebViewModel: NSObject, ObservableObject {
         if !s.heads.isEmpty && s.head.isEmpty { showToast("말머리를 골라 주세요"); return }
         // 쓰던 내용은 혹시 몰라 자동 저장에도
         DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
-                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
+                                   parts: s.draftParts())
         s.submitting = true
         let payload: [String: Any] = [
             "title": title,
@@ -994,9 +1002,10 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 앱 글쓰기 ← : 쓰던 게 있으면 자동 저장하고 뒤로
     func closeNativeWrite() {
         guard let s = nativeWrite else { return }
-        if s.hasText {
+        if s.hasText || s.hasUserImages {
             DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
-                                       preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url)
+                                       preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
+                                       parts: s.draftParts())
             showToast("쓰던 글을 자동 임시저장했어요")
         }
         nativeWrite = nil

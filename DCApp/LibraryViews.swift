@@ -236,7 +236,7 @@ struct DraftRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Text("\(draft.galleryID) · \(draft.updatedAt.shortKorean)")
+            Text("\(draft.galleryID) · \(draft.updatedAt.shortKorean)" + (draft.imageCount > 0 ? " · 사진 \(draft.imageCount)장" : ""))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
