@@ -1322,6 +1322,15 @@ extension WebViewModel: WKScriptMessageHandler {
 extension WebViewModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+        // 뒤로·앞으로 간 페이지는 예전에 연 화면이라 메모 설정이 옛날 것일 수 있음 → 열린 뒤 설정을 다시 넣음
+        if navigationAction.navigationType == .backForward {
+            // 캐시에서 되살아난 페이지는 didFinish가 안 올 수 있어서, 잠깐 뒤에 설정을 넣음
+            let js = "window.__dcapp && window.__dcapp.setConfig(\(FilterStore.shared.scriptConfigJSON)); true"
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                webView.evaluateJavaScript(js, completionHandler: nil)
+            }
+        }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {
             return .allow
         }
