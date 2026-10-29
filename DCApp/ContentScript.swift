@@ -30,6 +30,8 @@ enum ContentScript {
   function buildCSS() {
     var rules = [
       '.dcapp-hide{display:none!important}',
+      // 사이트 자체의 우측 하단 버튼 묶음(댓글 바로가기 등) — 앱의 새로고침 버튼으로 대신함
+      '.fab-wrap{display:none!important}',
       '.dcapp-pinned-off{display:none!important}',
       '.ginfo-ly{display:none!important}',
       // 디시 웹 알림 배너(새글·실베 등) — 앱 알림이 대신함
@@ -2055,6 +2057,12 @@ enum ContentScript {
       .catch(function () { return null; });
   }
   function refreshComments() {
+    // 댓글창이 화면 아래에 있으면(아직 댓글에 못 간 상태) 새로고침 대신 댓글창으로 이동
+    var cbox = document.getElementById('comment_box');
+    if (cbox && cbox.getBoundingClientRect().top > window.innerHeight * 0.5) {
+      cbox.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return 'scrolled';
+    }
     var b = commentRefreshButton();
     if (!b) return 'none';
     b.click();
@@ -2588,7 +2596,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v114-memoshort', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v115-nofab', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

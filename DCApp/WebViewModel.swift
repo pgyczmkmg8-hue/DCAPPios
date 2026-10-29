@@ -646,7 +646,9 @@ final class WebViewModel: NSObject, ObservableObject {
     func refreshComments() {
         Task {
             let r = await call("return window.__dcapp ? window.__dcapp.refreshComments() : 'none';") as? String
-            if r == "clicked" {
+            if r == "scrolled" {
+                // 댓글창으로 이동만 함 (새로고침은 다음에 한 번 더 누르면)
+            } else if r == "clicked" {
                 showToast("댓글을 새로고침했어요")
             } else {
                 scrollToCommentsAfterLoad = true
