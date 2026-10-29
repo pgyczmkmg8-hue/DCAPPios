@@ -20,6 +20,9 @@ struct ImageViewer: View {
     @State private var images: [Int: UIImage] = [:]
     @State private var datas: [Int: Data] = [:]
     @State private var failed: Set<Int> = []
+    @State private var originals: Set<Int> = []        // 원본으로 바뀐 사진
+    @State private var originalLinks: [URL]?           // PC 글의 원본 첨부파일 주소 (사진 순서)
+    @State private var linksLoaded = false
 
     @State private var scale: CGFloat = 1
     @State private var baseScale: CGFloat = 1
@@ -214,17 +217,34 @@ struct ImageViewer: View {
 
     private func load(_ i: Int) async {
         guard images[i] == nil, !failed.contains(i) else { return }
+        // 줄어든 사진을 먼저 보여주고, 원본이 받아지면 바로 바꿔 끼움
         if let r = await Self.fetch(item.urls[i]) {
             datas[i] = r.data
             images[i] = r.image
         } else {
             failed.insert(i)
         }
+        await upgrade(i)
+    }
+
+    private func upgrade(_ i: Int) async {
+        guard !originals.contains(i) else { return }
+        if !linksLoaded {
+            linksLoaded = true
+            originalLinks = await Self.originalLinks(page: item.pageURL, count: count)
+        }
+        guard let links = originalLinks, i < links.count,
+              let data = await Self.download(links[i]),
+              let img = Self.decode(data) else { return }
+        datas[i] = data
+        images[i] = img
+        failed.remove(i)
+        originals.insert(i)
     }
 
     /// 모바일 웹의 사진은 줄어든 사진이라, PC 글 아래 '원본 첨부파일' 링크(download.php)에서 원본을 받음
     /// 모바일 글 주소 → PC 글 주소로 바꿔서 원본 링크를 사진 순서대로 읽음. 못 찾으면 nil
-    nonisolated private static func fetchOriginal(page: URL?, index: Int, count: Int) async -> Data? {
+    nonisolated private static func originalLinks(page: URL?, count: Int) async -> [URL]? {
         guard let page, let pc = pcURL(page) else { return nil }
         var req = URLRequest(url: pc)
         req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
@@ -239,8 +259,12 @@ struct ImageViewer: View {
         guard let re = try? NSRegularExpression(pattern: #"https://image\.dcinside\.com/download\.php\?[^"'\s<>]+"#) else { return nil }
         let links = re.matches(in: section, range: NSRange(section.startIndex..., in: section))
             .compactMap { Range($0.range, in: section).map { String(section[$0]) } }
-        // 사진 수와 원본 파일 수가 같을 때만 순서로 짝지음 (다르면 엉뚱한 파일이 저장될 수 있어서)
-        guard links.count == count, index < links.count, let u = URL(string: links[index]) else { return nil }
+            .compactMap { URL(string: $0) }
+        // 사진 수와 원본 파일 수가 같을 때만 순서로 짝지음 (다르면 엉뚱한 파일일 수 있어서)
+        return links.count == count ? links : nil
+    }
+
+    nonisolated private static func download(_ u: URL) async -> Data? {
         var dl = URLRequest(url: u)
         dl.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
         guard let (data, res) = try? await URLSession.shared.data(for: dl),
@@ -291,7 +315,8 @@ struct ImageViewer: View {
     private func save(albumID: String?) async {
         guard let shown = datas[index] else { return }
         // 모바일 웹의 사진은 원본이 아닐 수 있어서, PC 글 아래 '원본파일 다운로드'와 같은 주소로 받아서 저장
-        let data = await Self.fetchOriginal(page: item.pageURL, index: index, count: count) ?? shown
+        if !originals.contains(index) { await upgrade(index) }
+        let data = datas[index] ?? shown
         do {
             let album = try await PhotoSaver.save(data, albumID: albumID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
