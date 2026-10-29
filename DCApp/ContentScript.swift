@@ -38,7 +38,7 @@ enum ContentScript {
       '#dcapp-headbar{display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 6px;margin:0;width:auto;background:#fff;border-bottom:1px solid rgb(223,225,238)}',
       '#dcapp-headbar::-webkit-scrollbar{display:none}',
       // 말머리 탭: 공식 앱처럼 글자 탭 + 고른 탭 밑줄
-      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:13px 14px 10px;border-radius:0;font-size:16px;line-height:1.2;font-weight:400;color:#222;background:transparent;border-bottom:3px solid transparent;-webkit-appearance:none}',
+      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:13px 14px 10px;border-radius:0;font-size:14px;line-height:1.2;font-weight:400;color:#222;background:transparent;border-bottom:3px solid transparent;-webkit-appearance:none}',
       '#dcapp-headbar button.on{color:#3b4890;font-weight:600;border-bottom-color:#3b4890}',
       // 글 목록 한 줄: 글자 글 아이콘은 빼고(사진 글만 아이콘), 정보 줄은 닉네임·조회·추천 → 오른쪽 끝에 말머리·시간
       'ul.gall-detail-lst > li .sp-lst-txt{display:none!important}',
@@ -46,7 +46,6 @@ enum ContentScript {
       // 글자 글은 아이콘 자리(왼쪽 여백)도 없애고, 맨 끝으로 옮긴 시간 뒤의 구분선은 숨김
       'ul.gall-detail-lst > li:has(.sp-lst-txt) .subject-add{padding-left:0!important}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::after, ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::before{display:none!important}',
-      'ul.gall-detail-lst > li .subjectin{font-size:16px!important}',
       'ul.gall-detail-lst > li ul.ginfo{display:flex!important;flex-wrap:nowrap!important;align-items:center}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head{order:9;margin-left:auto}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time{order:10}',
@@ -2486,7 +2485,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v105-prhead', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v106-font14', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

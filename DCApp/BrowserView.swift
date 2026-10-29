@@ -533,7 +533,8 @@ struct BrowserView: View {
                 .offset(x: barTucked ? (barMirrored ? -220 : 220) : 0)
                 .animation(.easeOut(duration: 0.2), value: barTucked)
             }
-            .navigationTitle(titleText)
+            // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
+            .navigationTitle(duoTopBar && !(showsMenuButton && model.isWritePage) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
@@ -1001,12 +1002,12 @@ struct BrowserView: View {
 
     @ToolbarContentBuilder
     private var topBar: some ToolbarContent {
-        // 듀오: 상단바 오른쪽 절반이 시계·카메라 줄이라 가운데(principal) 자리가 버튼과 겹쳐 제목이 통째로 사라짐 → 왼쪽에 둠
+        // 듀오: 상단바 오른쪽이 시계·카메라 줄이라 제목이 길면 '…'로 줄지 않고 통째로 사라짐
+        // → 오른쪽 버튼과 겹치지 않는 고정 폭을 줌 (가운데 정렬은 그대로)
         if duoTopBar && !(showsMenuButton && model.isWritePage) {
-            ToolbarItem(placement: .topBarLeading) {
-                topTitle.frame(width: duoTitleWidth, alignment: .leading)
+            ToolbarItem(placement: .principal) {
+                topTitle.frame(width: duoTitleWidth)
             }
-            .noGlassBackground()
         } else {
             ToolbarItem(placement: .principal) {
                 // 제목이 길면(디시 첫 화면 제목 등) 넓은 화면에서 양옆 버튼 자리를 밀어내 로그인 버튼이 사라짐 → 폭 제한
@@ -1222,13 +1223,13 @@ struct BrowserView: View {
     private var duoTopBar: Bool {
         UIDevice.current.userInterfaceIdiom == .phone && (fillsTrailing || Self.windowWidth >= 460)
     }
-    /// 듀오 상단바에서 제목이 쓸 수 있는 폭
-    /// 제목 + 오른쪽 버튼이 시계·카메라 자리를 뺀 폭의 절반쯤을 넘으면 오른쪽 버튼이 '…' 하나로 접혀 버림 (시뮬레이터에서 맞춘 값)
+    /// 듀오 상단바 제목 폭: 시계·카메라 자리를 뺀 폭의 가운데에 놓았을 때 오른쪽 버튼과 겹치지 않는 만큼
     private var duoTitleWidth: CGFloat {
         let statusArea: CGFloat = trailingInset > 0 ? trailingInset : 200
+        let usable = Self.windowWidth - statusArea
         let buttons = CGFloat(max(topTrailingCount, 1))
         let trailing = buttons * Self.topSlotWidth + (buttons - 1) * Self.topSlotSpacing
-        return min(240, max(60, (Self.windowWidth - statusArea) / 2 + 2 - trailing))
+        return min(240, max(60, usable - 48 - 2 * trailing))
     }
     private static var windowWidth: CGFloat {
         UIApplication.shared.connectedScenes
