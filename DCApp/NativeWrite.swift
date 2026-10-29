@@ -742,12 +742,23 @@ struct NativeWriteView: View {
     }
 
     /// 도구줄 아이콘: 모양이 달라도(배지 달린 아이콘 등) 같은 크기·같은 높이로
+    /// 그림 크기에 맞춰 늘리지 않고 같은 글자 크기로 그려서, 아이콘마다 선 굵기·크기가 같게
+    /// 자짤(photo.badge.plus)은 사진 아이콘을 그대로 두고 '+' 배지만 얹어서 사진 버튼과 줄이 딱 맞게
     private func toolIcon(_ icon: String, on: Bool) -> some View {
-        Image(systemName: icon)
-            .resizable()
-            .scaledToFit()
-            .fontWeight(.regular)
-            .frame(width: 23, height: 23)
+        Group {
+            if icon == "photo.badge.plus" {
+                Image(systemName: "photo")
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .background(Circle().fill(Color(uiColor: .systemGray5)).padding(-1.5))
+                            .offset(x: 5, y: 4)
+                    }
+            } else {
+                Image(systemName: icon)
+            }
+        }
+            .font(.system(size: 20, weight: .regular))
             .frame(width: 44, height: 46)
             .foregroundStyle(on ? AnyShapeStyle(DCTheme.accent) : AnyShapeStyle(.secondary))
             .background(on ? DCTheme.accent.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 8))
