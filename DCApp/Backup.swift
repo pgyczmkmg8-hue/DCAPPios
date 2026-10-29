@@ -185,14 +185,23 @@ struct BackupView: View {
         }
         .navigationTitle("백업 / 복원")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url):
-                do { pending = try BackupManager.read(url) }
-                catch { message = "백업 파일을 읽지 못했어요. DCApp에서 만든 백업 파일인지 확인해주세요." }
-            case .failure:
-                break
+        .sheet(isPresented: $showImporter) {
+            // 파일을 앱 안으로 복사해서 받음 (SwiftUI 파일 가져오기가 고른 뒤 반응하지 않던 문제 회피)
+            DocumentPicker { url in
+                showImporter = false
+                guard let url else { message = "파일 고르기를 취소했어요."; return }
+                do {
+                    let b = try BackupManager.read(url)
+                    message = "백업을 확인하는 중… (글 \(b.savedPosts.count)개)"
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(700))
+                        pending = b
+                    }
+                } catch {
+                    message = "백업 파일을 읽지 못했어요: \(error.localizedDescription)"
+                }
             }
+            .ignoresSafeArea()
         }
         .confirmationDialog("이 백업으로 복원할까요?",
                             isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
@@ -224,5 +233,35 @@ struct BackupView: View {
     private func fileSize(_ url: URL) -> String {
         let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+}
+
+
+/// 파일 고르기 창 (UIDocumentPicker, 복사 모드)
+struct DocumentPicker: UIViewControllerRepresentable {
+    let onPick: (URL?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json, .data, .item], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL?) -> Void
+        init(onPick: @escaping (URL?) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPick(urls.first)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onPick(nil)
+        }
     }
 }
