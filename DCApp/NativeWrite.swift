@@ -385,6 +385,7 @@ struct NativeWriteView: View {
                 }
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .tint(DCTheme.navy)
             }
         }
         .padding(.horizontal, 14)
@@ -446,6 +447,7 @@ struct NativeWriteView: View {
 
                 TextField("제목", text: $session.title)
                     .font(.system(size: 18))
+                    .tint(DCTheme.accent)
                     .focused($focus, equals: .title)
                     .submitLabel(.next)
                     .onSubmit { focus = nil; session.focusFirstText() }
@@ -669,7 +671,16 @@ struct NativeWriteView: View {
                     .accessibilityLabel("글자 색")
                 }
                 .padding(.horizontal, 6)
+                .padding(.trailing, 34)
             }
+            // 오른쪽 끝에서 잘린 아이콘 조각이 커서처럼 보이지 않게 흐리게 사라지게
+            .mask {
+                HStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 40)
+                }
+            }
+            Divider().frame(height: 24)
             if keyboardUp {
                 Button { dismissKeyboard() } label: {
                     toolIcon("keyboard.chevron.compact.down", on: false)
