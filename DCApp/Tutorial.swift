@@ -3,7 +3,7 @@ import SwiftUI
 /// 처음 켰을 때(업데이트로 처음 받은 사람도) 한 번 보여주는 기능 소개
 /// 끝까지 보거나 건너뛰면 다시 안 뜸. 설정 → '튜토리얼 다시 보기'로 다시 볼 수 있음
 enum Tutorial {
-    static let seenKey = "tutorialSeen"
+    static let seenKey = "tutorialSeenV2"
 }
 
 private struct TutorialPage: Identifiable {
