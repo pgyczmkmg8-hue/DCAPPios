@@ -32,7 +32,14 @@ enum ContentScript {
       '.dcapp-hide{display:none!important}',
       // 사이트 자체의 우측 하단 버튼 묶음(댓글 바로가기 등) — 앱의 새로고침 버튼으로 대신함
       '.fab-wrap{display:none!important}',
+      // 글 화면 맨 아래: 사진(실베·개념·디시미디어·디시이슈 탭) · 다음 검색 · 푸터
+      'section.grid:has(.view-btm-con),section.grid:has(.outside-search-box),body:has(.view-btm-con) .footer,body:has(.view-btm-con) .adv-group{display:none!important}',
       '.dcapp-pinned-off{display:none!important}',
+      // 다크모드 배경 살짝 밝게 (디시 야간 모드는 거의 검정이라 너무 어두움)
+      'html.darkmode,.darkmode body,.darkmode .header,.darkmode .grid,.darkmode .sec-wrap .grid,.darkmode .sec-wrap-sub .grid,.darkmode .all-comment-lst .comment,.darkmode .all-comment-lst .comment-full,.darkmode .all-comment,.darkmode .gall-lst,.darkmode .main-gall-lst,.darkmode .lg-tit-box,.darkmode .sel-box,.darkmode .paging.alg-full .prev,.darkmode .paging.alg-full .next,.darkmode .comment-write .ipt,.darkmode .comment-write .btm-wrt-btns,.darkmode .con-search-box .con-search-inner,.darkmode .wrt-tit-box,.darkmode .wrt-form-box,.darkmode .wrt-form-box .ipt,.darkmode .dccon-lywrap,.darkmode .power-lst,.darkmode .pp-box,.darkmode .con-tit-box,.darkmode .sub-tit-box,.darkmode .onemore,.darkmode .update-re{background-color:#272729!important}',
+      '.darkmode .comment-write .comment-caption,.darkmode .comment-write .who-txt,.darkmode .comment-write-btm,.darkmode .gall-detail-lst li .rt,.darkmode .btm-btns-both,.darkmode .con-search-box,.darkmode .pwd-box .ipt,.darkmode .search-wrap.bg,.darkmode .dccon-lywrap .btm-area{background-color:#2d2d30!important}',
+      '.darkmode .lg-tit-box.paging,.darkmode .tab-basic .tab-lst,.darkmode .tab-basic .tab-lst .sel,.darkmode .md-tit-box,.darkmode .power-tit,.darkmode .tab-lst .sel-box,.darkmode .con-child-tit,.darkmode .gall-lst-group .livebest-tab{background-color:#333336!important}',
+      '.darkmode .search-wrap2 .search-box .fld-sch,.darkmode .adv-group,.darkmode .view-btm-more .lnk,.darkmode .btn-line-gray{background-color:#3d3d41!important}',
       '.ginfo-ly{display:none!important}',
       // 디시 웹 알림 배너(새글·실베 등) — 앱 알림이 대신함
       '.alarm-popup{display:none!important}',
@@ -2596,7 +2603,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v115-nofab', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v117-darklight', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

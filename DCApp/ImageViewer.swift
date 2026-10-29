@@ -220,6 +220,22 @@ struct ImageViewer: View {
         }
     }
 
+    /// viewimage.php?...&no=키 → download.php?no=키 (PC 원본 다운로드 주소). 받지 못하면 nil
+    nonisolated private static func fetchOriginal(_ url: URL) async -> Data? {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              comps.path.hasSuffix("viewimage.php"),
+              let no = comps.queryItems?.first(where: { $0.name == "no" })?.value, !no.isEmpty,
+              var dl = URLComponents(string: "https://image.dcinside.com/download.php") else { return nil }
+        dl.queryItems = [URLQueryItem(name: "no", value: no), URLQueryItem(name: "f_no", value: "image")]
+        guard let u = dl.url else { return nil }
+        var req = URLRequest(url: u)
+        req.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
+        guard let (data, res) = try? await URLSession.shared.data(for: req),
+              (res as? HTTPURLResponse)?.statusCode == 200,
+              UIImage(data: data) != nil || CGImageSourceCreateWithData(data as CFData, nil) != nil else { return nil }
+        return data
+    }
+
     /// 디시 사진 서버는 Referer가 없으면 막으므로 붙여서 요청
     nonisolated private static func fetch(_ url: URL) async -> (data: Data, image: UIImage)? {
         var req = URLRequest(url: url)
@@ -251,7 +267,9 @@ struct ImageViewer: View {
     /// 원본 파일 그대로 사진 앱에 저장 (움짤도 움직이는 채로)
     /// albumID가 있으면 그 앨범에도 넣음 (설정 → 세부 설정 → 사진 저장)
     private func save(albumID: String?) async {
-        guard let data = datas[index] else { return }
+        guard let shown = datas[index] else { return }
+        // 모바일 웹의 사진은 원본이 아닐 수 있어서, PC 글 아래 '원본파일 다운로드'와 같은 주소로 받아서 저장
+        let data = await Self.fetchOriginal(item.urls[index]) ?? shown
         do {
             let album = try await PhotoSaver.save(data, albumID: albumID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
