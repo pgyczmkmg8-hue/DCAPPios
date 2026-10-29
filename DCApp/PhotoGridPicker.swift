@@ -196,6 +196,7 @@ struct PhotoGridPicker: View {
                     let asset = model.assets.object(at: i)
                     PhotoGridCell(asset: asset, manager: model.cache,
                                   order: selected.firstIndex(of: asset.localIdentifier).map { $0 + 1 })
+                        .id(asset.localIdentifier)       // 앨범을 바꾸면 칸을 새로 만들어 새 사진을 불러오게
                         .onTapGesture { toggle(asset) }
                 }
             }

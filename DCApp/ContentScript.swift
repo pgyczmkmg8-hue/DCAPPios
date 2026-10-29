@@ -808,11 +808,14 @@ enum ContentScript {
     var memos = (cfg.memos || []).filter(function (x) { return !x.g || x.g === gid; })
       .sort(function (a, b) { return (b.g ? 1 : 0) - (a.g ? 1 : 0); });
     // 아이디·IP·닉네임 메모를 전부 모음 (한 종류만 보면 다른 종류로 단 메모가 가려짐 — 유동은 IP·닉네임이 섞여 있음)
+    // 닉네임은 공백·(IP) 꼬리표를 떼고 비교 (글 화면과 목록에서 닉네임 칸 글자가 조금씩 달라도 같은 사람으로)
     var texts = [], seenText = {};
+    var normNick = function (v) { return String(v || '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ''); };
     [['id', idn.id], ['ip', idn.ip], ['nick', idn.nick]].forEach(function (p) {
       if (!p[1]) return;
       memos.forEach(function (x) {
-        if (x.k === p[0] && x.v === p[1] && !seenText[x.t]) { seenText[x.t] = true; texts.push(x.t); }
+        var same = p[0] === 'nick' ? (x.k === 'nick' && normNick(x.v) === normNick(p[1])) : (x.k === p[0] && x.v === p[1]);
+        if (same && !seenText[x.t]) { seenText[x.t] = true; texts.push(x.t); }
       });
     });
     if (texts.length) m = { t: texts.join(' · ') };
@@ -2579,7 +2582,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v112-memoall', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v113-memonick', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
