@@ -106,6 +106,9 @@ struct RootView: View {
     /// 처음 켰을 때 기능 소개 (한 번 보면 다시 안 뜸)
     @AppStorage(Tutorial.seenKey) private var tutorialSeen = false
     @State private var showTutorial = false
+    /// 처음 켠 튜토리얼이 끝나면 앱 아이콘 고르기 화면을 한 번 보여 줌
+    @State private var iconPickAfterTutorial = false
+    @State private var showIconPicker = false
     /// 앱 사용 중 새 디시 알림 배너
     @ObservedObject private var alarms = AlarmStore.shared
     @State private var bannerTask: Task<Void, Never>?
@@ -227,14 +230,25 @@ struct RootView: View {
             }
         }
         .task {
-            if !tutorialSeen { showTutorial = true }
+            if !tutorialSeen {
+                iconPickAfterTutorial = true
+                showTutorial = true
+            }
             // 앱을 열 때 GitHub Releases 확인 (주기는 버전 정보 → 업데이트에서) — 튜토리얼을 보는 중이면 끝난 뒤에
             let r = await UpdateChecker.checkIfDue()
             while showTutorial { try? await Task.sleep(for: .milliseconds(400)) }
             if let r { availableUpdate = r }
         }
-        .fullScreenCover(isPresented: $showTutorial) {
+        .fullScreenCover(isPresented: $showTutorial, onDismiss: {
+            if iconPickAfterTutorial {
+                iconPickAfterTutorial = false
+                showIconPicker = true
+            }
+        }) {
             TutorialView { showTutorial = false }
+        }
+        .sheet(isPresented: $showIconPicker) {
+            NavigationStack { AppIconSettingsView() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             // 백그라운드에서 다시 열었을 때도 확인

@@ -58,7 +58,9 @@ struct AppIconSettingsView: View {
     @ViewBuilder
     private func preview(for name: String?) -> some View {
         let key = name ?? primaryName ?? "AppIcon"
-        if let ui = UIImage(named: "\(key)-Preview") ?? UIImage(named: key) {
+        // 미리보기 그림: 이름에 공백·점이 있으면 Assets에서 못 쓰므로 글자·숫자만 남긴 이름(Preview-AppIcon-…)도 찾음
+        let clean = "Preview-" + key.filter { $0.isLetter || $0.isNumber || $0 == "-" }
+        if let ui = UIImage(named: "\(key)-Preview") ?? UIImage(named: clean) ?? UIImage(named: key) {
             Image(uiImage: ui)
                 .resizable()
                 .frame(width: 52, height: 52)
