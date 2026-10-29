@@ -190,6 +190,7 @@ struct RootView: View {
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
         .onAppear {
             StatusBarStyler.applySoon()   // 상태바(시계·배터리) 글씨: 유색 상단바면 흰색
+            DarkMode.apply()              // ⋮ 메뉴에서 정한 다크모드
             compactMode = false     // 앱을 새로 켜면 항상 일반 모드로 시작 (안전장치)
             if let url = DCNotify.pendingURL { DCNotify.pendingURL = nil; router.open(url) }   // 알림을 눌러서 켠 경우
         }

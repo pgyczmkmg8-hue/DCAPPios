@@ -245,6 +245,7 @@ struct BrowserView: View {
     // 글 보관 버튼: 폴더 고르기 / 이미 보관한 글 메뉴
     @State private var showSaveFolderPicker = false
     @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
+    @AppStorage(DarkMode.key) private var darkMode = false
     @State private var newFolderName = ""
     @State private var newFolderFor: SavedPost?        // nil이면 지금 글을 새 폴더에 보관, 있으면 그 글을 새 폴더로 옮기기
     @State private var showNewFolder = false
@@ -1722,6 +1723,9 @@ struct BrowserView: View {
             Button { router.sheet = .settings } label: {
                 Label("설정", systemImage: "gearshape")
             }
+            Button { DarkMode.toggle() } label: {
+                Label(darkMode ? "다크모드 끄기" : "다크모드 켜기", systemImage: darkMode ? "sun.max" : "moon")
+            }
         }
         // 화면에 따라 바뀌는 칸: 글 보기 중 → 글 보관 / 갤러리 목록 → 갤러리 즐겨찾기
         Section {
@@ -1772,7 +1776,7 @@ struct BrowserView: View {
         }
         Section("화면 정리") {
             Button { model.setPickMode(!model.isPickMode) } label: {
-                Label(model.isPickMode ? "요소 숨기기 끝내기" : "요소 숨기기 (탭해서 선택)",
+                Label(model.isPickMode ? "요소 숨기기 끝내기" : "요소 숨기기",
                       systemImage: "eye.slash")
             }
         }

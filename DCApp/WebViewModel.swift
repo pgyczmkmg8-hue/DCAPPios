@@ -188,6 +188,14 @@ final class WebViewModel: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
 
+        // ⋮ 메뉴에서 다크모드를 바꾸면 지금 페이지도 바로
+        NotificationCenter.default.publisher(for: DarkMode.changed)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.webView.evaluateJavaScript(DarkMode.pageScript, completionHandler: nil) }
+            }
+            .store(in: &cancellables)
+
         // 손가락으로 끌거나 관성으로 움직이는 동안만 '스크롤 중' (페이지 로드·키보드 때문에 움직이는 건 제외)
         webView.scrollView.publisher(for: \.contentOffset)
             .sink { [weak self] _ in self?.scrollMoved() }
