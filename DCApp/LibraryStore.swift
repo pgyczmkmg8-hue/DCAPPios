@@ -61,11 +61,14 @@ final class SavedPostStore: ObservableObject {
 
     // MARK: 폴더
 
-    func addFolder(_ name: String) {
+    @discardableResult
+    func addFolder(_ name: String) -> UUID? {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !n.isEmpty else { return }
-        folders.append(PostFolder(id: UUID(), name: n))
+        guard !n.isEmpty else { return nil }
+        let id = UUID()
+        folders.append(PostFolder(id: id, name: n))
         save()
+        return id
     }
 
     func renameFolder(_ f: PostFolder, to name: String) {
@@ -149,7 +152,7 @@ final class SavedPostStore: ObservableObject {
     nonisolated static func postInfo(_ url: URL) -> (galleryID: String, no: String)? {
         guard let host = url.host?.lowercased(), host.hasSuffix("dcinside.com") else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
-        if host == "m.dcinside.com", parts.count >= 3, ["board", "mini"].contains(parts[0]),
+        if host == "m.dcinside.com", parts.count >= 3, ["board", "mini", "person"].contains(parts[0]),
            parts[2].allSatisfy(\.isNumber) {
             return (parts[1], parts[2])
         }

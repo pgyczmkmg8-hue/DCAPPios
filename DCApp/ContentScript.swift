@@ -31,16 +31,31 @@ enum ContentScript {
     var rules = [
       '.dcapp-hide{display:none!important}',
       '.dcapp-pinned-off{display:none!important}',
+      '.ginfo-ly{display:none!important}',
       // 디시 웹 알림 배너(새글·실베 등) — 앱 알림이 대신함
       '.alarm-popup{display:none!important}',
       // 앱 말머리 탭
-      '#dcapp-headbar{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:9px 12px;margin:0;width:auto;background:#fff;border-bottom:2px solid rgb(223,225,238)}',
+      '#dcapp-headbar{display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 6px;margin:0;width:auto;background:#fff;border-bottom:1px solid rgb(223,225,238)}',
       '#dcapp-headbar::-webkit-scrollbar{display:none}',
-      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:6px 13px;border-radius:999px;font-size:14px;line-height:1.2;font-weight:500;color:#333;background:rgba(142,142,147,.14);-webkit-appearance:none}',
-      '#dcapp-headbar button.on{background:#3b4890;color:#fff;font-weight:700}',
+      // 말머리 탭: 공식 앱처럼 글자 탭 + 고른 탭 밑줄
+      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:13px 14px 10px;border-radius:0;font-size:16px;line-height:1.2;font-weight:400;color:#222;background:transparent;border-bottom:3px solid transparent;-webkit-appearance:none}',
+      '#dcapp-headbar button.on{color:#3b4890;font-weight:600;border-bottom-color:#3b4890}',
+      // 글 목록 한 줄: 글자 글 아이콘은 빼고(사진 글만 아이콘), 정보 줄은 닉네임·조회·추천 → 오른쪽 끝에 말머리·시간
+      'ul.gall-detail-lst > li .sp-lst-txt{display:none!important}',
+      'ul.gall-detail-lst > li.dcapp-filtered{display:none!important}',
+      // 글자 글은 아이콘 자리(왼쪽 여백)도 없애고, 맨 끝으로 옮긴 시간 뒤의 구분선은 숨김
+      'ul.gall-detail-lst > li:has(.sp-lst-txt) .subject-add{padding-left:0!important}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::after, ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::before{display:none!important}',
+      'ul.gall-detail-lst > li .subjectin{font-size:16px!important}',
+      'ul.gall-detail-lst > li ul.ginfo{display:flex!important;flex-wrap:nowrap!important;align-items:center}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head{order:9;margin-left:auto}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time{order:10}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time:not(.dcapp-after-head){margin-left:auto}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head-default{display:none!important}',
       '.dcapp-cmt{margin-left:.3em;color:rgb(41,121,255)!important;font-weight:600;white-space:nowrap}',
       // 오른쪽 댓글 칸을 없앤 자리까지 제목이 쓰도록
       '.gall-detail-lnk:has(> .rt.dcapp-hide) > .lt{width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important}',
+      'li.dcapp-read a.lt .subjectin, li.dcapp-read a.lt .subject-add, li.dcapp-read a.lt .detail-txt{color:#6d459e!important}',
       '.dcapp-collapsed{position:relative!important;height:30px!important;min-height:0!important;max-height:30px!important;overflow:hidden!important;padding-top:0!important;padding-bottom:0!important}',
       '.dcapp-collapsed>*{visibility:hidden!important}',
       // 안내 문구는 회색 칸 한가운데 (가로·세로 가운데 정렬)
@@ -83,6 +98,149 @@ enum ContentScript {
   }
 
   // ---------- 글/댓글 단위 찾기 ----------
+  // ---------- 읽은 글: 앱이 기억한 글은 목록에서 보라색 (웹뷰 방문 기록이 지워져도 유지) ----------
+  var readSet = null;
+  function postKeyOf(href) {
+    var m = String(href || '').match(/\/(board|mini|person)\/([^\/?#]+)\/(\d+)/);
+    if (!m) return null;
+    var g = m[2].replace(/^(mi|pr)\$/, '');
+    return (m[1] === 'mini' ? 'mi$' : (m[1] === 'person' ? 'pr$' : '')) + g + '/' + m[3];
+  }
+  function markReadRows() {
+    if (!readSet) return;
+    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+      var a = li.querySelector('a.lt, a[href]');
+      var k = a && postKeyOf(a.getAttribute('href'));
+      li.classList.toggle('dcapp-read', !!(k && readSet.has(k)));
+    });
+  }
+  /// 글 목록 정보 줄 칸 나누기 (자리는 CSS order로만 옮김 — 칸 순서는 그대로라 차단·메모 판정에 영향 없음)
+  function listRowLayout() {
+    document.querySelectorAll('ul.gall-detail-lst > li ul.ginfo').forEach(function (g) {
+      if (g.getAttribute('data-dcapp-layout') === '1') return;
+      var lis = Array.prototype.filter.call(g.children, function (c) { return c.tagName === 'LI'; });
+      if (lis.length < 4) return;
+      var hasHead = lis.length >= 5;
+      var time = lis[hasHead ? 2 : 1];
+      if (time && /^\s*[\d.:\-\/]+\s*$/.test(txt(time))) time.classList.add('dcapp-time');
+      if (hasHead) {
+        var head = lis[0];
+        head.classList.add('dcapp-head');
+        if (/^\s*일반\s*$/.test(txt(head))) head.classList.add('dcapp-head-default');   // 기본 말머리는 숨김
+        else if (time) time.classList.add('dcapp-after-head');
+      }
+      g.setAttribute('data-dcapp-layout', '1');
+    });
+  }
+  // ---------- 게시물 필터 (앱 상단바 깔때기): 읽음 여부·추천·댓글·조회 수 ----------
+  var listFilter = null;
+  function numIn(li, label) {
+    var n = -1;
+    li.querySelectorAll('ul.ginfo > li').forEach(function (x) {
+      var m = txt(x).match(new RegExp(label + '\\s*([\\d,]+)'));
+      if (m) n = parseInt(m[1].replace(/,/g, ''), 10);
+    });
+    return n;
+  }
+  function applyListFilter() {
+    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+      var hide = false;
+      if (listFilter && li.querySelector('ul.ginfo')) {
+        var f = listFilter;
+        var a = li.querySelector('a.lt, a[href]');
+        var k = a && postKeyOf(a.getAttribute('href'));
+        var isRead = !!(k && readSet && readSet.has(k));
+        if (f.read === 'read' && !isRead) hide = true;
+        if (f.read === 'unread' && isRead) hide = true;
+        if (f.rec >= 0 && numIn(li, '추천') < f.rec) hide = true;
+        if (f.view >= 0 && numIn(li, '조회') < f.view) hide = true;
+        if (f.cmt >= 0) {
+          var ct = li.querySelector('.ct');
+          var c = ct ? parseInt((ct.textContent || '').replace(/[^0-9]/g, '') || '0', 10) : 0;
+          if (c < f.cmt) hide = true;
+        }
+      }
+      li.classList.toggle('dcapp-filtered', hide);
+    });
+  }
+  // ---------- 글 목록 맨 아래에서 위로 더 당기면 → 디시 '더보기'(v) 눌러 다음 글 이어 붙이기 ----------
+  (function pullForMore() {
+    var base = null, armed = false, tip = null;
+    function moreBtn() {
+      var b = document.getElementById('listMore');
+      return b && b.offsetParent !== null && document.querySelector('ul.gall-detail-lst') ? b : null;
+    }
+    function atBottom() {
+      var se = document.scrollingElement || document.documentElement;
+      return window.scrollY + window.innerHeight >= se.scrollHeight - 4;
+    }
+    function showTip(on) {
+      if (on && !tip) {
+        tip = document.createElement('div');
+        tip.textContent = '놓으면 다음 글 불러오기';
+        tip.style.cssText = 'position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:2147483000;padding:8px 14px;border-radius:999px;background:rgba(59,72,144,.92);color:#fff;font-size:14px;pointer-events:none';
+        document.body.appendChild(tip);
+      } else if (!on && tip) { tip.remove(); tip = null; }
+    }
+    document.addEventListener('touchstart', function () { base = null; armed = false; }, { passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!moreBtn() || e.touches.length !== 1) return;
+      var y = e.touches[0].clientY;
+      if (!atBottom()) { base = null; if (armed) { armed = false; showTip(false); } return; }
+      if (base === null) base = y;                 // 맨 아래에 닿은 순간부터 잰 당긴 거리
+      var pulled = base - y > 90;
+      if (pulled !== armed) { armed = pulled; showTip(armed); }
+    }, { passive: true });
+    document.addEventListener('touchend', function () {
+      showTip(false);
+      if (!armed) return;
+      armed = false; base = null;
+      var b = moreBtn();
+      if (b) { if (typeof window.list_more === 'function') window.list_more(); else b.click(); }
+    }, { passive: true });
+  })();
+
+  /// 글 목록: 페이지 번호 아래(개념글보기·글쓰기 버튼, 검색칸, 디시 바닥글)는 전부 숨김 — 앱 컨트롤바에 다 있음
+  function hideBelowPaging() {
+    var pg = document.getElementById('pagination_div');
+    if (!pg || !document.querySelector('ul.gall-detail-lst')) return;
+    var sec = pg.closest('section') || pg;
+    for (var n = sec.nextElementSibling; n; n = n.nextElementSibling) {
+      if (/^(SECTION|FOOTER)$/.test(n.tagName) || n.classList.contains('footer')) n.classList.add('dcapp-hide');
+    }
+    document.querySelectorAll('footer, .footer').forEach(function (f) { f.classList.add('dcapp-hide'); });
+  }
+  function setListFilter(f) { listFilter = f || null; applyListFilter(); return true; }
+  function setReadPosts(keys) { readSet = new Set(keys || []); markReadRows(); return readSet.size; }
+  // 글 화면의 글쓴이 (작성한 글 기록용)
+  function articleIdentity() {
+    var h = articleHead();
+    if (!h) return null;
+    var r = identity({ el: h, kind: 'article' });
+    r.title = txt(h.querySelector('.tit') || h).replace(/^\s*\[[^\]]*\]\s*/, '').trim();
+    return r;
+  }
+  // 디시 원래 글쓰기 화면에서 등록을 누르면 → 앱에 알림 (작성한 글 기록)
+  (function hookWriteSubmit() {
+    if (!/\/write/.test(location.pathname)) return;
+    var tries = 0;
+    var t = setInterval(function () {
+      if (++tries > 40) { clearInterval(t); return; }
+      if (typeof window.write_submit !== 'function' || window.write_submit.__dcapp) return;
+      clearInterval(t);
+      var orig = window.write_submit;
+      var wrapped = function () {
+        try {
+          var s = document.getElementById('subject'), n = document.getElementById('name');
+          post('websubmit', { title: s ? s.value : '', nick: n ? n.value : '' });
+        } catch (e) {}
+        return orig.apply(this, arguments);
+      };
+      wrapped.__dcapp = true;
+      window.write_submit = wrapped;
+    }, 250);
+  })();
+
   function articleHead() { return document.querySelector('.gallview-tit-box, [class^="gallview-tit-box"]'); }
   function articleBody() { return document.querySelector('.thum-txtin'); }
 
@@ -185,7 +343,7 @@ enum ContentScript {
   /// 지금 보고 있는 갤러리 아이디 (/board/{id}, /mini/{id}) — 갤러리별 차단·메모용
   function currentGalleryId() {
     var p = location.pathname.split('/');
-    return (p[1] === 'board' || p[1] === 'mini') ? (p[2] || '') : '';
+    return (p[1] === 'board' || p[1] === 'mini' || p[1] === 'person') ? (p[2] || '') : '';
   }
 
   function blockedReason(u, idn, dset) {
@@ -279,12 +437,12 @@ enum ContentScript {
         break;
       }
     }
-    // 갤러리 이름 줄 ("아이패드 ⓜ (1,085,094) ☆ | ⓘ 설정 연관 글쓰기") — 앱 상단바에 갤러리 이름이 있으므로 숨김
+    // 갤러리 이름 줄 ("아이패드 ⓜ (1,085,094) ☆ | ⓘ 설정 연관 글쓰기", 인물갤은 '연관' 대신 '인맥') — 앱 상단바에 갤러리 이름이 있으므로 숨김
     var rows = document.querySelectorAll('div, section, header');
     var row = null;
     for (var j = 0; j < rows.length; j++) {
       var rt = txt(rows[j]);
-      if (rt.length < 80 && /연관/.test(rt) && /설정/.test(rt) && /글쓰기/.test(rt)) row = rows[j];   // 가장 안쪽 것으로 갱신
+      if (rt.length < 80 && /연관|인맥/.test(rt) && /설정/.test(rt) && /글쓰기/.test(rt)) row = rows[j];   // 가장 안쪽 것으로 갱신
     }
     if (row) targets.push(topAncestor(row, 110));
     // 오른쪽 아래에 떠 있는 남색 글쓰기(연필) 버튼 — 앱 하단 바에 글쓰기가 있으므로 숨김
@@ -822,6 +980,10 @@ enum ContentScript {
     ensureStyle();
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
+    try { markReadRows(); } catch (e) {}
+    try { listRowLayout(); } catch (e) {}
+    try { applyListFilter(); } catch (e) {}
+    try { hideBelowPaging(); } catch (e) {}
     try { hideListTypeTabs(); } catch (e) {}
     try { buildHeadBar(); } catch (e) {}
     try { hideGallNickTip(); } catch (e) {}
@@ -893,7 +1055,9 @@ enum ContentScript {
       var u = { el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') };
       var idn = identity(u);
       d.kind = u.kind; d.nick = idn.nick; d.userId = idn.id; d.ip = idn.ip;
-      d.snippet = txt(unitEl).slice(0, 80);
+      // 본문 위 작성자 칸은 칸 전체 글자에 날짜·'스크랩 갤로그 가기'까지 섞임 → 글 제목만
+      var tit = u.kind === 'article' ? unitEl.querySelector('.tit') : null;
+      d.snippet = txt(tit || unitEl).slice(0, 80);
     }
     var m = target && target.closest ? target.closest('img, video') : null;
     var key = dcconKey(m);
@@ -993,6 +1157,23 @@ enum ContentScript {
       post('picked', { selector: sel, count: count, snippet: txt(el).slice(0, 60), tag: el.tagName.toLowerCase() });
     }, delay || 0);
   }
+
+  // ---------- 닉네임·IP 누르기 → 디시 메뉴(.ginfo-ly) 대신 앱 차단·메모 메뉴 ----------
+  window.addEventListener('click', function (e) {
+    if (pick.on || blockPick) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (!t || !t.closest) return;
+    var area = t.closest('.ginfo-area');
+    if (!area || t.closest('.ginfo-ly')) return;
+    var a = t.closest('a[href]');
+    if (a && !/^\s*(#|javascript:)/i.test(a.getAttribute('href') || '')) return;   // 갤로그 등 진짜 링크는 그대로
+    var unitEl = area.closest('[data-dcapp-unit]');
+    if (!unitEl) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    if (Date.now() < suppressClickUntil) return;    // 방금 길게 눌러 메뉴를 띄웠음
+    post('longpress', describe(unitEl, t));
+  }, true);
 
   // ---------- 글쓰기: 위쪽 갤러리 이름을 눌러도 갤러리로 이동하지 않음 ----------
   window.addEventListener('click', function (e) {
@@ -1607,17 +1788,28 @@ enum ContentScript {
     var ok = false;
     try { var j = JSON.parse(d.text || '{}'); ok = j.result !== false && j.result !== 0 && j.result !== '0'; } catch (e) { return; }
     if (!ok) return;
-    var memo = '';
-    try { memo = (new URLSearchParams(d.body || '').get('comment_memo') || '').replace(/\s+/g, ' ').trim(); } catch (e) {}
-    if (!memo) return;                                   // 디시콘만 단 댓글은 글자로 확인 못 함
+    var memo = '', nickIn = '';
+    try {
+      var q = new URLSearchParams(d.body || '');
+      memo = (q.get('comment_memo') || '').replace(/\s+/g, ' ').trim();
+      nickIn = q.get('comment_nick') || '';
+    } catch (e) {}
+    var head = articleHead();
+    var title = head ? txt(head.querySelector('.tit') || head).replace(/^\s*\[[^\]]*\]\s*/, '').trim() : '';
+    if (!memo) { post('cmtwritten', { memo: '(디시콘)', nick: nickIn, ip: '', id: '', title: title }); return; }   // 디시콘만 단 댓글은 글자로 확인 못 함
     var key = memo.slice(0, 20);
     var page = location.href;
     setTimeout(function () {
       if (location.href !== page) return;
-      var found = Array.prototype.some.call(document.querySelectorAll('li.comment, li.comment-add'), function (li) {
-        return (li.textContent || '').replace(/\s+/g, ' ').indexOf(key) >= 0;
+      var mine = null;
+      Array.prototype.some.call(document.querySelectorAll('li.comment, li.comment-add'), function (li) {
+        if ((li.textContent || '').replace(/\s+/g, ' ').indexOf(key) >= 0) { mine = li; return true; }
+        return false;
       });
-      if (!found) post('cmtmissing', {});
+      // 작성한 댓글 기록: 쓴 신분(닉네임·IP·아이디)은 목록에 나온 내 댓글에서 읽음
+      var who = mine ? identity({ el: mine, kind: 'comment' }) : { nick: nickIn, ip: '', id: '' };
+      post('cmtwritten', { memo: memo.slice(0, 80), nick: who.nick || nickIn, ip: who.ip || '', id: who.id || '', title: title });
+      if (!mine) post('cmtmissing', {});
     }, 2500);
   });
   window.addEventListener('dcapp-cmtwrite', function (ev) {
@@ -1810,19 +2002,30 @@ enum ContentScript {
     listTypeRows().forEach(function (r) { r.el.classList.add('dcapp-hide'); });
     // 공지 목록 화면에서는 글들이 전부 공지 칸이라 숨기지 않음
     if (/[?&]notice=1/.test(location.search)) return;
-    pinnedRows().forEach(function (el) { el.classList.add('dcapp-pinned-off'); });   // 차단 표시가 dcapp-hide를 지울 수 있어서 따로
+    pinnedRows().forEach(function (el) { el.classList.add('dcapp-pinned-off'); });
+    // 실베·개념 돌아가는 상자 (#recom_box1 .detail-top-concept 등) — 말머리와 글 목록 사이
+    if (document.querySelector('ul.gall-detail-lst')) {
+      document.querySelectorAll('.detail-top-concept, .con-child-box').forEach(function (el) { el.classList.add('dcapp-pinned-off'); });
+    }   // 차단 표시가 dcapp-hide를 지울 수 있어서 따로
   }
   function headRowEl(el) {
     return tabRows().some(function (r) { return r.el.contains(el); });
   }
   /// 목록 맨 위 고정 줄 ('공지 …' / '개념 …' 한 줄짜리, 글쓴이·시간 줄 없음) — 목록 밖 별도 상자에 있을 수도 있어서 넓게 찾음
+  /// 글쓴이·시간 줄(.ginfo)이 있는 진짜 글 칸 안인지 — 제목이 '실베 …', '공지 …'로 시작하는 보통 글은 숨기면 안 됨
+  function inPostRow(el) {
+    var li = el.closest('.gall-detail-lst li');
+    while (li && !li.querySelector('.ginfo')) li = li.parentElement && li.parentElement.closest('.gall-detail-lst li');
+    return !!li;
+  }
   function pinnedRows() {
     var out = [];
     document.querySelectorAll('li, .detail-top-lnk, [class*="notice"], [class*="best"]').forEach(function (el) {
       if (el.closest('#dcapp-headbar') || el.closest('.comment, #comment_box, .gallview-tit-box')) return;
+      if (inPostRow(el)) return;
       if (el.querySelector('.ginfo, li, textarea')) return;
       var t = txt(el);
-      if (t.length > 120 || !/^(공지|개념|념글)\s/.test(t)) return;
+      if (t.length > 120 || !/^(공지|개념|념글|실베)\s/.test(t)) return;
       // 같은 줄을 감싼 바깥 칸을 숨김 (안쪽 칸만 숨기면 테두리·숫자 칸이 남음)
       var box = el.closest('li');
       if (!box || box.querySelector('.ginfo') || txt(box).length > 140) box = el;
@@ -1830,8 +2033,9 @@ enum ContentScript {
     });
     // '개념' 줄은 여러 글이 돌아가며 나오는 상자(▾)라 안에 li가 여러 개 → 딱지('개념'/'공지' 글자)에서 위로 올라가며 한 줄 높이 상자를 찾음
     document.querySelectorAll('span, em, strong, i, b, div, a').forEach(function (badge) {
-      if (badge.children.length || !/^(공지|개념|념글)$/.test(txt(badge))) return;
+      if (badge.children.length || !/^(공지|개념|념글|실베)$/.test(txt(badge))) return;
       if (badge.closest('#dcapp-headbar, .comment, #comment_box, .gallview-tit-box, .dcapp-hide')) return;
+      if (inPostRow(badge)) return;                   // 제목이 딱 '실베'·'공지'인 보통 글
       if (!badge.getClientRects().length) return;   // 이미 숨겨진 줄(말머리·목록 종류 줄)의 글자는 무시
       if (headRowEl(badge)) return;                   // 디시 말머리 줄의 '공지' 말머리
       var box = null;
@@ -2282,7 +2486,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v95-extlink', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v105-prhead', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -2543,6 +2747,9 @@ enum ContentScript {
     writeInfo: writeInfo,
     refreshCaptcha: refreshCaptcha,
     nativeSubmit: nativeSubmit,
+    setReadPosts: setReadPosts,
+    setListFilter: setListFilter,
+    articleIdentity: articleIdentity,
     openWebFeature: openWebFeature,
     collectWebInserts: collectWebInserts,
     dcconTabs: dcconTabs,

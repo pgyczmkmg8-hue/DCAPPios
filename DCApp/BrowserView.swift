@@ -99,6 +99,7 @@ extension Gallery {
         switch kind {
         case .board: URL(string: "https://m.dcinside.com/write/\(galleryID)")!
         case .mini:  URL(string: "https://m.dcinside.com/writemini/\(galleryID)")!   // 미니는 /writemini/ (디시 웹과 같게)
+        case .person: URL(string: "https://m.dcinside.com/writepr/\(galleryID)")!    // 인물은 /writepr/
         }
     }
 }
@@ -232,7 +233,7 @@ struct BrowserView: View {
     /// 컨트롤바 버튼 순서 (설정에서 바꿈)
     @AppStorage(ControlBarItem.storageKey) private var controlOrderRaw = ""
     /// ⋮ 메뉴를 상단바 오른쪽에 둘지 (켜면 컨트롤바에서는 빠짐)
-    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = false
+    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = true
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -243,6 +244,10 @@ struct BrowserView: View {
 
     // 글 보관 버튼: 폴더 고르기 / 이미 보관한 글 메뉴
     @State private var showSaveFolderPicker = false
+    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
+    @State private var newFolderName = ""
+    @State private var newFolderFor: SavedPost?        // nil이면 지금 글을 새 폴더에 보관, 있으면 그 글을 새 폴더로 옮기기
+    @State private var showNewFolder = false
     @State private var savedPostMenu: SavedPost?
     let fallbackTitle: String
     /// 왼쪽 위 ☰ 버튼 (홈 탭의 메인 브라우저에서만 표시, 다른 곳은 뒤로가기 버튼 자리)
@@ -273,6 +278,8 @@ struct BrowserView: View {
 
     // 임시저장 불러오기
     @State private var showDraftPicker = false
+    @State private var showListFilter = false
+    @ObservedObject private var listFilter = ListFilterStore.shared
 
     // 키보드가 떠 있는 동안에는 앱 툴바를 숨겨서, 디시 댓글창(유동 닉/비번/코드, 디시콘 버튼)이
     // 사파리처럼 키보드 바로 위에 붙도록 함
@@ -365,10 +372,47 @@ struct BrowserView: View {
         return Gallery(galleryID: g.id, name: name, kind: g.kind)
     }
 
+    /// 디시 모바일 첫 화면인지 (아직 아무 페이지도 안 열렸을 때 포함)
+    private var isHomeScreen: Bool {
+        guard let u = model.url else { return fallbackTitle == "홈" }
+        return u.host == "m.dcinside.com" && (u.path.isEmpty || u.path == "/")
+    }
+
     /// 상단바 제목: 갤러리 안이면 갤러리 이름, 아니면 페이지 제목
     private var titleText: String {
         if let g = gallery { return g.name }
         return model.title.isEmpty ? fallbackTitle : Gallery.cleanTitle(model.title)
+    }
+
+    /// 상단 갤러리 이름: '갤러리' 글자는 빼고, 마이너(Ⓜ)·미니(mi)·인물(사람) 표시를 따로
+    private enum GalleryBadge { case minor, mini, person }
+    private var titleParts: (name: String, badge: GalleryBadge?) {
+        guard let g = gallery else { return (titleText, nil) }
+        let raw = g.name
+        let name = raw.replacingOccurrences(of: #"\s*(마이너|미니|인물)?\s*갤러리$"#, with: "", options: .regularExpression)
+        let badge: GalleryBadge?
+        switch g.kind {
+        case .mini: badge = .mini
+        case .person: badge = .person
+        case .board: badge = (raw.contains("마이너 갤러리") || model.title.contains("마이너 갤러리")) ? .minor : nil
+        }
+        return (name.isEmpty ? raw : name, badge)
+    }
+
+    @ViewBuilder
+    private func badgeView(_ b: GalleryBadge) -> some View {
+        switch b {
+        case .minor:
+            Text("M").font(.system(size: 12, weight: .bold))
+                .frame(width: 20, height: 20)
+                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+        case .mini:
+            Text("mi").font(.system(size: 11, weight: .bold))
+                .frame(width: 22, height: 18)
+                .overlay(RoundedRectangle(cornerRadius: 3).stroke(.white, lineWidth: 1.5))
+        case .person:
+            Image(systemName: "person.fill").font(.system(size: 15, weight: .semibold))
+        }
     }
 
     /// 디시 첫 화면인지 (하단 바 홈 강조용)
@@ -478,16 +522,15 @@ struct BrowserView: View {
                     if usesSideBar {
                         if !keyboardVisible {
                             if barCollapsed {
-                                collapsedBarButton
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                                collapsedSideButton
                             } else { sideBar }
                         }
                     } else if showsMenuButton && showsRefresh && !keyboardVisible && !barCollapsed {
                         refreshButtonPlaced        // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침
                     }
                 }
-                // 스크롤하는 동안 오른쪽 밖으로 들어갔다가 멈추면 다시 나옴
-                .offset(x: barTucked ? 220 : 0)
+                // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴
+                .offset(x: barTucked ? (barMirrored ? -220 : 220) : 0)
                 .animation(.easeOut(duration: 0.2), value: barTucked)
             }
             .navigationTitle(titleText)
@@ -555,7 +598,8 @@ struct BrowserView: View {
 
     /// 차단 메뉴 / 요소 숨기기 확인
     private var layer2: some View {
-        layer1
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer1)
             .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제" : "차단",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
@@ -587,7 +631,8 @@ struct BrowserView: View {
 
     /// 토스트 / 키워드·유저 차단 입력
     private var layer3: some View {
-        layer2
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer2)
             .overlay(alignment: .bottom) {
                 if let toast = model.toast {
                     Text(toast)
@@ -634,7 +679,8 @@ struct BrowserView: View {
 
     /// 캡처 / 보관 폴더 고르기 / 유저 메모 / 차단 범위
     private var layer4: some View {
-        layer3
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer3)
             .confirmationDialog("어디서 가릴까요?",
                                 isPresented: Binding(get: { pendingBlock != nil }, set: { if !$0 { pendingBlock = nil } }),
                                 titleVisibility: .visible) {
@@ -668,13 +714,42 @@ struct BrowserView: View {
                 ForEach(savedPosts.folders) { f in
                     Button("📁 \(f.name)") { Task { await model.savePost(folderID: f.id, keepFolder: false) } }
                 }
+                Button("＋ 새 폴더 만들기") { newFolderFor = nil; newFolderName = ""; showNewFolder = true }
                 Button("취소", role: .cancel) {}
             }
+            .alert("새 폴더", isPresented: $showNewFolder) {
+                TextField("폴더 이름", text: $newFolderName)
+                Button("취소", role: .cancel) {}
+                Button("만들기") {
+                    guard let id = savedPosts.addFolder(newFolderName) else { return }
+                    if let post = newFolderFor {
+                        savedPosts.move(post, to: id)
+                        model.showToast("\(savedPosts.folderName(id))(으)로 옮겼어요")
+                    } else {
+                        Task { await model.savePost(folderID: id, keepFolder: false) }
+                    }
+                }
+            } message: { Text("만든 폴더에 바로 넣어요") }
     }
 
     /// 보관한 글 메뉴
     private var layer5: some View {
-        layer4
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer4)
+            // 컨트롤바 '메모하기'로 고른 작성자 → 메모 남기기
+            .background {
+                Color.clear
+                    .confirmationDialog("유저 메모",
+                                        isPresented: Binding(get: { model.memoRequest != nil },
+                                                             set: { if !$0 { model.memoRequest = nil } }),
+                                        titleVisibility: .visible,
+                                        presenting: model.memoRequest) { req in
+                        memoButton(req)
+                        Button("취소", role: .cancel) {}
+                    } message: { req in
+                        Text(req.nick.isEmpty ? "작성자" : req.nick)
+                    }
+            }
             .onReceive(NotificationCenter.default.publisher(for: DC.credentialsChanged)) { _ in
                 currentAccount = CredentialStore.currentAccountID
             }
@@ -698,6 +773,7 @@ struct BrowserView: View {
                                 model.showToast("\(f.name)(으)로 옮겼어요")
                             }
                         }
+                        Button("＋ 새 폴더로 옮기기") { newFolderFor = post; newFolderName = ""; showNewFolder = true }
                         Button("보관함에서 빼기", role: .destructive) {
                             savedPosts.remove(post)
                             model.showToast("보관함에서 뺐어요")
@@ -711,11 +787,15 @@ struct BrowserView: View {
 
     /// 갤러리 검색 / 임시저장 / 진단
     private var layer6: some View {
-        layer5
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer5)
             .sheet(isPresented: $showGallerySearch) {
                 if let g = gallery {
                     GallerySearchSheet(gallery: g, heads: galleryHeads) { url in model.load(url) }
                 }
+            }
+            .sheet(isPresented: $showListFilter) {
+                ListFilterSheet { model.applyListFilter() }
             }
             .sheet(isPresented: $showDraftPicker) {
                 DraftPickerSheet(galleryID: model.url.flatMap(AutoImageStore.writeGalleryID)) { d in
@@ -730,7 +810,8 @@ struct BrowserView: View {
 
     /// 글쓰기 화면 → 이 갤러리 자짤 설정 / 사진 보기
     private var layer7: some View {
-        layer6
+        // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        AnyView(layer6)
             .fullScreenCover(item: $model.imageViewer) { item in
                 ImageViewer(item: item)
                     .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
@@ -896,22 +977,41 @@ struct BrowserView: View {
 
     // MARK: - 상단바 (남색): 제목만 (메인 화면). 설정 안에서 연 화면은 오른쪽에 ☆ ⋮
 
+    /// 상단바 제목 (홈은 dcAPP, 갤러리 안이면 이름 + 배지)
+    private var topTitle: some View {
+        HStack(spacing: 6) {
+            if isHomeScreen {
+                // 홈: 페이지 제목(connecting… 등) 대신 앱 이름
+                Text("dcAPP").fontWeight(.heavy).italic()
+            } else {
+                Text(titleParts.name).lineLimit(1)
+                if let b = titleParts.badge { badgeView(b) }
+            }
+        }
+            .font(.headline)
+            .foregroundStyle(.white)
+            .contentShape(Rectangle())
+            // 갤러리 이름을 0.5초 누르면 한손 모드 켜기/끄기
+            .onLongPressGesture(minimumDuration: 0.5) {
+                guard showsMenuButton else { return }
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                compactMode.toggle()
+            }
+    }
+
     @ToolbarContentBuilder
     private var topBar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            Text(titleText)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .lineLimit(1)
+        // 듀오: 상단바 오른쪽 절반이 시계·카메라 줄이라 가운데(principal) 자리가 버튼과 겹쳐 제목이 통째로 사라짐 → 왼쪽에 둠
+        if duoTopBar && !(showsMenuButton && model.isWritePage) {
+            ToolbarItem(placement: .topBarLeading) {
+                topTitle.frame(width: duoTitleWidth, alignment: .leading)
+            }
+            .noGlassBackground()
+        } else {
+            ToolbarItem(placement: .principal) {
                 // 제목이 길면(디시 첫 화면 제목 등) 넓은 화면에서 양옆 버튼 자리를 밀어내 로그인 버튼이 사라짐 → 폭 제한
-                .frame(maxWidth: 240)
-                .contentShape(Rectangle())
-                // 갤러리 이름을 0.5초 누르면 한손 모드 켜기/끄기
-                .onLongPressGesture(minimumDuration: 0.5) {
-                    guard showsMenuButton else { return }
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    compactMode.toggle()
-                }
+                topTitle.frame(maxWidth: 240)
+            }
         }
         if showsMenuButton {
             // 글쓰기 화면: 왼쪽 (⋮) 로그인 / 오른쪽 임시저장 불러오기 등록
@@ -919,7 +1019,7 @@ struct BrowserView: View {
             if model.isWritePage {
                 ToolbarItem(placement: .topBarLeading) {
                     HStack(spacing: 16) {
-                        if hwKeyboard.connected { backButton { Image(systemName: "chevron.backward") } }
+                        if showsKeyboardBack { backButton { Image(systemName: "chevron.backward") } }
                         accountMenu                          // 로그인 / 계정 (글쓰기 화면은 컨트롤바 대신 여기)
                         if menuInTopBar { topMoreMenu }     // 글쓰기 화면은 오른쪽이 임시저장·등록이라 ⋮는 왼쪽
                     }
@@ -951,18 +1051,57 @@ struct BrowserView: View {
                 }
                 .noGlassBackground()
             } else {
-                // 다른 화면: 왼쪽은 (하드웨어 키보드일 때) 뒤로가기, 오른쪽 위에 ⋮ 고정
-                if hwKeyboard.connected {
-                    ToolbarItem(placement: .topBarLeading) {
-                        backButton { Image(systemName: "chevron.backward") }
+                // 다른 화면: 왼쪽은 (하드웨어 키보드일 때) 뒤로가기, 오른쪽은 깔때기(글 목록)·⋮
+                // 양쪽을 같은 폭(칸 수 × 28 + 간격)으로 맞춰야 가운데 제목이 한쪽으로 밀리지 않음
+                // 단 듀오는 상단바 오른쪽 절반이 시계·카메라 줄이라 제목을 왼쪽에 두므로 빈 칸 생략
+                if topSlots > 0 {
+                    if !duoTopBar || showsKeyboardBack {
+                        ToolbarItem(placement: .topBarLeading) {
+                            HStack(spacing: Self.topSlotSpacing) {
+                                if showsKeyboardBack {
+                                    backButton { Image(systemName: "chevron.backward") }
+                                        .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                }
+                                ForEach(0..<(duoTopBar ? 0 : topSlots - (showsKeyboardBack ? 1 : 0)), id: \.self) { _ in
+                                    Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                        .accessibilityHidden(true)
+                                }
+                            }
                             .foregroundStyle(.white)
+                            .fixedSize()
+                        }
+                        .noGlassBackground()
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        HStack(spacing: Self.topSlotSpacing) {
+                            ForEach(0..<(topSlots - topTrailingCount), id: \.self) { _ in
+                                Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                    .accessibilityHidden(true)
+                            }
+                            // 글 목록: 게시물 필터 (깔때기) — 켜져 있으면 색이 들어감
+                            if isListPage {
+                                Button { showListFilter = true } label: {
+                                    Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                        .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                        .contentShape(Rectangle())
+                                }
+                                .accessibilityLabel("게시물 필터")
+                            }
+                            // ⋮ 메뉴: 설정에서 '상단바에 두기'를 켰을 때만 (아니면 컨트롤바 안)
+                            if menuInTopBar {
+                                Menu { moreMenu } label: {
+                                    Image(systemName: "ellipsis")
+                                        .rotationEffect(.degrees(90))
+                                        .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                        .contentShape(Rectangle())
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .fixedSize()
                     }
                     .noGlassBackground()
-                }
-                // ⋮ 메뉴: 설정에서 '상단바에 두기'를 켰을 때만 오른쪽 위 (아니면 컨트롤바 안)
-                if menuInTopBar {
-                    ToolbarItem(placement: .topBarTrailing) { topMoreMenu.foregroundStyle(.white) }
-                        .noGlassBackground()
                 }
             }
         } else {
@@ -1003,9 +1142,9 @@ struct BrowserView: View {
         }
         .padding(4)
         .glassBar()
-        .padding(.trailing, 12)
+        .padding(barMirrored ? .leading : .trailing, 12)
             .padding(.bottom, 16 + bottomBarHeight)      // 페이지 위에 떠 있는 하단 바 위로
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .bottomLeading : .bottomTrailing)
     }
 
     /// 홈 인디케이터 등 기기 아래쪽 안전 영역 높이
@@ -1041,7 +1180,7 @@ struct BrowserView: View {
                 }
             }
             // 4. 뒤로가기 — 하드웨어 키보드(트랙패드)를 쓸 때만 (쓸어서 뒤로가기를 못 쓰므로). ⌘[ 단축키도
-            if hwKeyboard.connected {
+            if showsKeyboardBack {
                 backButton { floatIcon("chevron.backward", tint: .primary) }
             }
     }
@@ -1067,6 +1206,37 @@ struct BrowserView: View {
 
     /// 새로고침 버튼을 보일 화면: 글 보기 + 글 목록
     private var showsRefresh: Bool { isPostPage || isListPage }
+
+    /// 상단바 양옆 버튼 칸 (제목 가운데 맞춤용)
+    static let topSlotWidth: CGFloat = 28
+    static let topSlotSpacing: CGFloat = 14
+    private var topTrailingCount: Int { (isListPage ? 1 : 0) + (menuInTopBar ? 1 : 0) }
+    /// 하드웨어 키보드(트랙패드)용 뒤로가기 버튼 — 아이패드만. 아이폰(듀오 포함)은 키보드를 연결해도 쓸어서 뒤로가기만
+    private var showsKeyboardBack: Bool {
+        hwKeyboard.connected && UIDevice.current.userInterfaceIdiom != .phone
+    }
+    /// 양쪽 모두 이 칸 수만큼 차지 (모자란 쪽은 빈 칸)
+    private var topSlots: Int { max(topTrailingCount, showsKeyboardBack ? 1 : 0) }
+    /// 듀오처럼 상단바 오른쪽에 시계·카메라가 겹쳐 그려지는 화면인지
+    /// (세로 화면은 오른쪽 안전 영역이 0이라 폭으로 구분 — 일반 아이폰은 가장 넓은 Pro Max도 440pt)
+    private var duoTopBar: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone && (fillsTrailing || Self.windowWidth >= 460)
+    }
+    /// 듀오 상단바에서 제목이 쓸 수 있는 폭
+    /// 제목 + 오른쪽 버튼이 시계·카메라 자리를 뺀 폭의 절반쯤을 넘으면 오른쪽 버튼이 '…' 하나로 접혀 버림 (시뮬레이터에서 맞춘 값)
+    private var duoTitleWidth: CGFloat {
+        let statusArea: CGFloat = trailingInset > 0 ? trailingInset : 200
+        let buttons = CGFloat(max(topTrailingCount, 1))
+        let trailing = buttons * Self.topSlotWidth + (buttons - 1) * Self.topSlotSpacing
+        return min(240, max(60, (Self.windowWidth - statusArea) / 2 + 2 - trailing))
+    }
+    private static var windowWidth: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { $0.windowLevel == .normal && !$0.isHidden }
+            .map(\.bounds.width).max() ?? 390
+    }
 
     /// 글 보기 → 댓글 새로고침, 글 목록 → 페이지 새로고침
     private func refreshTapped() {
@@ -1110,6 +1280,31 @@ struct BrowserView: View {
     @State private var barGestureActive = false
     /// 컨트롤바를 동그란 버튼 하나로 접어 둠
     @AppStorage(ControlBarItem.collapsedKey) private var barCollapsed = false
+    /// 가로 막대: 설정 ⋮만 보이는 상태
+    @State private var barMenuMode = false
+    @State private var barMenuChangedAt = Date.distantPast
+    @State private var galleryBarWidth: CGFloat = 0
+    @State private var sideBarHeight: CGFloat = 0
+    /// 세로 막대 위치 (가운데 기준 위아래 거리, 저장)
+    @AppStorage("sideBarOffsetY") private var sideBarOffsetY = 0.0
+    @State private var sideDragY: CGFloat = 0
+    @State private var sideMoving = false
+    @State private var sideMovedAt = Date.distantPast
+    @State private var collapsedHeight: CGFloat = 0
+    /// 좌우반전: 세로 막대·접은 버튼·새로고침 버튼을 왼쪽에, 가로 막대 밀기 방향도 반대로
+    @AppStorage(ControlBarItem.mirroredKey) private var barMirrored = false
+
+    /// 막대가 화면 밖으로 나가지 않게
+    private func clampedSideOffset(_ y: CGFloat) -> CGFloat {
+        let limit = max(0, (viewSize.height - sideBarHeight) / 2 - 16)
+        return min(max(y, -limit), limit)
+    }
+
+    private func setBarMenuMode(_ on: Bool) {
+        barMenuChangedAt = Date()
+        withAnimation(.spring(duration: 0.3)) { barMenuMode = on }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
 
     private func barGestureChanged(_ active: Bool) {
         if active {
@@ -1136,7 +1331,7 @@ struct BrowserView: View {
     }
 
     /// 접어 둔 컨트롤바(전개 버튼) — 글 볼 때는 댓글 새로고침과 한 덩어리 (위: 새로고침, 아래: 펼치기)
-    private var collapsedBarButton: some View {
+    private var collapsedBarCore: some View {
         VStack(spacing: 0) {
             if showsRefresh {
                 Button {
@@ -1162,16 +1357,38 @@ struct BrowserView: View {
             DragGesture(minimumDistance: 15)
                 .onEnded { v in
                     let t = v.translation
-                    if t.width < -30 && abs(t.width) > abs(t.height) {
-                        expandBar(vertical: false)        // 왼쪽으로 밀기 → 가로 막대
+                    if t.width * (barMirrored ? -1 : 1) < -30 && abs(t.width) > abs(t.height) {
+                        expandBar(vertical: false)        // 안쪽(보통 왼쪽, 좌우반전이면 오른쪽)으로 밀기 → 가로 막대
                     } else if t.height < -30 && abs(t.height) > abs(t.width) {
                         expandBar(vertical: true)         // 위로 밀기 → 세로 막대
                     }
                 }
         )
-        .padding(.trailing, 16)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    /// 가로 배치일 때: 오른쪽 아래
+    private var collapsedBarButton: some View {
+        collapsedBarCore
+            .padding(barMirrored ? .leading : .trailing, 16)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: barMirrored ? .leading : .trailing)
+    }
+
+    /// 세로 배치일 때: 펼친 세로 막대와 아래쪽을 맞춤 → 접힌 네모 버튼이 펼쳤을 때 맨 아래(새로고침) 버튼 자리에
+    @ViewBuilder
+    private var collapsedSideButton: some View {
+        if sideBarHeight > 0 {
+            // 펼친 막대 맨 아래 칸(글자 있음)의 가운데가 막대 아래 끝에서 조금 더 위라 그만큼 올림
+            let lift: CGFloat = compactSideBar ? 0 : 7
+            collapsedBarCore
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { collapsedHeight = $0 }
+                .offset(y: clampedSideOffset(CGFloat(sideBarOffsetY)) + (sideBarHeight - collapsedHeight) / 2 - lift)
+                .padding(barMirrored ? .leading : .trailing, 18)          // 세로 막대(폭 64, 가장자리 12)와 가운데 맞춤
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .leading : .trailing)
+        } else {
+            collapsedBarButton
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .bottomLeading : .bottomTrailing)
+        }
     }
 
     private func collapsedIcon(_ name: String) -> some View {
@@ -1183,13 +1400,37 @@ struct BrowserView: View {
     }
 
     private var galleryBar: some View {
-        HStack(spacing: 2) { galleryBarItems }
+        HStack(spacing: 2) { barItems(horizontal: true) }
             .disabled(barGestureActive)
             .padding(6)
             .glassBar()
-            .barSweepGesture(vertical: false) { collapseBar() }   // 그냥 끝에서 끝까지 오른쪽으로 쓸면 접기
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { galleryBarWidth = $0 }
+            // 그냥 밀기: 오른쪽→왼쪽 = 설정 ⋮만 보기 / 그 상태에서 왼쪽→오른쪽 = 원래대로
+            //           평소에 왼쪽→오른쪽으로 막대 길이 30% 이상 쓸면 접기
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { v in
+                        // 밀기 시작했으면 막대 안 버튼이 눌리지 않게
+                        if !barGestureActive && hypot(v.translation.width, v.translation.height) > 8 { barGestureChanged(true) }
+                    }
+                    .onEnded { v in
+                        barGestureChanged(false)
+                        // 좌우반전이면 방향도 뒤집음 (왼→오 = 둘째 칸, 오→왼 = 접기)
+                        let w = v.translation.width * (barMirrored ? -1 : 1), h = v.translation.height
+                        guard abs(w) > abs(h) * 1.5 else { return }
+                        if barMenuMode {
+                            if w > 18 { setBarMenuMode(false) }
+                        } else if w < -18 {
+                            if barHasMenu { setBarMenuMode(true) }
+                        } else if galleryBarWidth > 0 && w >= galleryBarWidth * 0.3 {
+                            collapseBar()
+                        }
+                    }
+            )
             .barSwitchGesture(onActive: barGestureChanged) { t in
-                if t.width > 40 && abs(t.width) > abs(t.height) {
+                // 설정 ⋮만 보이는 상태(또는 방금 원래대로 돌린 직후)에는 접지 않음
+                guard !barMenuMode, Date().timeIntervalSince(barMenuChangedAt) > 0.6 else { return }
+                if t.width * (barMirrored ? -1 : 1) > 40 && abs(t.width) > abs(t.height) {
                     collapseBar()                 // 꾹 누른 채 오른쪽으로 → 동그란 버튼 하나
                 }
             }
@@ -1202,7 +1443,7 @@ struct BrowserView: View {
     @ViewBuilder
     private var sideBar: some View {
         let bar = VStack(spacing: 2) {
-            Group { galleryBarItems }.disabled(barGestureActive)
+            Group { barItems(horizontal: true) }.disabled(barGestureActive)
             if showsRefresh {
                 // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침
                 barItem("arrow.clockwise", "arrow.clockwise", "새로고침", selected: false) { refreshTapped() }
@@ -1231,29 +1472,117 @@ struct BrowserView: View {
             bar
                 .frame(width: 64)
                 .glassBar()
-                .barSweepGesture(vertical: true) { collapseBar() }    // 그냥 위에서 아래까지 쓸면 접기
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { sideBarHeight = $0 }
+                // 그냥 밀기: 아래→위 = 둘째 칸 / 그 상태에서 위→아래 = 원래대로
+                //           평소에 위→아래로 막대 길이 30% 이상 쓸면 접기
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { v in
+                            if !barGestureActive && hypot(v.translation.width, v.translation.height) > 8 { barGestureChanged(true) }
+                        }
+                        .onEnded { v in
+                            barGestureChanged(false)
+                            if sideMoving || Date().timeIntervalSince(sideMovedAt) < 0.5 { return }   // 위치 옮기기였음
+                            let w = v.translation.width, h = v.translation.height
+                            guard abs(h) > abs(w) * 1.5 else { return }
+                            if barMenuMode {
+                                if h > 18 { setBarMenuMode(false) }
+                            } else if h < -18 {
+                                setBarMenuMode(true)
+                            } else if sideBarHeight > 0 && h >= sideBarHeight * 0.3 {
+                                collapseBar()
+                            }
+                        }
+                )
                 .barSwitchGesture(onActive: barGestureChanged) { t in
+                    guard !barMenuMode, Date().timeIntervalSince(barMenuChangedAt) > 0.6 else { return }
+                    guard !sideMoving, Date().timeIntervalSince(sideMovedAt) > 0.5 else { return }
                     if t.height > 40 && abs(t.height) > abs(t.width) {
                         collapseBar()             // 꾹 누른 채 아래로 → 동그란 버튼 하나
                     }
                 }
-                .padding(.trailing, 12)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                // 1초 꾹 누른 뒤 위아래로 끌면 막대 위치 옮기기 (저장됨)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 1.0)
+                        .onEnded { _ in
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            sideMoving = true
+                            barGestureChanged(true)
+                        }
+                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .onChanged { value in
+                            if case .second(true, let d?) = value { sideDragY = d.translation.height }
+                        }
+                        .onEnded { _ in
+                            if sideMoving {
+                                sideBarOffsetY = Double(clampedSideOffset(CGFloat(sideBarOffsetY) + sideDragY))
+                            }
+                            sideDragY = 0
+                            sideMoving = false
+                            sideMovedAt = Date()
+                            barGestureChanged(false)
+                        }
+                )
+                .scaleEffect(sideMoving ? 1.06 : 1)
+                .animation(.spring(duration: 0.2), value: sideMoving)
+                .offset(y: clampedSideOffset(CGFloat(sideBarOffsetY) + sideDragY))
+                .padding(barMirrored ? .leading : .trailing, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .leading : .trailing)
         }
     }
 
     /// 웹페이지 아래에 하단 바 높이만큼 스크롤 여백 (바에 가려지지 않게)
     private func updateBottomInset() {
-        model.setBottomBarInset(keyboardVisible ? 0 : bottomBarHeight)
+        // 바 높이만 비우면 페이지 맨 아래(페이지 번호 등)가 바 테두리에 걸림 → 여유를 더 줌
+        model.setBottomBarInset(keyboardVisible || bottomBarHeight == 0 ? 0 : bottomBarHeight + 24)
     }
 
     /// 컨트롤바 버튼들 — 순서는 설정 → 컨트롤바 버튼 순서에서 바꿀 수 있음
-    private var galleryBarItems: some View {
+    private var galleryBarItems: some View { barItems(horizontal: false) }
+
+    /// 컨트롤바에 넣을 버튼 (설정 ⋮은 항상 맨 끝)
+    /// 가로 막대: 평소엔 설정 ⋮을 빼고, 오른쪽→왼쪽으로 밀면 설정 ⋮만 보임
+    private func barItems(horizontal: Bool) -> some View {
         // 글쓰기 화면은 로그인을 상단바 왼쪽에 두므로 컨트롤바에서는 뺌
-        ForEach(ControlBarItem.order(from: controlOrderRaw).filter { !(menuInTopBar && $0 == .menu) && !(model.isWritePage && $0 == .account) }) { item in
-            controlItem(item)
+        let all = ControlBarItem.order(from: controlOrderRaw).filter { !(menuInTopBar && $0 == .menu) && !(model.isWritePage && $0 == .account) }
+        return Group {
+            if horizontal && barMenuMode {
+                // 밀어서 나오는 둘째 칸: 설정 / 탭해서 차단 / 메모하기 / 전체 검색 / 링크 공유
+                if all.contains(.menu) {
+                    controlItem(.menu)
+                } else {
+                    // ⋮이 상단바에 있으면 그 자리에 홈
+                    barItem("house", "house.fill", "홈", selected: false) { model.load(DC.home) }
+                }
+                extraBarItems
+            } else {
+                ForEach(horizontal ? all.filter { $0 != .menu } : all) { item in
+                    controlItem(item)
+                }
+            }
         }
     }
+
+    /// 컨트롤바 둘째 칸 (설정 ⋮ 다음)
+    @ViewBuilder
+    private var extraBarItems: some View {
+        barItem("hand.tap", "hand.tap.fill", "차단", selected: model.isBlockPickMode) {
+            model.setBlockPickMode(!model.isBlockPickMode)
+            if model.isBlockPickMode { model.showToast("차단할 글이나 댓글의 작성자를 탭하세요") }
+        }
+        barItem("note.text", "note.text", "메모하기", selected: model.isMemoPickMode) {
+            model.setMemoPickMode(!model.isMemoPickMode)
+        }
+        barItem("magnifyingglass.circle", "magnifyingglass.circle.fill", "전체 검색", selected: false) {
+            router.sheet = .search                   // 홈 화면의 검색과 같은 전체 검색
+        }
+        barItem("link", "link", "링크 공유", selected: false, enabled: model.url != nil) {
+            if let url = model.url { model.share(url) }
+        }
+    }
+
+    /// 밀어서 둘째 칸을 열 수 있는지
+    private var barHasMenu: Bool { true }
 
     @ViewBuilder
     private func controlItem(_ item: ControlBarItem) -> some View {
@@ -1263,7 +1592,7 @@ struct BrowserView: View {
             // 로그인 / 계정
             accountBarItem
         case .gallery:
-            barItem("square.stack", "square.stack.fill", "갤러리", selected: false) {
+            barItem("square.stack", "square.stack.fill", "메뉴", selected: false) {
                 router.sheet = .library
             }
             .overlay(alignment: .top) {
@@ -1309,7 +1638,7 @@ struct BrowserView: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 19, weight: .medium))
                         .frame(height: 24)
-                    if !compact { Text("메뉴").font(.system(size: 11, weight: .semibold)) }
+                    if !compact { Text("설정").font(.system(size: 11, weight: .semibold)) }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, compact ? 10 : 7)
@@ -1380,21 +1709,6 @@ struct BrowserView: View {
             }
             // (글 보관함은 갤러리 창의 '보관함' 탭으로)
         }
-        Section {
-            Button { model.goForward() } label: { Label("앞으로", systemImage: "chevron.forward") }
-                .disabled(!model.canGoForward)
-            Button { model.reload() } label: { Label("새로고침", systemImage: "arrow.clockwise") }
-            if showsMenuButton && !showFloatingBar {
-                if isPostPage {
-                    Button { model.refreshComments() } label: {
-                        Label("댓글 새로고침", systemImage: "arrow.clockwise.circle")
-                    }
-                }
-                Button { compactMode.toggle() } label: {
-                    Label(compactMode ? "한손 모드 끄기" : "한손 모드 켜기", systemImage: "rectangle.bottomhalf.inset.filled")
-                }
-            }
-        }
         if let url = model.url {
             // ShareLink를 메뉴 안에 두면 아이패드에서 공유 창이 상단바 제목에 붙어 화면이 깨짐 → 직접 띄움
             Button { model.share(url) } label: { Label("링크 공유", systemImage: "link") }
@@ -1408,32 +1722,15 @@ struct BrowserView: View {
             }
         }
         Section("차단") {
-            Button {
-                Task {
-                    if let author = await model.articleAuthor() {
-                        model.blockRequest = author
-                    } else {
-                        model.showToast("글 보기 화면에서 쓸 수 있어요")
-                    }
-                }
-            } label: {
-                Label("이 글 작성자 차단", systemImage: "person.fill.xmark")
-            }
             Button { model.setBlockPickMode(!model.isBlockPickMode) } label: {
                 Label(model.isBlockPickMode ? "탭해서 차단 끝내기" : "탭해서 유저 차단",
                       systemImage: "hand.tap")
             }
             Button {
-                userInput = ""
-                showUserPrompt = true
+                router.settingsAnchor = "block"
+                router.sheet = .settings
             } label: {
-                Label("유저 직접 입력해서 차단", systemImage: "person.crop.circle.badge.plus")
-            }
-            Button {
-                keywordInput = ""
-                showKeywordPrompt = true
-            } label: {
-                Label("키워드 차단 추가", systemImage: "text.badge.xmark")
+                Label("차단 설정 가기", systemImage: "hand.raised")
             }
         }
         Section("화면 정리") {
@@ -1442,10 +1739,13 @@ struct BrowserView: View {
                       systemImage: "eye.slash")
             }
         }
-        Button {
-            Task { diagnosticText = await model.diagnose() }
-        } label: {
-            Label("페이지 구조 진단", systemImage: "stethoscope")
+        // 버전 정보/업데이트 확인 화면에서 켰을 때만
+        if showDiagnoseMenu {
+            Button {
+                Task { diagnosticText = await model.diagnose() }
+            } label: {
+                Label("페이지 구조 진단", systemImage: "stethoscope")
+            }
         }
     }
 
@@ -1488,6 +1788,7 @@ struct BrowserView: View {
                 model.showToast("'\(w)' 키워드 차단을 풀었어요")
             }
         }
+        searchPostsButton(req)
         memoButton(req)
         Button("취소", role: .cancel) {}
     }
@@ -1521,8 +1822,17 @@ struct BrowserView: View {
             keywordInput = ""
             showKeywordPrompt = true
         }
+        searchPostsButton(req)
         memoButton(req)
         Button("취소", role: .cancel) {}
+    }
+
+    /// 디시 메뉴에 있던 '작성글 검색' (이 갤러리에서 글쓴이로 검색)
+    @ViewBuilder
+    private func searchPostsButton(_ req: BlockRequest) -> some View {
+        if let g = gallery, !req.nick.isEmpty {
+            Button("작성글 검색: \(req.nick)") { model.load(g.searchURL(req.nick, type: .name)) }
+        }
     }
 
     /// 길게 누르기 메뉴의 '메모': 고닉·반고닉은 아이디에, 유동은 IP / 닉네임 중 골라서
@@ -1666,6 +1976,8 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
     static let autoHideKey = "controlBarAutoHide"
     /// 컨트롤바를 동그란 버튼 하나로 접어 둠
     static let collapsedKey = "controlBarCollapsed"
+    /// 좌우반전 (왼손용)
+    static let mirroredKey = "controlBarMirrored"
     /// 기본값: 가로로 쓸 때는 세로 막대, 세로로 쓸 때는 아이패드만 세로 막대 (아이폰·듀오는 하단 가로)
     static var defaultVerticalInPortrait: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     /// 아이패드, 또는 지금 앱 창이 가로·세로 모두 넓은 화면(듀오 펼침)인지
@@ -1684,11 +1996,11 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .account: "로그인 / 계정"
-        case .gallery: "갤러리"
+        case .gallery: "메뉴 (갤러리·기록)"
         case .recommend: "개념글 / 전체글"
         case .search: "검색"
         case .write: "글쓰기"
-        case .menu: "메뉴 (⋮)"
+        case .menu: "설정 (⋮)"
         }
     }
     var icon: String {
@@ -1709,6 +2021,9 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
             if let item = ControlBarItem(rawValue: String(part)), !list.contains(item) { list.append(item) }
         }
         for item in allCases where !list.contains(item) { list.append(item) }
+        // 설정 ⋮은 항상 맨 끝(오른쪽·아래)
+        list.removeAll { $0 == .menu }
+        list.append(.menu)
         return list
     }
 

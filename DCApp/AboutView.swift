@@ -60,6 +60,9 @@ struct AboutView: View {
             Toggle("업데이트 자동 확인", isOn: $autoCheck)
                 .padding(.vertical, 10)
             Divider()
+            Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
+                .padding(.vertical, 10)
+            Divider()
             Button {
                 Task { await checkNow() }
             } label: {
@@ -107,7 +110,7 @@ struct AboutView: View {
             checkResult = "확인하지 못했어요. 인터넷 연결을 확인해 주세요."
             return
         }
-        if UpdateChecker.isNewer(latest.version, than: Self.version) {
+        if UpdateChecker.isNewerThanCurrent(latest.version) {
             foundRelease = latest
             checkResult = "새 버전 \(latest.version)이 있어요."
         } else {
@@ -124,6 +127,7 @@ struct AboutView: View {
     @State private var confetti = 0
     @State private var image: UIImage? = AboutView.pickImage()
     @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
+    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
     @AppStorage(AdBlock.key) private var adBlock = true
     @State private var checking = false
     @State private var checkResult: String?

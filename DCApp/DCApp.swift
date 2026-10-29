@@ -35,6 +35,8 @@ enum AppSheet: String, Identifiable {
 @MainActor
 final class AppRouter: ObservableObject {
     @Published var sheet: AppSheet?
+    /// 설정을 열 때 바로 보여줄 칸 (예: "block" = 차단)
+    var settingsAnchor: String?
     let mainBrowser: WebViewModel
 
     init() {

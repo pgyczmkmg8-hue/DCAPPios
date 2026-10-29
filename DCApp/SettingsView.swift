@@ -5,27 +5,7 @@ import WebKit
 
 struct SettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
-    @ObservedObject private var autoImages = AutoImageStore.shared
-    @AppStorage("autoLogin") private var autoLogin = false
-    @AppStorage("dockComment") private var dockComment = true
-    @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
-    @AppStorage("fullSwipeBack") private var fullSwipeBack = true
-    @AppStorage("swipeSensitivity") private var swipeSensitivity = 3.0
-    @AppStorage("gallerySwipeOpensList") private var gallerySwipeOpensList = true
-
-    private var sensitivityLabel: String {
-        switch Int(swipeSensitivity) {
-        case 1: "매우 둔감"
-        case 2: "둔감"
-        case 3: "보통"
-        case 4: "민감"
-        default: "매우 민감"
-        }
-    }
-    @AppStorage("hideSiteHeader") private var hideSiteHeader = true
-    @AppStorage("homeRankOnly") private var homeRankOnly = true
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
-    @AppStorage("hideDory") private var hideDory = true
     @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
     @AppStorage(AppLock.lockKey) private var appLock = false
     @AppStorage(AppLock.blurKey) private var privacyBlur = false
@@ -34,12 +14,8 @@ struct SettingsView: View {
     @State private var notifyResult: String?
     @State private var notifyChecking = false
     @EnvironmentObject private var router: AppRouter
-    @State private var accounts: [LoginCredential] = CredentialStore.all()
+    @State private var path: [SettingsPage] = []
     @State private var currentID: String? = CredentialStore.currentAccountID
-    @State private var showAddAccount = false
-    @State private var switchTarget: LoginCredential?
-    @State private var confirmLogout = false
-    @State private var message: String?
 
     private func runNotifyCheck() async {
         notifyChecking = true
@@ -48,97 +24,17 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
-                // 계정 (여러 개 저장 → 눌러서 전환)
+                // 계정 / 테마
                 Section {
-                    ForEach(accounts) { acc in
-                        Button {
-                            if acc.id != currentID { switchTarget = acc }
-                        } label: {
-                            HStack {
-                                Image(systemName: acc.id == currentID ? "person.crop.circle.fill" : "person.crop.circle")
-                                    .foregroundStyle(acc.id == currentID ? DCTheme.accent : .secondary)
-                                    .font(.title3)
-                                Text(acc.id).foregroundStyle(.primary)
-                                Spacer()
-                                if acc.id == currentID {
-                                    Text("로그인 중").font(.caption).foregroundStyle(DCTheme.accent)
-                                }
-                            }
-                        }
-                    }
-                    .onDelete { offsets in
-                        for i in offsets { CredentialStore.remove(id: accounts[i].id) }
-                    }
-                    .onMove { CredentialStore.move(from: $0, to: $1) }
-
-                    Button { showAddAccount = true } label: {
-                        Label("계정 추가", systemImage: "plus.circle")
-                    }
-                    if !accounts.isEmpty {
-                        Toggle("로그인 화면에서 자동 로그인", isOn: $autoLogin)
-                    }
-                    NavigationLink { AnonInfoView() } label: {
-                        Label("유동 닉네임·비밀번호", systemImage: "person.fill.questionmark")
-                    }
-                    NavigationLink {
-                        BrowserView(startURL: DC.login, fallbackTitle: "로그인")
-                    } label: {
-                        Label("로그인 페이지 직접 열기", systemImage: "person.badge.key")
-                    }
-                    Button("로그아웃", role: .destructive) { confirmLogout = true }
-                } header: {
-                    Text("계정")
-                } footer: {
-                    Text(accounts.isEmpty
-                         ? "계정을 추가하거나, 로그인에 성공하면 저장할지 물어봐요. 비밀번호는 기기 키체인에 암호화돼요."
-                         : "계정을 누르면 지금 로그인을 끝내고 그 계정으로 바로 로그인해요. 밀어서 삭제할 수 있어요. 맨 위 계정(가장 최근에 저장한 계정)이 로그인 화면에 자동으로 입력돼요.")
-                }
-
-                // 글쓰기
-                Section {
-                    Picker("글쓰기 화면", selection: $nativeWrite) {
-                        Text("앱 글쓰기").tag(true)
-                        Text("디시 원래 화면").tag(false)
-                    }
-                } header: {
-                    Text("글쓰기")
-                } footer: {
-                    Text(nativeWrite
-                         ? "앱이 만든 글쓰기 화면으로 써요. 등록은 디시 글쓰기 페이지로 그대로 보내져요. 동영상·디시콘·유튜브·투표는 ⋯ → 디시 원래 화면으로 쓰기에서 쓸 수 있어요."
-                         : "디시 모바일 웹 글쓰기 화면을 그대로 써요.")
-                }
-
-                // 댓글
-                Section {
-                    Toggle("댓글창을 키보드 위에 붙이기", isOn: $dockComment)
-                        .onChange(of: dockComment) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
-                } header: {
-                    Text("댓글")
-                } footer: {
-                    Text("댓글 입력칸을 누르면 닉네임·비밀번호·코드·디시콘 버튼이 있는 댓글창 전체가 키보드 바로 위로 올라와요. 댓글창 바깥을 누르면 원래 자리로 돌아가요.")
-                }
-
-                // 자짤
-                Section {
-                    NavigationLink { AutoImageSettingsView() } label: {
+                    NavigationLink(value: SettingsPage.account) {
                         LabeledContent {
-                            Text(autoImages.settings.enabled ? "\(autoImages.settings.images.count)장 · 켜짐" : "꺼짐")
+                            Text(currentID ?? "로그인 안 함")
                         } label: {
-                            Label("자짤", systemImage: "photo.on.rectangle")
+                            Label("계정", systemImage: "person.crop.circle")
                         }
                     }
-                } header: {
-                    Text("글쓰기")
-                } footer: {
-                    Text("글쓰기 화면에 미리 등록한 사진을 자동으로 첨부해요.")
-                }
-
-                // 앱 아이콘 / 제스처
-                Section("앱") {
                     Picker(selection: $themeRaw) {
                         ForEach(AppTheme.allCases) { t in
                             Label {
@@ -155,44 +51,31 @@ struct SettingsView: View {
                     .onChange(of: themeRaw) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 웹페이지 색도 다시 칠하기
                     }
-                    Toggle("화면을 오른쪽으로 쓸어 뒤로가기", isOn: $fullSwipeBack)
-                        .onChange(of: fullSwipeBack) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
-                    if fullSwipeBack {
-                        Toggle("갤러리 목록에서 쓸면 '갤러리' 창 열기", isOn: $gallerySwipeOpensList)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("스와이프 민감도")
-                                Spacer()
-                                Text(sensitivityLabel).foregroundStyle(.secondary)
-                            }
-                            .font(.subheadline)
-                            HStack {
-                                Text("둔감").font(.caption).foregroundStyle(.secondary)
-                                Slider(value: $swipeSensitivity, in: 1...5, step: 1)
-                                Text("민감").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    Toggle("사이트 상단 메뉴 숨기기", isOn: $hideSiteHeader)
-                        .onChange(of: hideSiteHeader) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
-                    Toggle("홈 화면 대신 실북갤 순위 보기", isOn: $homeRankOnly)
-                        .onChange(of: homeRankOnly) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
-                    Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)
-                        .onChange(of: hideDory) { _, _ in
-                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
-                        }
                     NavigationLink { ControlBarOrderView() } label: {
                         Label("컨트롤바 버튼", systemImage: "arrow.up.arrow.down")
                     }
                     NavigationLink { AppIconSettingsView() } label: {
                         Label("앱 아이콘", systemImage: "app.badge")
                     }
+                }
+
+                // 도구 / 차단 / 세부 설정
+                Section {
+                    NavigationLink { ToolsSettingsView() } label: {
+                        Label("도구", systemImage: "wrench.and.screwdriver")
+                    }
+                    NavigationLink(value: SettingsPage.block) {
+                        LabeledContent {
+                            Text(filters.settings.enabled ? "켜짐" : "꺼짐")
+                        } label: {
+                            Label("차단", systemImage: "hand.raised")
+                        }
+                    }
+                    NavigationLink { DetailSettingsView() } label: {
+                        Label("세부 설정", systemImage: "slider.horizontal.3")
+                    }
+                } footer: {
+                    Text("도구: 글쓰기 화면·댓글창·자짤 / 세부 설정: 화면 쓸기·사이트 메뉴·화면 정리")
                 }
 
                 // 알림 (백그라운드에서 디시 알림 확인 → iOS 알림) — DCNotify.featureAvailable이 false면 숨김
@@ -271,48 +154,8 @@ struct SettingsView: View {
                     NavigationLink {
                         BrowserView(startURL: DC.dccon, fallbackTitle: "디시콘 샵")
                     } label: {
-                        Label("디시콘 샵 / 내 디시콘", systemImage: "face.smiling")
+                        Label("디시콘 샵", systemImage: "face.smiling")
                     }
-                }
-
-                // 차단
-                Section {
-                    Toggle("차단 기능 사용", isOn: $filters.settings.enabled)
-                    Picker("차단된 글·댓글·디시콘", selection: $filters.settings.display) {
-                        ForEach(BlockDisplay.allCases) { Text($0.label).tag($0) }
-                    }
-                    NavigationLink { BlockedUsersView() } label: {
-                        LabeledContent("차단한 유저", value: "\(filters.settings.users.count)")
-                    }
-                    NavigationLink { BlockedDcconsView() } label: {
-                        LabeledContent("차단한 디시콘", value: "\(filters.settings.dccons.count)")
-                    }
-                    NavigationLink { KeywordsView() } label: {
-                        LabeledContent("차단 키워드", value: "\(filters.settings.keywords.count)")
-                    }
-                    NavigationLink { MemoListView() } label: {
-                        LabeledContent("유저 메모", value: "\(MemoStore.shared.memos.count)")
-                    }
-                } header: {
-                    Text("차단")
-                } footer: {
-                    Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
-                }
-
-                // 화면 정리
-                Section {
-                    Toggle("실시간 베스트 알림 숨기기", isOn: $filters.settings.hideBestNotice)
-                    NavigationLink { HiddenElementsView() } label: {
-                        LabeledContent("직접 숨긴 요소", value: "\(filters.settings.hiddenElements.count)")
-                    }
-                } header: {
-                    Text("화면 정리")
-                } footer: {
-                    Text("그래도 보이는 알림이나 배너는 화면 아래 ⋯ → '요소 숨기기'를 누르고 직접 탭해서 숨길 수 있어요.")
-                }
-
-                if let message {
-                    Section { Text(message).foregroundStyle(.secondary) }
                 }
 
                 // 백업
@@ -334,28 +177,113 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
+            .navigationDestination(for: SettingsPage.self) { page in
+                switch page {
+                case .account: AccountSettingsView()
+                case .block: BlockSettingsView()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("닫기") { router.sheet = nil }
                 }
             }
-            .confirmationDialog("로그아웃할까요?", isPresented: $confirmLogout, titleVisibility: .visible) {
-                Button("로그아웃", role: .destructive) { Task { await logout() } }
+            .onAppear {
+                // ⋮ → '차단 설정 가기'로 열었으면 차단 화면으로 바로
+                if router.settingsAnchor == "block" { path = [.block] }
+                router.settingsAnchor = nil
             }
             .onReceive(NotificationCenter.default.publisher(for: DC.credentialsChanged)) { _ in
-                accounts = CredentialStore.all()
                 currentID = CredentialStore.currentAccountID
-                if accounts.isEmpty { autoLogin = false }
             }
-            .confirmationDialog(switchTarget.map { "\($0.id) 계정으로 전환할까요?" } ?? "",
-                                isPresented: Binding(get: { switchTarget != nil }, set: { if !$0 { switchTarget = nil } }),
-                                titleVisibility: .visible,
-                                presenting: switchTarget) { acc in
-                Button("전환") { router.switchAccount(acc) }
-                Button("취소", role: .cancel) {}
-            }
-            .sheet(isPresented: $showAddAccount) { AddAccountView() }
         }
+    }
+}
+
+enum SettingsPage: Hashable { case account, block }
+
+// MARK: - 계정
+
+struct AccountSettingsView: View {
+    @EnvironmentObject private var router: AppRouter
+    @AppStorage("autoLogin") private var autoLogin = false
+    @State private var accounts: [LoginCredential] = CredentialStore.all()
+    @State private var currentID: String? = CredentialStore.currentAccountID
+    @State private var showAddAccount = false
+    @State private var switchTarget: LoginCredential?
+    @State private var confirmLogout = false
+    @State private var message: String?
+
+    var body: some View {
+        Form {
+            // 계정 (여러 개 저장 → 눌러서 전환)
+            Section {
+                ForEach(accounts) { acc in
+                    Button {
+                        if acc.id != currentID { switchTarget = acc }
+                    } label: {
+                        HStack {
+                            Image(systemName: acc.id == currentID ? "person.crop.circle.fill" : "person.crop.circle")
+                                .foregroundStyle(acc.id == currentID ? DCTheme.accent : .secondary)
+                                .font(.title3)
+                            Text(acc.id).foregroundStyle(.primary)
+                            Spacer()
+                            if acc.id == currentID {
+                                Text("로그인 중").font(.caption).foregroundStyle(DCTheme.accent)
+                            }
+                        }
+                    }
+                }
+                .onDelete { offsets in
+                    for i in offsets { CredentialStore.remove(id: accounts[i].id) }
+                }
+                .onMove { CredentialStore.move(from: $0, to: $1) }
+
+                Button { showAddAccount = true } label: {
+                    Label("계정 추가", systemImage: "plus.circle")
+                }
+                if !accounts.isEmpty {
+                    Toggle("로그인 화면에서 자동 로그인", isOn: $autoLogin)
+                }
+                NavigationLink { AnonInfoView() } label: {
+                    Label("유동 닉네임·비밀번호", systemImage: "person.fill.questionmark")
+                }
+                NavigationLink {
+                    BrowserView(startURL: DC.login, fallbackTitle: "로그인")
+                } label: {
+                    Label("로그인 페이지 직접 열기", systemImage: "person.badge.key")
+                }
+                Button("로그아웃", role: .destructive) { confirmLogout = true }
+            } header: {
+                Text("계정")
+            } footer: {
+                Text(accounts.isEmpty
+                     ? "계정을 추가하거나, 로그인에 성공하면 저장할지 물어봐요. 비밀번호는 기기 키체인에 암호화돼요."
+                     : "계정을 누르면 지금 로그인을 끝내고 그 계정으로 바로 로그인해요. 밀어서 삭제할 수 있어요. 맨 위 계정(가장 최근에 저장한 계정)이 로그인 화면에 자동으로 입력돼요.")
+            }
+
+            if let message {
+                Section { Text(message).foregroundStyle(.secondary) }
+            }
+        }
+        .navigationTitle("계정")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("로그아웃할까요?", isPresented: $confirmLogout, titleVisibility: .visible) {
+            Button("로그아웃", role: .destructive) { Task { await logout() } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: DC.credentialsChanged)) { _ in
+            accounts = CredentialStore.all()
+            currentID = CredentialStore.currentAccountID
+            if accounts.isEmpty { autoLogin = false }
+        }
+        .confirmationDialog(switchTarget.map { "\($0.id) 계정으로 전환할까요?" } ?? "",
+                            isPresented: Binding(get: { switchTarget != nil }, set: { if !$0 { switchTarget = nil } }),
+                            titleVisibility: .visible,
+                            presenting: switchTarget) { acc in
+            Button("전환") { router.switchAccount(acc) }
+            Button("취소", role: .cancel) {}
+        }
+        .sheet(isPresented: $showAddAccount) { AddAccountView() }
     }
 
     private func logout() async {
@@ -363,6 +291,120 @@ struct SettingsView: View {
         message = autoLogin
             ? "로그아웃했어요. (자동 로그인이 켜져 있어서 로그인 페이지를 열면 다시 로그인돼요)"
             : "로그아웃했어요."
+    }
+}
+
+// MARK: - 차단
+
+struct BlockSettingsView: View {
+    @ObservedObject private var filters = FilterStore.shared
+
+    var body: some View {
+        Form {
+            // 차단
+            Section {
+                Toggle("차단 기능 사용", isOn: $filters.settings.enabled)
+                Picker("차단된 글·댓글·디시콘", selection: $filters.settings.display) {
+                    ForEach(BlockDisplay.allCases) { Text($0.label).tag($0) }
+                }
+                NavigationLink { BlockedUsersView() } label: {
+                    LabeledContent("차단한 유저", value: "\(filters.settings.users.count)")
+                }
+                NavigationLink { BlockedDcconsView() } label: {
+                    LabeledContent("차단한 디시콘", value: "\(filters.settings.dccons.count)")
+                }
+                NavigationLink { KeywordsView() } label: {
+                    LabeledContent("차단 키워드", value: "\(filters.settings.keywords.count)")
+                }
+                NavigationLink { MemoListView() } label: {
+                    LabeledContent("유저 메모", value: "\(MemoStore.shared.memos.count)")
+                }
+            } header: {
+                Text("차단")
+            } footer: {
+                Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
+            }
+        }
+        .navigationTitle("차단")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - 세부 설정 (앱 + 화면 정리)
+
+struct DetailSettingsView: View {
+    @ObservedObject private var filters = FilterStore.shared
+    @AppStorage("fullSwipeBack") private var fullSwipeBack = true
+    @AppStorage("swipeSensitivity") private var swipeSensitivity = 3.0
+    @AppStorage("gallerySwipeOpensList") private var gallerySwipeOpensList = true
+    @AppStorage("hideSiteHeader") private var hideSiteHeader = true
+    @AppStorage("homeRankOnly") private var homeRankOnly = true
+    @AppStorage("hideDory") private var hideDory = true
+
+    private var sensitivityLabel: String {
+        switch Int(swipeSensitivity) {
+        case 1: "매우 둔감"
+        case 2: "둔감"
+        case 3: "보통"
+        case 4: "민감"
+        default: "매우 민감"
+        }
+    }
+
+    var body: some View {
+        Form {
+            // 앱 아이콘 / 제스처
+            Section("앱") {
+                Toggle("화면을 오른쪽으로 쓸어 뒤로가기", isOn: $fullSwipeBack)
+                    .onChange(of: fullSwipeBack) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+                if fullSwipeBack {
+                    Toggle("갤러리 목록에서 쓸면 '갤러리' 창 열기", isOn: $gallerySwipeOpensList)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("스와이프 민감도")
+                            Spacer()
+                            Text(sensitivityLabel).foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline)
+                        HStack {
+                            Text("둔감").font(.caption).foregroundStyle(.secondary)
+                            Slider(value: $swipeSensitivity, in: 1...5, step: 1)
+                            Text("민감").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Toggle("사이트 상단 메뉴 숨기기", isOn: $hideSiteHeader)
+                    .onChange(of: hideSiteHeader) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+                Toggle("홈 화면 대신 실북갤 순위 보기", isOn: $homeRankOnly)
+                    .onChange(of: homeRankOnly) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+                Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)
+                    .onChange(of: hideDory) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+            }
+
+            // 화면 정리
+            Section {
+                Toggle("실시간 베스트 알림 숨기기", isOn: $filters.settings.hideBestNotice)
+                NavigationLink { HiddenElementsView() } label: {
+                    LabeledContent("직접 숨긴 요소", value: "\(filters.settings.hiddenElements.count)")
+                }
+            } header: {
+                Text("화면 정리")
+            } footer: {
+                Text("그래도 보이는 알림이나 배너는 컨트롤바 설정(⋮) → '요소 숨기기'를 누르고 직접 탭해서 숨길 수 있어요.")
+            }
+
+            PhotoSaveSettingsSection()
+        }
+        .navigationTitle("세부 설정")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -603,9 +645,11 @@ struct AnonInfoView: View {
 /// 설정 → 컨트롤바 버튼 순서 (끌어서 바꾸기)
 struct ControlBarOrderView: View {
     @AppStorage(ControlBarItem.storageKey) private var raw = ""
-    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = false
+    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = true
     @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
+    @AppStorage("sideBarOffsetY") private var sideBarOffsetY = 0.0
+    @AppStorage(ControlBarItem.mirroredKey) private var mirrored = false
     @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
 
     private var items: [ControlBarItem] { ControlBarItem.order(from: raw) }
@@ -613,17 +657,25 @@ struct ControlBarOrderView: View {
     var body: some View {
         List {
             Section {
-                ForEach(items) { item in
+                ForEach(items.filter { $0 != .menu }) { item in
                     Label(item.label, systemImage: item.icon)
-                        .foregroundStyle(menuInTopBar && item == .menu ? .secondary : .primary)
                 }
                 .onMove { from, to in
-                    var list = items
+                    var list = items.filter { $0 != .menu }
                     list.move(fromOffsets: from, toOffset: to)
-                    raw = ControlBarItem.raw(from: list)
+                    raw = ControlBarItem.raw(from: list + [.menu])
+                }
+                if !menuInTopBar {
+                    LabeledContent {
+                        Text("맨 끝 고정").font(.caption)
+                    } label: {
+                        Label(ControlBarItem.menu.label, systemImage: ControlBarItem.menu.icon)
+                    }
+                    .foregroundStyle(.secondary)
+                    .moveDisabled(true)
                 }
             } footer: {
-                Text("오른쪽 손잡이(≡)를 끌어서 순서를 바꿔요. 위쪽이 가로 배치에서는 왼쪽, 세로 배치에서는 위쪽이에요. 글을 볼 때 나오는 댓글 새로고침 버튼은 따로 떠요.")
+                Text("오른쪽 손잡이(≡)를 끌어서 순서를 바꿔요. 위쪽이 가로 배치에서는 왼쪽, 세로 배치에서는 위쪽이에요. 설정 ⋮은 평소에 숨겨 두고, 막대를 밀면(가로: 오른쪽→왼쪽, 세로: 아래→위) 설정 · 차단(탭해서) · 메모하기 · 전체 검색 · 링크 공유 칸이 나와요. 반대로 밀면 원래대로 돌아와요. 글을 볼 때 나오는 댓글 새로고침 버튼은 따로 떠요.")
             }
             // 모든 기기에 적용 (가로로 쓸 때 / 세로로 쓸 때 따로)
             Section {
@@ -641,6 +693,17 @@ struct ControlBarOrderView: View {
                 Text("가로: 화면 아래쪽에 가로로. 세로: 화면 오른쪽 가운데에 세로로.\n휴대폰을 가로로 쓸 때 세로 막대는 아이콘만 보여요.")
             }
             Section {
+                Toggle("좌우반전", isOn: $mirrored)
+            } footer: {
+                Text("켜면 세로 막대·접은 버튼·새로고침 버튼이 왼쪽에 오고, 가로 막대는 왼쪽→오른쪽으로 밀면 둘째 칸, 오른쪽→왼쪽으로 밀면 접혀요.")
+            }
+            Section {
+                Button("세로 막대 위치 가운데로") { sideBarOffsetY = 0 }
+                    .disabled(sideBarOffsetY == 0)
+            } footer: {
+                Text("세로 막대는 1초 꾹 누른 뒤 위아래로 끌어서 옮길 수 있어요. 옮긴 위치는 저장돼요.")
+            }
+            Section {
                 Toggle("스크롤할 때 숨기기", isOn: $autoHideBar)
             } footer: {
                 Text("페이지를 스크롤하는 동안 컨트롤바가 화면 아래(세로 막대는 오른쪽)로 들어가고, 멈추면 다시 나와요.")
@@ -656,6 +719,61 @@ struct ControlBarOrderView: View {
         }
         .environment(\.editMode, .constant(.active))
         .navigationTitle("컨트롤바 버튼")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - 도구 (글쓰기 · 댓글 · 자짤)
+
+struct ToolsSettingsView: View {
+    @ObservedObject private var autoImages = AutoImageStore.shared
+    @AppStorage("dockComment") private var dockComment = true
+    @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
+
+    var body: some View {
+        Form {
+            // 글쓰기
+            Section {
+                Picker("글쓰기 화면", selection: $nativeWrite) {
+                    Text("앱 글쓰기").tag(true)
+                    Text("디시 원래 화면").tag(false)
+                }
+            } header: {
+                Text("글쓰기")
+            } footer: {
+                Text(nativeWrite
+                     ? "앱이 만든 글쓰기 화면으로 써요. 사진·자짤·디시콘·동영상·유튜브·투표와 글자 꾸미기(굵게·기울임·크기·색)를 쓸 수 있고, 등록은 디시 글쓰기 페이지로 그대로 보내져요. 키보드 위 도구줄 맨 오른쪽 나침반 버튼을 누르면 디시 원래 화면으로 바꿔서 쓸 수 있어요."
+                     : "디시 모바일 웹 글쓰기 화면을 그대로 써요.")
+            }
+
+            // 댓글
+            Section {
+                Toggle("댓글창을 키보드 위에 붙이기", isOn: $dockComment)
+                    .onChange(of: dockComment) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+            } header: {
+                Text("댓글")
+            } footer: {
+                Text("댓글 입력칸을 누르면 닉네임·비밀번호·코드·디시콘 버튼이 있는 댓글창 전체가 키보드 바로 위로 올라와요. 댓글창 바깥을 누르면 원래 자리로 돌아가요.")
+            }
+
+            // 자짤
+            Section {
+                NavigationLink { AutoImageSettingsView() } label: {
+                    LabeledContent {
+                        Text(autoImages.settings.enabled ? "\(autoImages.settings.images.count)장 · 켜짐" : "꺼짐")
+                    } label: {
+                        Label("자짤", systemImage: "photo.on.rectangle")
+                    }
+                }
+            } header: {
+                Text("자짤")
+            } footer: {
+                Text("글쓰기 화면에 미리 등록한 사진을 자동으로 첨부해요.")
+            }
+        }
+        .navigationTitle("도구")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

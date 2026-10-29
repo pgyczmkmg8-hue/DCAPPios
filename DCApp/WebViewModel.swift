@@ -65,11 +65,16 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 글 속 사진 보기 (사진 탭 → 전체 화면)
     @Published var imageViewer: ImageViewerItem?
     @Published var isBlockPickMode = false
+    /// 탭해서 유저 메모 (탭하는 방식은 차단 모드와 같고, 고르면 메모 창)
+    @Published var isMemoPickMode = false
+    @Published var memoRequest: BlockRequest?
     @Published var isWritePage = false
     /// 앱 글쓰기 화면 (디시 글쓰기 페이지 위에 덮어서 보여줌, nil이면 디시 원래 화면)
     @Published var nativeWrite: NativeWriteSession?
     /// '디시 원래 화면으로 쓰기'를 고른 글쓰기 페이지 (이 페이지는 앱 화면을 덮지 않음)
     private var nativeSkipURL: URL?
+    /// 방금 글쓰기 등록을 누름 → 곧 열리는 글 화면을 '작성한 글'로 기록
+    private var pendingWritten: (gallery: String, title: String, nick: String, at: Date)?
     /// 키보드 위에 붙인 글쓰기 도구줄 높이 (그 위로 < > 버튼을 올림)
     @Published var writeToolbarHeight: CGFloat = 0
     /// 페이지를 스크롤하는 동안 true → 컨트롤바를 화면 밖으로 넣음, 멈추면 다시 false
@@ -433,6 +438,7 @@ final class WebViewModel: NSObject, ObservableObject {
 
     func setPickMode(_ on: Bool) {
         if on && isBlockPickMode { setBlockPickMode(false) }
+        if on && isMemoPickMode { setMemoPickMode(false) }
         isPickMode = on
         Task { await call("if (window.__dcapp) window.__dcapp.setPickMode(on); return true;", ["on": on]) }
     }
@@ -441,7 +447,17 @@ final class WebViewModel: NSObject, ObservableObject {
 
     func setBlockPickMode(_ on: Bool) {
         if on && isPickMode { setPickMode(false) }
+        if on { isMemoPickMode = false }
         isBlockPickMode = on
+        Task { await call("if (window.__dcapp) window.__dcapp.setBlockPickMode(on); return true;", ["on": on]) }
+    }
+
+    /// 탭해서 메모: 페이지 쪽은 '탭해서 차단'과 같은 고르기 모드를 씀
+    func setMemoPickMode(_ on: Bool) {
+        if on && isPickMode { setPickMode(false) }
+        if on { isBlockPickMode = false }
+        isMemoPickMode = on
+        showToast(on ? "메모할 글이나 댓글의 작성자를 탭하세요" : "메모 모드를 끝냈어요")
         Task { await call("if (window.__dcapp) window.__dcapp.setBlockPickMode(on); return true;", ["on": on]) }
     }
 
@@ -962,6 +978,45 @@ final class WebViewModel: NSObject, ObservableObject {
         swipeBack()
     }
 
+    // MARK: - 읽은 글 / 작성한 글 기록
+
+    private func recordHistory() {
+        guard let url = webView.url else { return }
+        if let key = PostKey.from(url) {
+            ReadPostStore.shared.markRead(key, title: Gallery.cleanTitle(title))
+            let pending = pendingWritten
+            Task {
+                let info = await call("return window.__dcapp ? window.__dcapp.articleIdentity() : null;") as? [String: Any]
+                let realTitle = info?["title"] as? String ?? ""
+                if !realTitle.isEmpty { ReadPostStore.shared.setTitle(realTitle, for: key) }
+                // 글쓰기 등록 직후 2분 안에 같은 갤러리 글이 열리면 = 방금 쓴 글
+                guard let p = pending, Date().timeIntervalSince(p.at) < 120,
+                      DCGalleryID.bare(PostKey.gallery(key)) == DCGalleryID.bare(p.gallery) else { return }
+                pendingWritten = nil
+                let account = CredentialStore.currentAccountID
+                let who = WriterIdentity(account: account,
+                                         nick: account == nil ? ((info?["nick"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? p.nick) : nil,
+                                         ip: account == nil ? (info?["ip"] as? String) : nil)
+                WrittenStore.shared.add(WrittenItem(kind: .post, key: key, title: realTitle.isEmpty ? p.title : realTitle,
+                                                    snippet: "", date: Date(), who: who))
+            }
+        } else if let g = Gallery.parse(url), isGalleryListPage {
+            let prefix = g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")
+            let keys = ReadPostStore.shared.readKeys(gallery: prefix + g.id)
+            Task {
+                await call("if (window.__dcapp) window.__dcapp.setReadPosts(k); return true;", ["k": Array(keys)])
+                applyListFilter()
+            }
+        }
+    }
+
+    /// 게시물 필터를 지금 글 목록에 적용 (상단바 깔때기)
+    func applyListFilter() {
+        let f = ListFilterStore.shared.filter
+        let arg: Any = f.isActive ? f.script : NSNull()
+        Task { await call("if (window.__dcapp) window.__dcapp.setListFilter(f); return true;", ["f": arg]) }
+    }
+
     // MARK: - 글쓰기 등록
 
     /// 상단바 '등록' → 디시 글쓰기 화면의 등록 버튼을 대신 누름
@@ -1138,6 +1193,11 @@ extension WebViewModel: WKScriptMessageHandler {
         switch type {
         case "longpress":
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            if isMemoPickMode {
+                setMemoPickMode(false)                       // 한 번 고르면 모드 종료
+                memoRequest = BlockRequest(body)
+                return
+            }
             if isBlockPickMode { setBlockPickMode(false) }   // 한 번 고르면 모드 종료
             blockRequest = BlockRequest(body)
         case "draft":
@@ -1165,6 +1225,20 @@ extension WebViewModel: WKScriptMessageHandler {
             if body["state"] as? String == "resumed" {
                 nativeWrite?.showingWeb = false
                 nativeWrite?.submitting = true
+            }
+        case "websubmit":   // 글쓰기 등록을 누름 (앱 글쓰기·디시 원래 화면 모두)
+            if let gid = currentWriteGalleryID {
+                pendingWritten = (gid, body["title"] as? String ?? "", body["nick"] as? String ?? "", Date())
+            }
+        case "cmtwritten":   // 댓글 등록 성공 → 작성한 댓글 기록
+            if let url = webView.url, let key = PostKey.from(url) {
+                let account = CredentialStore.currentAccountID
+                let who = WriterIdentity(account: account,
+                                         nick: account == nil ? (body["nick"] as? String) : nil,
+                                         ip: account == nil ? (body["ip"] as? String) : nil)
+                let title = (body["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? Gallery.cleanTitle(self.title)
+                WrittenStore.shared.add(WrittenItem(kind: .comment, key: key, title: title,
+                                                    snippet: body["memo"] as? String ?? "", date: Date(), who: who))
             }
         case "cmtmissing":   // 댓글은 등록됐는데 목록에 안 보임 → 글을 다시 불러와 댓글 위치로 (나갔다 들어온 것과 같게)
             scrollToCommentsAfterLoad = true
@@ -1261,6 +1335,9 @@ extension WebViewModel: WKNavigationDelegate {
         endRefreshing()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
 
+        // 읽은 글 기록 + 방금 쓴 글이면 작성한 글 기록 + 목록이면 읽은 글 보라색
+        recordHistory()
+
         // 알림이 온 글을 열면 → 알림 탭에서도 그 글 알림은 읽음으로
         if let url = webView.url, let info = SavedPostStore.postInfo(url), let no = Int(info.no) {
             AlarmStore.shared.markRead(galleryID: info.galleryID, postNo: no)
@@ -1293,6 +1370,7 @@ extension WebViewModel: WKNavigationDelegate {
         }
         if isPickMode { setPickMode(true) }   // 새 페이지에도 선택 모드 유지
         if isBlockPickMode { setBlockPickMode(true) }
+        if isMemoPickMode { Task { await call("if (window.__dcapp) window.__dcapp.setBlockPickMode(true); return true;") } }
 
 
         if scrollToCommentsAfterLoad {

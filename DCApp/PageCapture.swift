@@ -58,6 +58,8 @@ enum PageCapture {
 struct CapturePreview: View {
     let capture: CapturedImage
     @Environment(\.dismiss) private var dismiss
+    @State private var askAlbum = false
+    @State private var message: String?
 
     var body: some View {
         NavigationStack {
@@ -67,19 +69,68 @@ struct CapturePreview: View {
                     .scaledToFit()
             }
             .background(Color(.secondarySystemBackground))
+            .overlay(alignment: .bottom) {
+                if let message {
+                    Text(message)
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, 30)
+                }
+            }
+            .sheet(isPresented: $askAlbum) {
+                NavigationStack {
+                    PhotoAlbumPicker(title: "어디에 저장할까요?", selectedID: PhotoSaver.defaultAlbumID) { id in
+                        Task { await save(albumID: id) }
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("취소") { askAlbum = false } }
+                    }
+                }
+                .presentationDetents([.medium, .large])
+            }
             .navigationTitle("캡처")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("닫기") { dismiss() }
                 }
+                // 사진 저장: 설정 → 세부 설정 → 사진 저장에서 정한 앨범으로
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        if PhotoSaver.askEveryTime { askAlbum = true } else { Task { await save(albumID: PhotoSaver.defaultAlbumID) } }
+                    } label: {
+                        Label("사진 저장", systemImage: "square.and.arrow.down")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     ShareLink(item: capture.fileURL,
                               preview: SharePreview("디시 캡처", image: Image(uiImage: capture.image))) {
-                        Label("저장/공유", systemImage: "square.and.arrow.up")
+                        Label("공유", systemImage: "square.and.arrow.up")
                     }
                 }
             }
+        }
+    }
+
+    private func save(albumID: String?) async {
+        guard let data = try? Data(contentsOf: capture.fileURL) else { return }
+        do {
+            let album = try await PhotoSaver.save(data, albumID: albumID)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            flash(album.map { "'\($0)' 앨범에 저장했어요" } ?? "사진 앱에 저장했어요")
+        } catch PhotoSaver.SaveError.denied {
+            flash("설정에서 사진 접근을 허용해주세요")
+        } catch {
+            flash("저장하지 못했어요")
+        }
+    }
+
+    private func flash(_ text: String) {
+        withAnimation { message = text }
+        Task {
+            try? await Task.sleep(for: .seconds(1.6))
+            if message == text { withAnimation { message = nil } }
         }
     }
 }

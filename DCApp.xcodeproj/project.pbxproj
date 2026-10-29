@@ -262,7 +262,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = MF2FAS39Q3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -272,6 +272,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "사진 첨부에 사용";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "앱 잠금 해제에 사용";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "캡쳐 이미지 저장에 사용";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "사진을 저장할 앨범을 고르는 데 사용";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -305,7 +306,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = MF2FAS39Q3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -315,6 +316,7 @@
 				INFOPLIST_KEY_NSCameraUsageDescription = "사진 첨부에 사용";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "앱 잠금 해제에 사용";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "캡쳐 이미지 저장에 사용";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "사진을 저장할 앨범을 고르는 데 사용";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

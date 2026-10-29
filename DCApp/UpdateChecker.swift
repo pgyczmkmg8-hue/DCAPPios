@@ -27,6 +27,19 @@ enum UpdateChecker {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
+    /// 버전 + 빌드를 한 줄로: 0.9.0 (7) → "0.9.0.7"
+    /// 릴리스 태그를 0.9.0.7처럼 빌드까지 붙여 올려도, 같은 빌드면 '새 버전'으로 보지 않게
+    static var currentFullVersion: String {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        return "\(currentVersion).\(build)"
+    }
+
+    /// 릴리스 버전이 지금 앱보다 새 것인지 (빌드 번호까지 비교)
+    /// 0.9.0.7 vs 0.9.0 (7) → 아님 / 0.9.1 vs 0.9.0 (7) → 새 것 / 0.9.0 vs 0.9.0 (7) → 아님
+    static func isNewerThanCurrent(_ release: String) -> Bool {
+        isNewer(release, than: currentFullVersion)
+    }
+
     /// 앱을 열 때마다 확인. 판올림 새 버전이 있고 '건너뛰기'한 버전이 아니면 돌려줌
     static func checkIfDue() async -> AppRelease? {
         guard autoCheckEnabled else { return nil }

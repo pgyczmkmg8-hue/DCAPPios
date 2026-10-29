@@ -28,6 +28,7 @@ struct ImageViewer: View {
     @State private var pageDrag: CGFloat = 0
     @State private var showChrome = true
     @State private var message: String?
+    @State private var askAlbum = false
 
     init(item: ImageViewerItem) {
         self.item = item
@@ -63,6 +64,17 @@ struct ImageViewer: View {
             .onTapGesture { showChrome.toggle() }
         }
         .statusBarHidden(!showChrome)
+        .sheet(isPresented: $askAlbum) {
+            NavigationStack {
+                PhotoAlbumPicker(title: "어디에 저장할까요?", selectedID: PhotoSaver.defaultAlbumID) { id in
+                    Task { await save(albumID: id) }
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("취소") { askAlbum = false } }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
         .task(id: index) {
             for i in [index, index + 1, index - 1] where i >= 0 && i < count { await load(i) }
         }
@@ -99,7 +111,9 @@ struct ImageViewer: View {
                         .font(.subheadline.monospacedDigit().weight(.medium))
                 }
                 Spacer()
-                Button { Task { await save() } } label: {
+                Button {
+                    if PhotoSaver.askEveryTime { askAlbum = true } else { Task { await save(albumID: PhotoSaver.defaultAlbumID) } }
+                } label: {
                     Image(systemName: "square.and.arrow.down")
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
@@ -235,19 +249,15 @@ struct ImageViewer: View {
     }
 
     /// 원본 파일 그대로 사진 앱에 저장 (움짤도 움직이는 채로)
-    private func save() async {
+    /// albumID가 있으면 그 앨범에도 넣음 (설정 → 세부 설정 → 사진 저장)
+    private func save(albumID: String?) async {
         guard let data = datas[index] else { return }
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized || status == .limited else {
-            flash("설정에서 사진 저장을 허용해주세요")
-            return
-        }
         do {
-            try await PHPhotoLibrary.shared().performChanges {
-                PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
-            }
+            let album = try await PhotoSaver.save(data, albumID: albumID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            flash("사진 앱에 저장했어요")
+            flash(album.map { "'\($0)' 앨범에 저장했어요" } ?? "사진 앱에 저장했어요")
+        } catch PhotoSaver.SaveError.denied {
+            flash("설정에서 사진 접근을 허용해주세요")
         } catch {
             flash("저장하지 못했어요")
         }

@@ -20,9 +20,16 @@ enum DCGalleryID {
 enum GalleryKind: String, Codable, CaseIterable, Identifiable {
     case board   // 일반 + 마이너 갤러리 (모바일에서는 둘 다 /board/{id})
     case mini    // 미니 갤러리
+    case person  // 인물 갤러리 (/person/{id})
 
     var id: String { rawValue }
-    var label: String { self == .board ? "일반/마이너" : "미니" }
+    var label: String {
+        switch self {
+        case .board: "일반/마이너"
+        case .mini: "미니"
+        case .person: "인물"
+        }
+    }
 }
 
 struct Gallery: Codable, Identifiable, Hashable {
@@ -36,6 +43,7 @@ struct Gallery: Codable, Identifiable, Hashable {
         switch kind {
         case .board: URL(string: "https://m.dcinside.com/board/\(galleryID)")!
         case .mini:  URL(string: "https://m.dcinside.com/mini/\(galleryID)")!
+        case .person: URL(string: "https://m.dcinside.com/person/\(galleryID)")!
         }
     }
 
@@ -60,6 +68,7 @@ struct Gallery: Codable, Identifiable, Hashable {
             switch parts[0] {
             case "board": return (id, .board)
             case "mini":  return (id, .mini)
+            case "person": return (id, .person)
             default:      return nil
             }
         }
@@ -67,7 +76,7 @@ struct Gallery: Codable, Identifiable, Hashable {
            let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "id" })?.value,
            !id.isEmpty {
-            return (id, parts.first == "mini" ? .mini : .board)
+            return (id, parts.first == "mini" ? .mini : (parts.first == "person" ? .person : .board))
         }
         return nil
     }
@@ -142,8 +151,10 @@ final class FavoritesStore: ObservableObject {
 enum LibrarySection: String, CaseIterable, Identifiable {
     case visited = "방문한 갤러리"
     case galleries = "즐겨찾기"
-    case alarms = "알림"
     case posts = "보관함"
+    case read = "읽은 글"
+    case written = "작성한 글"
+    case commented = "댓글 작성한 글"
     var id: Self { self }
 }
 
@@ -191,6 +202,8 @@ final class VisitedStore: ObservableObject {
     func remove(_ v: VisitedGallery) { items.removeAll { $0.id == v.id }; save() }
     func remove(at offsets: IndexSet) { items.remove(atOffsets: offsets); save() }
     func removeAll() { items.removeAll(); save() }
+    /// 조건에 맞는 것만 남기고 지우기 (예: 즐겨찾기한 갤러리는 남김)
+    func removeAll(keeping keep: (Gallery) -> Bool) { items.removeAll { !keep($0.gallery) }; save() }
     func replaceAll(_ list: [VisitedGallery]) { items = list; save() }
 }
 
@@ -200,8 +213,11 @@ struct VisitedGalleriesList: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
 
+    @State private var confirmClear = false
+
     var body: some View {
         List {
+            Section {
             ForEach(store.items) { v in
                 let g = v.gallery
                 let fav = favorites.items.first { $0.galleryID == g.galleryID && $0.kind == g.kind }
@@ -232,6 +248,24 @@ struct VisitedGalleriesList: View {
                 }
             }
             .onDelete { store.remove(at: $0) }
+            } header: {
+                if !store.items.isEmpty {
+                    HStack {
+                        Spacer()
+                        Button("전체 삭제", role: .destructive) { confirmClear = true }
+                            .textCase(nil)
+                    }
+                    .padding(.top, 12).padding(.bottom, 6)
+                }
+            }
+        }
+        .confirmationDialog("방문 기록을 모두 지울까요?", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("모두 지우기", role: .destructive) {
+                store.removeAll { favorites.contains(galleryID: $0.galleryID, kind: $0.kind) }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("즐겨찾기한 갤러리는 남겨둬요.")
         }
         .overlay {
             if store.items.isEmpty {
@@ -246,12 +280,15 @@ struct VisitedGalleriesList: View {
 struct FavoritesView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
-    @State private var section: LibrarySection = .visited
-    @State private var confirmClearVisited = false
+    @ObservedObject private var alarms = AlarmStore.shared
+    @AppStorage("librarySection") private var sectionRaw = LibrarySection.visited.rawValue
     @State private var galleryQuery = ""
     @State private var showingAdd = false
+    @State private var showAlarms = false
     @State private var renaming: Gallery?
     @State private var renameText = ""
+
+    private var section: LibrarySection { LibrarySection(rawValue: sectionRaw) ?? .visited }
 
     var body: some View {
         NavigationStack {
@@ -262,23 +299,20 @@ struct FavoritesView: View {
                     switch section {
                     case .visited: VisitedGalleriesList()
                     case .galleries: galleriesList
-                    case .alarms: AlarmsList()
-                    case .posts: SavedPostsList()     // 글 보관함 (⋮ 메뉴에서 옮김)
+                    case .posts: SavedPostsList()     // 글 보관함
+                    case .read: ReadPostsList()
+                    case .written: WrittenList(kind: .post)
+                    case .commented: WrittenList(kind: .comment)
                     }
                 }
             }
             .searchable(text: $galleryQuery, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "갤러리 이름이나 ID로 찾기")
             .safeAreaInset(edge: .top, spacing: 0) {
-                Picker("갤러리", selection: $section) {
-                    ForEach(LibrarySection.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+                sectionTabs
                 .background(.bar)
             }
-            .navigationTitle("갤러리")
+            .navigationTitle("메뉴")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // 디시 첫 화면으로 (하단 바의 홈 버튼을 이쪽으로 옮김)
@@ -287,34 +321,21 @@ struct FavoritesView: View {
                         Label("홈", systemImage: "house")
                     }
                 }
-                ToolbarItem(placement: .topBarLeading) { EditButton() }
-                if section == .galleries {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { showingAdd = true } label: { Image(systemName: "plus") }
-                    }
+                if section == .visited || section == .galleries || section == .posts {
+                    ToolbarItem(placement: .topBarLeading) { EditButton() }
                 }
-                if section == .alarms && !AlarmStore.shared.items.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button("모두 읽음으로") { AlarmStore.shared.markAllRead() }
-                            Button("전체 삭제", role: .destructive) { AlarmStore.shared.removeAll() }
-                        } label: { Image(systemName: "ellipsis.circle") }
-                    }
-                }
-                if section == .visited && !VisitedStore.shared.items.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("전체 삭제") { confirmClearVisited = true }
-                    }
-                }
+                // 알림 (탭에서 종 버튼으로 옮김) — 안 읽은 알림이 있으면 빨간 점
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("닫기") { router.sheet = nil }
+                    Button { showAlarms = true } label: {
+                        Image(systemName: alarms.unreadCount > 0 ? "bell.badge" : "bell")
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.red, Color.accentColor)
+                    }
+                    .accessibilityLabel("알림")
                 }
             }
+            .navigationDestination(isPresented: $showAlarms) { AlarmsScreen() }
             .sheet(isPresented: $showingAdd) { AddGalleryView() }
-            .confirmationDialog("방문 기록을 모두 지울까요?", isPresented: $confirmClearVisited, titleVisibility: .visible) {
-                Button("모두 지우기", role: .destructive) { VisitedStore.shared.removeAll() }
-                Button("취소", role: .cancel) {}
-            }
             .alert("이름 변경",
                    isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("갤러리 이름", text: $renameText)
@@ -324,8 +345,36 @@ struct FavoritesView: View {
         }
     }
 
+    /// 탭 6개 — 옆으로 밀어서 넘김
+    private var sectionTabs: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(LibrarySection.allCases) { s in
+                        let on = s == section
+                        Button {
+                            withAnimation(.easeOut(duration: 0.15)) { sectionRaw = s.rawValue }
+                            withAnimation { proxy.scrollTo(s, anchor: .center) }
+                        } label: {
+                            Text(s.rawValue)
+                                .font(.subheadline.weight(on ? .semibold : .regular))
+                                .foregroundStyle(on ? .white : .primary)
+                                .padding(.horizontal, 14).padding(.vertical, 7)
+                                .background(on ? DCTheme.navy : Color(uiColor: .secondarySystemBackground), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .id(s)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 8)
+            }
+            .onAppear { proxy.scrollTo(section, anchor: .center) }
+        }
+    }
+
     private var galleriesList: some View {
         List {
+            Section {
             ForEach(favorites.items) { g in
                 Button {
                     router.open(g.url)   // 홈 탭 브라우저에서 열기
@@ -356,6 +405,14 @@ struct FavoritesView: View {
             }
             .onDelete { favorites.remove(at: $0) }
             .onMove { favorites.move(from: $0, to: $1) }
+            } header: {
+                HStack {
+                    Spacer()
+                    Button { showingAdd = true } label: { Label("갤러리 추가", systemImage: "plus") }
+                        .textCase(nil)
+                }
+                .padding(.top, 12).padding(.bottom, 6)
+            }
         }
         .overlay {
             if favorites.items.isEmpty {

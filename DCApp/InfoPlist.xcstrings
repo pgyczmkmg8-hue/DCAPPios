@@ -69,6 +69,18 @@
           }
         }
       }
+    },
+    "NSPhotoLibraryUsageDescription" : {
+      "comment" : "Privacy - Photo Library Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "사진을 저장할 앨범을 고르는 데 사용"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
