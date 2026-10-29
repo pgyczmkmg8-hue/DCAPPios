@@ -569,6 +569,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 로그인·로그아웃으로 글쓰기 화면이 다시 열려도 쓰던 내용이 남도록: 지금 내용을 잡아 두었다가 다시 열리면 채움
     private var keptWrite: (draft: Draft, at: Date)?
+    /// 로그아웃으로 글쓰기 페이지를 다시 열었을 때, 앱 글쓰기 화면은 두고 양식 정보만 다시 읽기
+    private var nativeWriteNeedsReread = false
 
     private func keepWriteBeforeReload() async {
         if let s = nativeWrite {
@@ -621,7 +623,12 @@ final class WebViewModel: NSObject, ObservableObject {
     func logoutHere() {
         let back = webView.url
         Task {
-            await keepWriteBeforeReload()
+            if nativeWrite != nil {
+                // 앱 글쓰기는 화면(사진 포함)을 그대로 두고, 페이지가 다시 열리면 양식(유동 닉·비번·코드)만 다시 읽음
+                nativeWriteNeedsReread = true
+            } else {
+                await keepWriteBeforeReload()
+            }
             await DCSession.clear(notify: false)
             NotificationCenter.default.post(name: DC.sessionChanged, object: self)   // 다른 화면만 새로고침
             if let back { load(back) } else { reload() }
@@ -695,27 +702,7 @@ final class WebViewModel: NSObject, ObservableObject {
             if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft) }
         }
         Task {
-            let info = await call("return window.__dcapp ? await window.__dcapp.writeInfo() : null;") as? [String: Any]
-            guard nativeWrite === s else { return }
-            guard let info, (info["ok"] as? Bool) == true else {
-                nativeWrite = nil
-                showToast("글쓰기 양식을 못 읽어서 디시 화면으로 쓸게요")
-                return
-            }
-            s.galleryName = info["gallery"] as? String ?? ""
-            s.isAnon = info["anon"] as? Bool ?? false
-            s.nickLocked = info["nickLocked"] as? Bool ?? false
-            if s.isAnon {
-                let pageNick = info["nick"] as? String ?? ""
-                s.nick = !pageNick.isEmpty ? pageNick : (AnonStore.nick.isEmpty ? "ㅇㅇ" : AnonStore.nick)
-                let pagePw = info["pw"] as? String ?? ""
-                s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password
-            }
-            s.heads = (info["heads"] as? [[String: Any]] ?? []).compactMap { h in
-                guard let no = h["no"] as? String, let name = h["name"] as? String else { return nil }
-                return WriteHead(no: no, name: name)
-            }
-            s.head = info["head"] as? String ?? ""
+            guard let info = await readWriteInfo(s) else { return }
             // 글 수정: 원래 제목·내용(글자·사진 순서 그대로) 불러오기
             if info["mode"] as? String == "modify" {
                 s.title = info["title"] as? String ?? ""
@@ -734,11 +721,40 @@ final class WebViewModel: NSObject, ObservableObject {
                     loadRemotePreviews(s)
                 }
             }
-            s.hasCaptcha = info["captcha"] as? Bool ?? false
-            s.captchaImage = Self.imageFromDataURL(info["captchaImg"] as? String)
             s.loaded = true
             runNativeAutosave(s)
         }
+    }
+
+    /// 디시 글쓰기 양식에서 유동 여부·닉네임·말머리·코드 입력칸을 읽어 앱 글쓰기에 반영 (못 읽으면 디시 화면으로)
+    private func readWriteInfo(_ s: NativeWriteSession) async -> [String: Any]? {
+        let info = await call("return window.__dcapp ? await window.__dcapp.writeInfo() : null;") as? [String: Any]
+        guard nativeWrite === s else { return nil }
+        guard let info, (info["ok"] as? Bool) == true else {
+            nativeWrite = nil
+            showToast("글쓰기 양식을 못 읽어서 디시 화면으로 쓸게요")
+            return nil
+        }
+        s.galleryName = info["gallery"] as? String ?? ""
+        s.isAnon = info["anon"] as? Bool ?? false
+        s.nickLocked = info["nickLocked"] as? Bool ?? false
+        if s.isAnon {
+            let pageNick = info["nick"] as? String ?? ""
+            s.nick = !pageNick.isEmpty ? pageNick : (AnonStore.nick.isEmpty ? "ㅇㅇ" : AnonStore.nick)
+            let pagePw = info["pw"] as? String ?? ""
+            s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password
+        } else {
+            s.nick = ""; s.pw = ""
+        }
+        s.heads = (info["heads"] as? [[String: Any]] ?? []).compactMap { h in
+            guard let no = h["no"] as? String, let name = h["name"] as? String else { return nil }
+            return WriteHead(no: no, name: name)
+        }
+        if s.head.isEmpty || !s.heads.contains(where: { $0.no == s.head }) { s.head = info["head"] as? String ?? "" }
+        s.hasCaptcha = info["captcha"] as? Bool ?? false
+        s.captchaImage = Self.imageFromDataURL(info["captchaImg"] as? String)
+        s.captcha = ""
+        return info
     }
 
     /// 글 수정: 원래 올라가 있던 사진 미리보기 (디시 이미지 서버는 Referer가 있어야 보여줌)
@@ -1396,7 +1412,12 @@ extension WebViewModel: WKNavigationDelegate {
         // 앱 글쓰기 화면: 글쓰기 페이지면 덮고, 다른 페이지로 가면(등록 완료 등) 닫음
         var nativeHandled = false
         if let gid = writeGID, Self.nativeWriteEnabled, nativeSkipURL != webView.url {
-            if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true { startNativeWrite(gid) }
+            if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true {
+                startNativeWrite(gid)
+            } else if nativeWriteNeedsReread, let s = nativeWrite {
+                Task { _ = await readWriteInfo(s) }
+            }
+            nativeWriteNeedsReread = false
             focusTitleOnWrite = false
             nativeHandled = true      // 자짤·이어쓰기·자동 저장은 앱 화면에서 처리
         }
