@@ -811,10 +811,16 @@ enum ContentScript {
     // 닉네임은 공백·(IP) 꼬리표를 떼고 비교 (글 화면과 목록에서 닉네임 칸 글자가 조금씩 달라도 같은 사람으로)
     var texts = [], seenText = {};
     var normNick = function (v) { return String(v || '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ''); };
+    // 목록은 긴 닉네임을 '가나다..'처럼 줄여 씀 → 줄인 닉네임은 앞부분이 같으면 같은 사람으로
+    var nickSame = function (memoNick, rowNick) {
+      var a = normNick(memoNick), b = normNick(rowNick);
+      if (/\.\.$/.test(b)) { b = b.replace(/\.+$/, ''); return b.length >= 2 && a.indexOf(b) === 0; }
+      return a === b;
+    };
     [['id', idn.id], ['ip', idn.ip], ['nick', idn.nick]].forEach(function (p) {
       if (!p[1]) return;
       memos.forEach(function (x) {
-        var same = p[0] === 'nick' ? (x.k === 'nick' && normNick(x.v) === normNick(p[1])) : (x.k === p[0] && x.v === p[1]);
+        var same = p[0] === 'nick' ? (x.k === 'nick' && nickSame(x.v, p[1])) : (x.k === p[0] && x.v === p[1]);
         if (same && !seenText[x.t]) { seenText[x.t] = true; texts.push(x.t); }
       });
     });
@@ -2582,7 +2588,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v113-memonick', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v114-memoshort', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
