@@ -169,7 +169,7 @@ struct AboutView: View {
 /// 버전 정보 → 업데이트: 자동 확인, 지금 확인, 사이드로드 앱으로 바로 설치
 struct UpdateView: View {
     @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
-    @AppStorage("installerApp") private var installer: Installer = .feather
+    @AppStorage(Installer.storageKey) private var installer: Installer = .feather
     @State private var checking = false
     @State private var checkResult: String?
     @State private var installing = false
@@ -220,6 +220,9 @@ struct UpdateView: View {
         .alert(foundRelease.map { "새 버전 \($0.version)" } ?? "",
                isPresented: Binding(get: { foundRelease != nil }, set: { if !$0 { foundRelease = nil } }),
                presenting: foundRelease) { r in
+            if let ipa = r.ipaURL, let url = installer.installURL(for: ipa) {
+                Button("\(installer.name)로 바로 설치") { UIApplication.shared.open(url) }
+            }
             Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
             Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
             Button("닫기", role: .cancel) {}
@@ -252,6 +255,11 @@ struct UpdateView: View {
     /// 최신 릴리즈 ipa를 사이드로드 앱으로 바로 설치
     enum Installer: String, CaseIterable {
         case feather, sideStore, liveContainer
+        static let storageKey = "installerApp"
+        /// 업데이트 화면에서 고른 앱 (업데이트 알림창의 '바로 설치'도 이걸로)
+        static var current: Installer {
+            Installer(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .feather
+        }
         var name: String {
             switch self { case .feather: "Feather"; case .sideStore: "SideStore"; case .liveContainer: "LiveContainer" }
         }

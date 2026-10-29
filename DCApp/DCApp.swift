@@ -230,6 +230,11 @@ struct RootView: View {
         .alert(availableUpdate.map { "새 버전 \($0.version)" } ?? "",
                isPresented: Binding(get: { availableUpdate != nil }, set: { if !$0 { availableUpdate = nil } }),
                presenting: availableUpdate) { r in
+            // 버전 정보 → 업데이트에서 고른 앱(Feather/SideStore/LiveContainer)으로 바로 설치
+            let installer = UpdateView.Installer.current
+            if let ipa = r.ipaURL, let url = installer.installURL(for: ipa) {
+                Button("\(installer.name)로 바로 설치") { UIApplication.shared.open(url) }
+            }
             Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
             Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
             Button("이 버전 건너뛰기") { UpdateChecker.skip(r.version) }
