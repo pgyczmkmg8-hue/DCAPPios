@@ -265,6 +265,8 @@ struct BrowserView: View {
 
     // 유저 메모 입력 (길게 누르기 → 메모)
     @State private var memoTarget: (kind: BlockedUser.Kind, value: String, nick: String, existing: UserMemo?)?
+    // 메모가 이미 있는 대상 → 메모 목록 (눌러서 고치기 / 새 메모 추가)
+    @State private var memoListTarget: (kind: BlockedUser.Kind, value: String, nick: String)?
     // 차단 범위 고르기 (이 갤러리만 / 모든 갤러리)
     @State private var pendingBlock: (kind: BlockedUser.Kind, value: String, nick: String, label: String)?
     @State private var memoInput = ""
@@ -673,9 +675,15 @@ struct BrowserView: View {
 
     private func saveMemo(gallery: String?) {
         guard let t = memoTarget else { return }
-        MemoStore.shared.set(kind: t.kind, value: t.value, text: memoInput, gallery: gallery, replacing: t.existing)
         let empty = memoInput.trimmingCharacters(in: .whitespaces).isEmpty
-        model.showToast(empty ? "메모를 지웠어요" : (gallery == nil ? "메모를 남겼어요 (모든 갤러리)" : "메모를 남겼어요 (이 갤러리)"))
+        if let old = t.existing {
+            MemoStore.shared.update(old, text: memoInput, gallery: gallery)
+            model.showToast(empty ? "메모를 지웠어요" : (gallery == nil ? "메모를 고쳤어요 (모든 갤러리)" : "메모를 고쳤어요 (이 갤러리)"))
+        } else {
+            guard !empty else { return }
+            MemoStore.shared.add(kind: t.kind, value: t.value, text: memoInput, gallery: gallery)
+            model.showToast(gallery == nil ? "메모를 남겼어요 (모든 갤러리)" : "메모를 남겼어요 (이 갤러리)")
+        }
     }
 
     /// 캡처 / 보관 폴더 고르기 / 유저 메모 / 차단 범위
@@ -697,8 +705,9 @@ struct BrowserView: View {
                 }
                 Button("취소", role: .cancel) {}
             }
-            .alert("유저 메모", isPresented: Binding(get: { memoTarget != nil }, set: { if !$0 { memoTarget = nil } })) {
-                TextField("메모 (비우면 삭제)", text: $memoInput)
+            .alert(memoTarget?.existing == nil ? "유저 메모" : "메모 고치기",
+                   isPresented: Binding(get: { memoTarget != nil }, set: { if !$0 { memoTarget = nil } })) {
+                TextField(memoTarget?.existing == nil ? "메모" : "메모 (비우면 삭제)", text: $memoInput)
                 if let gid = currentGallery?.id {
                     Button("이 갤러리에만 저장") { saveMemo(gallery: gid) }
                 }
@@ -749,6 +758,33 @@ struct BrowserView: View {
                         Button("취소", role: .cancel) {}
                     } message: { req in
                         Text(req.nick.isEmpty ? "작성자" : req.nick)
+                    }
+            }
+            // 메모가 이미 있는 대상 → 메모 목록 (눌러서 고치기 / 새 메모 추가)
+            .background {
+                Color.clear
+                    .confirmationDialog("유저 메모",
+                                        isPresented: Binding(get: { memoListTarget != nil },
+                                                             set: { if !$0 { memoListTarget = nil } }),
+                                        titleVisibility: .visible,
+                                        presenting: memoListTarget) { t in
+                        ForEach(MemoStore.shared.memos(kind: t.kind, value: t.value, gallery: currentGallery?.id)) { m in
+                            Button((m.gallery == nil ? "" : "[이 갤러리] ") + m.text) {
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(450))
+                                    openMemoEditor(t.kind, t.value, t.nick, existing: m)
+                                }
+                            }
+                        }
+                        Button("＋ 새 메모 추가…") {
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(450))
+                                openMemoEditor(t.kind, t.value, t.nick, existing: nil)
+                            }
+                        }
+                        Button("취소", role: .cancel) {}
+                    } message: { t in
+                        Text("\(t.nick.isEmpty ? "" : t.nick + " · ")\(t.kind.label) \(t.value)\n고칠 메모를 누르세요 (비우고 저장하면 삭제)")
                     }
             }
             .onReceive(NotificationCenter.default.publisher(for: DC.credentialsChanged)) { _ in
@@ -1848,15 +1884,20 @@ struct BrowserView: View {
     }
 
     private func memoChoice(_ kind: BlockedUser.Kind, _ value: String, _ nick: String, label: String) -> some View {
-        let existing = MemoStore.shared.memo(kind: kind, value: value, gallery: currentGallery?.id)
-        return Button(label + (existing == nil ? "메모 남기기…" : "메모 고치기…")) {
-            memoInput = existing?.text ?? ""
-            // 메뉴가 닫힌 뒤에 메모 창을 띄움 (바로 띄우면 무시될 때가 있음)
+        let count = MemoStore.shared.memos(kind: kind, value: value, gallery: currentGallery?.id).count
+        return Button(label + (count == 0 ? "메모 남기기…" : "메모 \(count)개 보기·추가…")) {
+            // 메뉴가 닫힌 뒤에 다음 창을 띄움 (바로 띄우면 무시될 때가 있음)
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(450))
-                memoTarget = (kind, value, nick, existing)
+                if count == 0 { openMemoEditor(kind, value, nick, existing: nil) } else { memoListTarget = (kind, value, nick) }
             }
         }
+    }
+
+    /// 메모 입력 창 (existing이 있으면 그 메모 고치기, 없으면 새 메모)
+    private func openMemoEditor(_ kind: BlockedUser.Kind, _ value: String, _ nick: String, existing: UserMemo?) {
+        memoInput = existing?.text ?? ""
+        memoTarget = (kind, value, nick, existing)
     }
 
     /// 차단 대상을 고르면 → 갤러리 안이면 범위(이 갤러리만 / 모든 갤러리)를 한 번 더 물음

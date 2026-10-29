@@ -69,7 +69,7 @@ enum ContentScript {
       '.dcapp-lp-nick,.dcapp-memo,img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}',
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
-      '.dcapp-memo{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;font-size:11px;line-height:1.6;background:rgba(255,149,0,.16);color:#b86400;vertical-align:middle;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:normal}',
+      '.dcapp-memo{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;font-size:11px;line-height:1.6;background:rgba(255,149,0,.16);color:#b86400;vertical-align:middle;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:normal}',
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
       '.dcapp-mine-name{background:rgb(64,140,200)!important;color:#fff!important;padding:0 3px!important;border-radius:4px!important;line-height:1.2!important}',
@@ -721,12 +721,13 @@ enum ContentScript {
   function showMemo(u, nk) {
     if (u.kind === 'article' && !nk.parentNode) return;
     var gid = currentGalleryId(), idn = identity(u), m = null;
-    // 이 갤러리 전용 메모 우선, 없으면 모든 갤러리 메모
+    // 같은 대상에 메모가 여러 개면 ' · '로 이어서 (이 갤러리 전용 메모 먼저)
     var memos = (cfg.memos || []).filter(function (x) { return !x.g || x.g === gid; })
       .sort(function (a, b) { return (b.g ? 1 : 0) - (a.g ? 1 : 0); });
     [['id', idn.id], ['ip', idn.ip], ['nick', idn.nick]].some(function (p) {
       if (!p[1]) return false;
-      m = memos.filter(function (x) { return x.k === p[0] && x.v === p[1]; })[0] || null;
+      var found = memos.filter(function (x) { return x.k === p[0] && x.v === p[1]; });
+      if (found.length) m = { t: found.map(function (x) { return x.t; }).join(' · ') };
       return !!m;
     });
     var next = nk.nextElementSibling;
@@ -2407,6 +2408,12 @@ enum ContentScript {
     if (pw && p.pw != null) setField(pw, p.pw);
     var cap = document.getElementById('dcblock');
     if (cap && p.captcha != null) setField(cap, p.captcha);
+    // 사진 크기: 디시 '이미지 크기 일괄 설정'과 같은 칸 (기본 850px로 줄어드는 것 방지)
+    if (p.imgSize) {
+      try { localStorage.setItem('imgSizeSetting', p.imgSize); } catch (e) {}
+      var isz = document.getElementById('imgSize');
+      if (isz) isz.value = p.imgSize;
+    }
     var ht = document.getElementById('headtext');
     if (ht && p.head != null && p.head !== '') {
       if (typeof window.head_select === 'function') window.head_select(p.head); else ht.value = p.head;
@@ -2485,7 +2492,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v106-font14', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v108-memos', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

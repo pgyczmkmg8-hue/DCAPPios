@@ -7,6 +7,19 @@ import Combine
 // 화면은 앱이 그리고, 등록은 뒤에 열린 디시 글쓰기 양식에 채워서 디시가 처리하게 함
 // (로그인·보안 토큰·Cloudflare 체크는 디시 웹이 원래대로)
 
+/// 앱 글쓰기 사진 크기 — 디시 글쓰기 '이미지 크기 일괄 설정'과 같은 값 (등록할 때 디시 imgSize 칸에도 넣음)
+enum WriteImageSize: String, CaseIterable, Identifiable {
+    case original = "ori", w1024 = "1024", w850 = "850", w640 = "640", w480 = "480"
+    static let key = "writeImageSize"
+    var id: String { rawValue }
+    var label: String { self == .original ? "원본 크기" : "가로 \(rawValue)px" }
+    /// 앱에서 줄일 가로 크기 (원본이면 nil)
+    var maxWidth: CGFloat? { Double(rawValue).map { CGFloat($0) } }
+    static var current: WriteImageSize {
+        WriteImageSize(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .original
+    }
+}
+
 struct WriteImage: Identifiable {
     let id = UUID()
     let data: Data
@@ -308,8 +321,9 @@ struct NativeWriteView: View {
         .overlay { if session.submitting { submittingCover } }
         // 안내 문구 (브라우저 화면의 안내는 이 화면에 가려서 여기서도 띄움)
         .overlay(alignment: .bottom) { NativeWriteToast(model: model).padding(.bottom, 70) }
+        // .current: 사진 앱에 있는 원본 파일 그대로 받음 (HEIC 등은 올리기 전에 JPEG로 바꿈)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 20,
-                      matching: .images, photoLibrary: .shared())
+                      matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
         .onChange(of: photoItems) { _, items in loadPhotos(items) }
         .sheet(isPresented: $showDcconPicker) {
             DcconPickerSheet(model: model)
@@ -710,11 +724,12 @@ struct NativeWriteView: View {
     private func loadPhotos(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         photoItems = []
+        let maxWidth = WriteImageSize.current.maxWidth
         Task {
             var added: [WriteImage] = []
             for item in items {
                 guard let raw = try? await item.loadTransferable(type: Data.self) else { continue }
-                let prepared = await Task.detached { AutoImageStore.prepare(raw) }.value
+                let prepared = await Task.detached { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }.value
                 guard let p = prepared else { continue }
                 added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage()))
             }

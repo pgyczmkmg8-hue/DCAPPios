@@ -194,6 +194,29 @@ final class AutoImageStore: ObservableObject {
         guard let jpg = resized.jpegData(compressionQuality: 0.85) else { return nil }
         return (jpg, "image/jpeg", "jpg")
     }
+
+    /// 앱 글쓰기에 올릴 사진 준비. maxWidth가 없으면(원본 크기) JPEG·PNG·GIF는 받은 파일 그대로,
+    /// 디시가 못 받는 형식(HEIC 등)만 같은 크기의 JPEG로 바꿈. maxWidth가 있으면 가로가 그보다 클 때만 줄임
+    nonisolated static func prepareForUpload(_ data: Data, maxWidth: CGFloat?) -> (data: Data, mime: String, ext: String)? {
+        if data.starts(with: [0x47, 0x49, 0x46]) { return (data, "image/gif", "gif") }
+        let isJPEG = data.starts(with: [0xFF, 0xD8, 0xFF])
+        let isPNG = data.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        guard let image = UIImage(data: data) else { return nil }
+        guard let maxWidth, image.size.width > maxWidth else {
+            if isJPEG { return (data, "image/jpeg", "jpg") }
+            if isPNG { return (data, "image/png", "png") }
+            guard let jpg = image.jpegData(compressionQuality: 0.95) else { return nil }
+            return (jpg, "image/jpeg", "jpg")
+        }
+        let size = CGSize(width: maxWidth, height: (image.size.height * maxWidth / image.size.width).rounded())
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        guard let jpg = resized.jpegData(compressionQuality: 0.92) else { return nil }
+        return (jpg, "image/jpeg", "jpg")
+    }
 }
 
 // MARK: - 자짤 설정 화면

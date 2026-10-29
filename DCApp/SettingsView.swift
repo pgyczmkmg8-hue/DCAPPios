@@ -729,6 +729,7 @@ struct ToolsSettingsView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
     @AppStorage("dockComment") private var dockComment = true
     @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
+    @AppStorage(WriteImageSize.key) private var imageSize = WriteImageSize.original.rawValue
 
     var body: some View {
         Form {
@@ -738,12 +739,17 @@ struct ToolsSettingsView: View {
                     Text("앱 글쓰기").tag(true)
                     Text("디시 원래 화면").tag(false)
                 }
+                if nativeWrite {
+                    Picker("사진 크기", selection: $imageSize) {
+                        ForEach(WriteImageSize.allCases) { Text($0.label).tag($0.rawValue) }
+                    }
+                }
             } header: {
                 Text("글쓰기")
             } footer: {
                 Text(nativeWrite
-                     ? "앱이 만든 글쓰기 화면으로 써요. 사진·자짤·디시콘·동영상·유튜브·투표와 글자 꾸미기(굵게·기울임·크기·색)를 쓸 수 있고, 등록은 디시 글쓰기 페이지로 그대로 보내져요. 키보드 위 도구줄 맨 오른쪽 나침반 버튼을 누르면 디시 원래 화면으로 바꿔서 쓸 수 있어요."
-                     : "디시 모바일 웹 글쓰기 화면을 그대로 써요.")
+                     ? "앱이 만든 글쓰기 화면으로 써요. 사진·자짤·디시콘·동영상·유튜브·투표와 글자 꾸미기(굵게·기울임·크기·색)를 쓸 수 있고, 등록은 디시 글쓰기 페이지로 그대로 보내져요. 키보드 위 도구줄 맨 오른쪽 나침반 버튼을 누르면 디시 원래 화면으로 바꿔서 쓸 수 있어요.\n사진 크기는 디시 '이미지 크기 일괄 설정'과 같아요. 원본 크기를 고르면 사진을 줄이지 않고 올려요. 가로 크기보다 작은 사진은 그대로 올라가요."
+                     : "디시 모바일 웹 글쓰기 화면을 그대로 써요. 사진 크기는 디시 글쓰기 화면의 설정(톱니) 버튼에서 바꿀 수 있어요.")
             }
 
             // 댓글

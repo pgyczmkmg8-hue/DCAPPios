@@ -828,6 +828,7 @@ final class WebViewModel: NSObject, ObservableObject {
             "pw": s.isAnon ? s.pw : NSNull(),
             "captcha": s.hasCaptcha ? s.captcha : NSNull(),
             "head": s.head,
+            "imgSize": WriteImageSize.current.rawValue,
             // 본문 순서 그대로: 글자 칸 / 사진 칸
             "blocks": s.blocks.compactMap { b -> [String: Any]? in
                 if let img = b.image {
