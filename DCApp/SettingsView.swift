@@ -6,6 +6,7 @@ import WebKit
 struct SettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
+    @AppStorage(DarkMode.followKey) private var darkFollowSystem = false
     @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
     @AppStorage(AppLock.lockKey) private var appLock = false
     @AppStorage(AppLock.blurKey) private var privacyBlur = false
@@ -52,6 +53,10 @@ struct SettingsView: View {
                     .onChange(of: themeRaw) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 웹페이지 색도 다시 칠하기
                     }
+                    Toggle(isOn: $darkFollowSystem) {
+                        Label("다크모드를 시스템에 맞추기", systemImage: "circle.lefthalf.filled")
+                    }
+                    .onChange(of: darkFollowSystem) { _, _ in DarkMode.followChanged() }
                     NavigationLink { ControlBarOrderView() } label: {
                         Label("컨트롤바 버튼", systemImage: "arrow.up.arrow.down")
                     }

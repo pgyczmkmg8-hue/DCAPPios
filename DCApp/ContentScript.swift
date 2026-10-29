@@ -87,6 +87,7 @@ enum ContentScript {
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
       // 연한 하늘색 상자에 글자가 위아래 가운데 오도록 (inline-flex로 상자 높이를 글자에 맞춤)
+      'html.darkmode .dcapp-mine-name{background:rgb(52,78,112)!important;color:#e8eefc!important}',
       '.dcapp-mine-name{display:inline-flex!important;align-items:center!important;height:1.45em!important;padding:0 4px!important;vertical-align:middle!important;background:rgb(207,230,255)!important;color:#111!important;border-radius:3px!important;line-height:1!important;box-sizing:border-box!important}',
       // 디시는 내 댓글 li에 'on' 클래스를 붙여 파랗게 칠함 → 디시 쪽 규칙보다 우선하도록 클래스를 겹쳐 씀
       'li.comment.on.dcapp-mine.dcapp-mine.dcapp-mine>*{background:none!important;background-color:transparent!important;box-shadow:none!important}',
@@ -2606,7 +2607,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v118-headdark', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v119-minedark', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

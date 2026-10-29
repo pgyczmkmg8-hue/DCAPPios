@@ -8,8 +8,36 @@ enum DarkMode {
     static let changed = Notification.Name("DCDarkModeChanged")
     private static let cookieNames = ["m_dcinside_darkmode", "m_dcinside_darkmode_info"]
 
-    static var isOn: Bool { UserDefaults.standard.bool(forKey: key) }
-    private static var isSet: Bool { UserDefaults.standard.object(forKey: key) != nil }
+    /// 설정: 다크모드를 아이폰 설정(시스템)에 맞출지 (끄면 ⋮ 메뉴 버튼으로 직접)
+    static let followKey = "darkModeFollowSystem"
+    static var followSystem: Bool { UserDefaults.standard.bool(forKey: followKey) }
+    /// 시스템이 지금 다크인지 (화면이 알려 줄 때마다 갱신)
+    private static var systemDark: Bool?
+
+    static var isOn: Bool {
+        if followSystem {
+            if let d = systemDark { return d }
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+            return scene?.traitCollection.userInterfaceStyle == .dark
+        }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+    private static var isSet: Bool { followSystem || UserDefaults.standard.object(forKey: key) != nil }
+
+    /// 시스템 다크/라이트가 바뀌었을 때 (시스템 따라가기가 켜져 있으면 화면·디시 쿠키도 같이)
+    static func systemChanged(dark: Bool) {
+        systemDark = dark
+        guard followSystem else { return }
+        syncCookie()
+        NotificationCenter.default.post(name: changed, object: nil)
+    }
+
+    /// 설정에서 시스템 따라가기를 켜고 끌 때
+    static func followChanged() {
+        if followSystem { systemDark = nil }
+        apply()
+        NotificationCenter.default.post(name: changed, object: nil)
+    }
 
     static func toggle() {
         UserDefaults.standard.set(!isOn, forKey: key)
@@ -20,7 +48,7 @@ enum DarkMode {
     /// 앱을 켤 때 / 바꿀 때: 창 모양 + 디시 쿠키 맞추기
     static func apply() {
         guard isSet else { return }
-        let style: UIUserInterfaceStyle = isOn ? .dark : .light
+        let style: UIUserInterfaceStyle = followSystem ? .unspecified : (isOn ? .dark : .light)
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
             for w in scene.windows { w.overrideUserInterfaceStyle = style }
         }

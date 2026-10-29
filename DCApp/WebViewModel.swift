@@ -192,7 +192,7 @@ final class WebViewModel: NSObject, ObservableObject {
         NotificationCenter.default.publisher(for: DarkMode.changed)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                Task { @MainActor in self?.webView.evaluateJavaScript(DarkMode.pageScript, completionHandler: nil) }
+                Task { @MainActor in _ = try? await self?.webView.evaluateJavaScript(DarkMode.pageScript) }
             }
             .store(in: &cancellables)
 
@@ -1330,7 +1330,7 @@ extension WebViewModel: WKNavigationDelegate {
             let js = "window.__dcapp && window.__dcapp.setConfig(\(FilterStore.shared.scriptConfigJSON)); true"
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
-                webView.evaluateJavaScript(js, completionHandler: nil)
+                _ = try? await webView.evaluateJavaScript(js)
             }
         }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {

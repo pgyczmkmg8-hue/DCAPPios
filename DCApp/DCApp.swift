@@ -215,7 +215,10 @@ struct RootView: View {
         }
         .animation(.spring(duration: 0.35), value: alarms.incoming?.item.id)
         .onChange(of: themeRaw) { _, _ in StatusBarStyler.applySoon() }          // 테마를 바꾸면 상태바 글씨 색도
-        .onChange(of: systemScheme) { _, _ in StatusBarStyler.applySoon() }      // 다크 모드 전환 (테마 색이 바뀔 수 있음)
+        .onChange(of: systemScheme) { _, v in
+            DarkMode.systemChanged(dark: v == .dark)
+            StatusBarStyler.applySoon()
+        }      // 다크 모드 전환 (테마 색이 바뀔 수 있음)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             StatusBarStyler.apply()
         }
