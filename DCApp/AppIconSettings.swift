@@ -23,7 +23,7 @@ struct AppIconSettingsView: View {
     var body: some View {
         List {
             Section {
-                row(name: nil, label: "기본")
+                row(name: nil, label: "1. 터져서 없어짐 수고하세요")
                 ForEach(alternates, id: \.self) { name in
                     row(name: name, label: displayName(name))
                 }

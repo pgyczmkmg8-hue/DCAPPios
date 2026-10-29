@@ -242,7 +242,11 @@ struct RootView: View {
         .fullScreenCover(isPresented: $showTutorial, onDismiss: {
             if iconPickAfterTutorial {
                 iconPickAfterTutorial = false
-                showIconPicker = true
+                // 튜토리얼 화면이 완전히 내려간 뒤에 띄워야 시트가 뜸
+                Task {
+                    try? await Task.sleep(for: .milliseconds(700))
+                    showIconPicker = true
+                }
             }
         }) {
             TutorialView { showTutorial = false }
