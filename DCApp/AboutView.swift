@@ -258,6 +258,16 @@ struct UpdateView: View {
         var scheme: String {
             switch self { case .feather: "feather"; case .sideStore: "sidestore"; case .liveContainer: "livecontainer" }
         }
+        /// Feather는 feather://install/<ipa 주소> (주소를 그대로 뒤에 붙임),
+        /// SideStore·LiveContainer는 <scheme>://install?url=<ipa 주소>
+        func installURL(for ipa: URL) -> URL? {
+            if self == .feather { return URL(string: "feather://install/" + ipa.absoluteString) }
+            var c = URLComponents()
+            c.scheme = scheme
+            c.host = "install"
+            c.queryItems = [URLQueryItem(name: "url", value: ipa.absoluteString)]
+            return c.url
+        }
     }
 
     private func install(with app: Installer) async {
@@ -270,11 +280,7 @@ struct UpdateView: View {
                                          : "최신 릴리즈에 ipa 파일이 없어요."
             return
         }
-        var c = URLComponents()
-        c.scheme = app.scheme
-        c.host = "install"
-        c.queryItems = [URLQueryItem(name: "url", value: ipa.absoluteString)]
-        guard let url = c.url else { return }
+        guard let url = app.installURL(for: ipa) else { return }
         if !(await UIApplication.shared.open(url)) {
             checkResult = "\(app.name)을(를) 열지 못했어요. 설치돼 있는지 확인해 주세요."
         }
