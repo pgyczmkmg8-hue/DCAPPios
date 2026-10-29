@@ -224,8 +224,13 @@ struct RootView: View {
             }
         }
         .task {
-            // 앱을 열 때마다 GitHub Releases 확인
+            // 앱을 열 때 GitHub Releases 확인 (주기는 버전 정보 → 업데이트에서)
             if let r = await UpdateChecker.checkIfDue() { availableUpdate = r }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // 백그라운드에서 다시 열었을 때도 확인
+            guard availableUpdate == nil else { return }
+            Task { if let r = await UpdateChecker.checkIfDue() { availableUpdate = r } }
         }
         .alert(availableUpdate.map { "새 버전 \($0.version)" } ?? "",
                isPresented: Binding(get: { availableUpdate != nil }, set: { if !$0 { availableUpdate = nil } }),

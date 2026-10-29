@@ -169,6 +169,7 @@ struct AboutView: View {
 /// 버전 정보 → 업데이트: 자동 확인, 지금 확인, 사이드로드 앱으로 바로 설치
 struct UpdateView: View {
     @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
+    @AppStorage(UpdateChecker.Frequency.storageKey) private var frequency: UpdateChecker.Frequency = .everyOpen
     @AppStorage(Installer.storageKey) private var installer: Installer = .feather
     @State private var checking = false
     @State private var checkResult: String?
@@ -179,6 +180,11 @@ struct UpdateView: View {
         Form {
             Section {
                 Toggle("업데이트 자동 확인", isOn: $autoCheck)
+                if autoCheck {
+                    Picker("확인 주기", selection: $frequency) {
+                        ForEach(UpdateChecker.Frequency.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                }
                 Button {
                     Task { await checkNow() }
                 } label: {
@@ -190,7 +196,7 @@ struct UpdateView: View {
                 }
                 .disabled(checking)
             } footer: {
-                Text("지금 버전: \(AboutView.versionString)")
+                Text("앱을 열 때 새 버전(예: 0.9.0 → 0.9.1)이 있으면 알려 줘요.\n지금 버전: \(AboutView.versionString)")
             }
             Section {
                 Picker("바로 설치에 쓸 앱", selection: $installer) {

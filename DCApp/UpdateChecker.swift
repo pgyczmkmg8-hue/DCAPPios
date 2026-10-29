@@ -10,13 +10,27 @@ nonisolated struct AppRelease: Identifiable, Sendable {
     var id: String { version }
 }
 
-/// 앱을 열 때마다 GitHub Releases의 최신 버전을 확인해서, 판올림(0.6.x → 0.7.x)일 때만 알려 줌
+/// 앱을 열 때(백그라운드에서 돌아올 때 포함) GitHub Releases의 최신 버전을 확인해서,
+/// 버전(0.9.0 → 0.9.1)이 올라갔을 때만 알려 줌 — 빌드 번호만 바뀐 건(0.9.0.14 → 0.9.0.15) 조용히
 /// (저장소: github.com/pgyczmkmg8-hue/DCAPPios — 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
 /// 버전 정보/업데이트 확인 화면에서 자동 확인 끄기 / 수동 확인 가능
 enum UpdateChecker {
     nonisolated static let repo = "pgyczmkmg8-hue/DCAPPios"
     private static let skippedKey = "updateSkippedVersion"
     static let autoCheckKey = "updateAutoCheck"
+    private static let lastCheckKey = "updateLastCheck"
+
+    /// 자동 확인 주기: 앱을 열 때마다 / 하루 한 번
+    enum Frequency: String, CaseIterable {
+        case everyOpen, daily
+        static let storageKey = "updateCheckFrequency"
+        static var current: Frequency {
+            Frequency(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .everyOpen
+        }
+        var name: String {
+            switch self { case .everyOpen: "열 때마다"; case .daily: "하루 한 번" }
+        }
+    }
 
     /// 자동 확인 켜짐 여부 (기본 켬)
     static var autoCheckEnabled: Bool {
@@ -40,12 +54,16 @@ enum UpdateChecker {
         isNewer(release, than: currentFullVersion)
     }
 
-    /// 앱을 열 때마다 확인. 판올림 새 버전이 있고 '건너뛰기'한 버전이 아니면 돌려줌
+    /// 앱을 열 때 확인 ('하루 한 번'이면 오늘 이미 확인했으면 건너뜀).
+    /// 버전이 올라간 새 릴리스가 있고 '건너뛰기'한 버전이 아니면 돌려줌
     static func checkIfDue() async -> AppRelease? {
         guard autoCheckEnabled else { return nil }
         let defaults = UserDefaults.standard
+        if Frequency.current == .daily, let last = defaults.object(forKey: lastCheckKey) as? Date,
+           Calendar.current.isDateInToday(last) { return nil }
         guard let latest = await fetchLatest() else { return nil }   // 실패하면 다음에 열 때 다시
-        guard isMinorNewer(latest.version, than: currentVersion),     // 패치(0.6.1 → 0.6.2)는 조용히
+        defaults.set(Date(), forKey: lastCheckKey)
+        guard isVersionNewer(latest.version, than: currentVersion),   // 빌드만 바뀐 건(0.9.0.14 → 0.9.0.15) 조용히
               defaults.string(forKey: skippedKey) != latest.version else { return nil }
         return latest
     }
@@ -75,10 +93,10 @@ enum UpdateChecker {
                           ipaURL: ipa)
     }
 
-    /// 앞의 두 자리(판)가 올라갔는지: 0.7.0 vs 0.6.9 → true, 0.6.3 vs 0.6.2 → false
-    nonisolated static func isMinorNewer(_ a: String, than b: String) -> Bool {
+    /// 앞의 세 자리(버전)가 올라갔는지: 0.9.1 vs 0.9.0 → true, 0.9.0.15 vs 0.9.0 → false
+    nonisolated static func isVersionNewer(_ a: String, than b: String) -> Bool {
         func head(_ s: String) -> String {
-            s.split(whereSeparator: { !$0.isNumber }).prefix(2).joined(separator: ".")
+            s.split(whereSeparator: { !$0.isNumber }).prefix(3).joined(separator: ".")
         }
         return isNewer(head(a), than: head(b))
     }
