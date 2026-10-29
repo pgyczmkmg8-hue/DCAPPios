@@ -15,12 +15,13 @@ struct AboutView: View {
         ("AboutImage5", 0.25),
     ]
 
-    /// 확률에 따라 하나 뽑기
-    static func pickImage() -> UIImage? {
-        let pool = aboutImages.compactMap { item -> (UIImage, Double)? in
+    /// 확률에 따라 하나 뽑기 (excluding: 방금 보던 사진은 빼고 — 다른 사진이 없으면 그대로)
+    static func pickImage(excluding current: String? = nil) -> (name: String, image: UIImage)? {
+        var pool = aboutImages.compactMap { item -> ((name: String, image: UIImage), Double)? in
             guard item.weight > 0, let img = UIImage(named: item.name) else { return nil }
-            return (img, item.weight)
+            return ((item.name, img), item.weight)
         }
+        if pool.count > 1 { pool.removeAll { $0.0.name == current } }
         let total = pool.reduce(0) { $0 + $1.1 }
         guard total > 0 else { return nil }
         var r = Double.random(in: 0..<total)
@@ -54,34 +55,26 @@ struct AboutView: View {
             }
     }
 
-    /// 업데이트: 자동 확인 켜기/끄기 + 지금 확인
+    /// 업데이트 화면으로 가는 줄 + 진단 메뉴 스위치
     private var updateBox: some View {
         VStack(spacing: 0) {
-            Toggle("업데이트 자동 확인", isOn: $autoCheck)
-                .padding(.vertical, 10)
-            Divider()
-            Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
-                .padding(.vertical, 10)
-            Divider()
-            Button {
-                Task { await checkNow() }
+            NavigationLink {
+                UpdateView()
             } label: {
                 HStack {
-                    Text("업데이트 확인")
+                    Text("업데이트")
                     Spacer()
-                    if checking { ProgressView() }
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
                 .contentShape(Rectangle())
             }
-            .disabled(checking)
+            .foregroundStyle(.primary)
             .padding(.vertical, 12)
-            if let checkResult {
-                Text(checkResult)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 10)
-            }
+            Divider()
+            Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
+                .padding(.vertical, 10)
         }
         .padding(.horizontal, 16)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -98,6 +91,144 @@ struct AboutView: View {
             .padding(.horizontal, 16)
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .frame(maxWidth: 420)
+    }
+
+    private func photoTapped() {
+        confetti += 1
+        guard !adBlockUnlocked else { return }
+        photoTaps += 1
+        if photoTaps >= 10 {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation { adBlockUnlocked = true }
+        }
+    }
+
+    private var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "DCApp"
+    }
+
+    @State private var confetti = 0
+    @State private var image: (name: String, image: UIImage)? = AboutView.pickImage()
+    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
+    @AppStorage(AdBlock.key) private var adBlock = true
+    /// 광고 차단 스위치는 처음엔 숨김 — 사진을 10번 누르면 나타나고 그 뒤로 계속 보임
+    @AppStorage("adBlockUnlocked") private var adBlockUnlocked = false
+    @State private var photoTaps = 0
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                if let image {
+                    Image(uiImage: image.image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 320, maxHeight: 320)
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+                        .onTapGesture {                      // 사진을 누르면 다시 뽑고 한 번 더 축하
+                            self.image = AboutView.pickImage(excluding: image.name)
+                            photoTapped()
+                        }
+                } else {
+                    placeholder
+                        .onTapGesture { photoTapped() }
+                }
+
+                VStack(spacing: 6) {
+                    Text(appName)
+                        .font(.title2.bold())
+                    Text("버전 \(Self.version) (빌드 \(Self.build))")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                updateBox
+                if adBlockUnlocked { adBlockBox }
+
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 40)
+            .padding(.horizontal)
+        }
+        .overlay {
+            ConfettiView(trigger: confetti)
+                .allowsHitTesting(false)
+                .ignoresSafeArea()
+        }
+        .onAppear {
+            confetti += 1                                       // 들어오면 축하 꽃가루
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+        .navigationTitle("버전 정보/업데이트 확인")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 버전 정보 → 업데이트: 자동 확인, 지금 확인, 사이드로드 앱으로 바로 설치
+struct UpdateView: View {
+    @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
+    @AppStorage("installerApp") private var installer: Installer = .feather
+    @State private var checking = false
+    @State private var checkResult: String?
+    @State private var installing = false
+    @State private var foundRelease: AppRelease?
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("업데이트 자동 확인", isOn: $autoCheck)
+                Button {
+                    Task { await checkNow() }
+                } label: {
+                    HStack {
+                        Text("업데이트 확인")
+                        Spacer()
+                        if checking { ProgressView() }
+                    }
+                }
+                .disabled(checking)
+            } footer: {
+                Text("지금 버전: \(AboutView.versionString)")
+            }
+            Section {
+                Picker("바로 설치에 쓸 앱", selection: $installer) {
+                    ForEach(Installer.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                Button {
+                    Task { await install(with: installer) }
+                } label: {
+                    HStack {
+                        Text("\(installer.name)로 바로 설치")
+                        Spacer()
+                        if installing { ProgressView() }
+                    }
+                }
+                .disabled(installing)
+            } footer: {
+                Text("GitHub 최신 릴리즈의 ipa를 고른 앱으로 열어 설치해요.")
+            }
+            if let checkResult {
+                Section {
+                    Text(checkResult)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .alert(foundRelease.map { "새 버전 \($0.version)" } ?? "",
+               isPresented: Binding(get: { foundRelease != nil }, set: { if !$0 { foundRelease = nil } }),
+               presenting: foundRelease) { r in
+            Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
+            Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
+            Button("닫기", role: .cancel) {}
+        } message: { r in
+            let notes = r.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            Text("지금 버전: \(AboutView.version)" + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(300))))
+        }
+        .navigationTitle("업데이트")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// 수동 확인: 패치 버전이라도 새것이면 알려 줌
@@ -118,73 +249,34 @@ struct AboutView: View {
         }
     }
 
-    private var appName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "DCApp"
+    /// 최신 릴리즈 ipa를 사이드로드 앱으로 바로 설치
+    enum Installer: String, CaseIterable {
+        case feather, sideStore, liveContainer
+        var name: String {
+            switch self { case .feather: "Feather"; case .sideStore: "SideStore"; case .liveContainer: "LiveContainer" }
+        }
+        var scheme: String {
+            switch self { case .feather: "feather"; case .sideStore: "sidestore"; case .liveContainer: "livecontainer" }
+        }
     }
 
-    @State private var confetti = 0
-    @State private var image: UIImage? = AboutView.pickImage()
-    @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
-    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
-    @AppStorage(AdBlock.key) private var adBlock = true
-    @State private var checking = false
-    @State private var checkResult: String?
-    @State private var foundRelease: AppRelease?
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 320, maxHeight: 320)
-                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                        .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-                        .onTapGesture { confetti += 1 }      // 사진을 누르면 한 번 더 축하
-                } else {
-                    placeholder
-                        .onTapGesture { confetti += 1 }
-                }
-
-                VStack(spacing: 6) {
-                    Text(appName)
-                        .font(.title2.bold())
-                    Text("버전 \(Self.version) (빌드 \(Self.build))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                updateBox
-                adBlockBox
-
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 40)
-            .padding(.horizontal)
+    private func install(with app: Installer) async {
+        installing = true
+        defer { installing = false }
+        let release: AppRelease?
+        if let foundRelease { release = foundRelease } else { release = await UpdateChecker.fetchLatest() }
+        guard let ipa = release?.ipaURL else {
+            checkResult = release == nil ? "최신 버전을 확인하지 못했어요. 인터넷 연결을 확인해 주세요."
+                                         : "최신 릴리즈에 ipa 파일이 없어요."
+            return
         }
-        .overlay {
-            ConfettiView(trigger: confetti)
-                .allowsHitTesting(false)
-                .ignoresSafeArea()
+        var c = URLComponents()
+        c.scheme = app.scheme
+        c.host = "install"
+        c.queryItems = [URLQueryItem(name: "url", value: ipa.absoluteString)]
+        guard let url = c.url else { return }
+        if !(await UIApplication.shared.open(url)) {
+            checkResult = "\(app.name)을(를) 열지 못했어요. 설치돼 있는지 확인해 주세요."
         }
-        .onAppear {
-            confetti += 1                                       // 들어오면 축하 꽃가루
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        }
-        .alert(foundRelease.map { "새 버전 \($0.version)" } ?? "",
-               isPresented: Binding(get: { foundRelease != nil }, set: { if !$0 { foundRelease = nil } }),
-               presenting: foundRelease) { r in
-            Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
-            Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
-            Button("닫기", role: .cancel) {}
-        } message: { r in
-            let notes = r.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            Text("지금 버전: \(Self.version)" + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(300))))
-        }
-        .navigationTitle("버전 정보/업데이트 확인")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
