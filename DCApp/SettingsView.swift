@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var notifyChecking = false
     @EnvironmentObject private var router: AppRouter
     @State private var path: [SettingsPage] = []
+    @State private var showTutorial = false
     @State private var currentID: String? = CredentialStore.currentAccountID
 
     private func runNotifyCheck() async {
@@ -165,8 +166,15 @@ struct SettingsView: View {
                     }
                 }
 
-                // 버전 정보 (맨 아래)
+                // 튜토리얼 다시 보기 + 버전 정보 (맨 아래)
                 Section {
+                    Button { showTutorial = true } label: {
+                        Label {
+                            Text("튜토리얼 다시 보기").foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                    }
                     NavigationLink { AboutView() } label: {
                         LabeledContent {
                             Text(AboutView.versionString)
@@ -177,6 +185,9 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
+            .fullScreenCover(isPresented: $showTutorial) {
+                TutorialView { showTutorial = false }
+            }
             .navigationDestination(for: SettingsPage.self) { page in
                 switch page {
                 case .account: AccountSettingsView()
