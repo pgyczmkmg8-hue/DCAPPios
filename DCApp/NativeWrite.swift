@@ -349,7 +349,7 @@ struct NativeWriteView: View {
             header
             content
         }
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+        .background(Color(uiColor: Self.pageBackground).ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { toolbar }
         .overlay { if session.submitting { submittingCover } }
         // 안내 문구 (브라우저 화면의 안내는 이 화면에 가려서 여기서도 띄움)
@@ -738,8 +738,12 @@ struct NativeWriteView: View {
             .padding(.trailing, 4)
         }
         .frame(height: 50)
-        .background(Color(uiColor: .systemGray5).ignoresSafeArea(edges: .bottom))
+        .background(Color(uiColor: Self.toolbarBackground).ignoresSafeArea(edges: .bottom))
     }
+
+    /// 다크모드 배경: 디시 화면(다크모드)과 같은 회색 (기본 검정이 너무 어두워서)
+    private static let pageBackground = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0x27/255, green: 0x27/255, blue: 0x29/255, alpha: 1) : .systemBackground }
+    private static let toolbarBackground = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0x33/255, green: 0x33/255, blue: 0x36/255, alpha: 1) : .systemGray5 }
 
     /// 도구줄 아이콘: 모양이 달라도(배지 달린 아이콘 등) 같은 크기·같은 높이로
     /// 그림 크기에 맞춰 늘리지 않고 같은 글자 크기로 그려서, 아이콘마다 선 굵기·크기가 같게
