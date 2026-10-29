@@ -7,6 +7,8 @@ struct ImageViewerItem: Identifiable {
     let id = UUID()
     let urls: [URL]
     let index: Int
+    /// 사진이 있는 글 주소 (원본 다운로드 주소를 PC 글에서 찾는 데 씀)
+    var pageURL: URL? = nil
 }
 
 /// 글 속 사진 전체 화면 보기: 핀치·더블탭 확대 / 좌우로 넘기기 / 위아래로 쓸어서 닫기 / 저장
@@ -220,20 +222,40 @@ struct ImageViewer: View {
         }
     }
 
-    /// viewimage.php?...&no=키 → download.php?no=키 (PC 원본 다운로드 주소). 받지 못하면 nil
-    nonisolated private static func fetchOriginal(_ url: URL) async -> Data? {
-        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              comps.path.hasSuffix("viewimage.php"),
-              let no = comps.queryItems?.first(where: { $0.name == "no" })?.value, !no.isEmpty,
-              var dl = URLComponents(string: "https://image.dcinside.com/download.php") else { return nil }
-        dl.queryItems = [URLQueryItem(name: "no", value: no), URLQueryItem(name: "f_no", value: "image")]
-        guard let u = dl.url else { return nil }
-        var req = URLRequest(url: u)
+    /// 모바일 웹의 사진은 줄어든 사진이라, PC 글 아래 '원본 첨부파일' 링크(download.php)에서 원본을 받음
+    /// 모바일 글 주소 → PC 글 주소로 바꿔서 원본 링크를 사진 순서대로 읽음. 못 찾으면 nil
+    nonisolated private static func fetchOriginal(page: URL?, index: Int, count: Int) async -> Data? {
+        guard let page, let pc = pcURL(page) else { return nil }
+        var req = URLRequest(url: pc)
+        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+                     forHTTPHeaderField: "User-Agent")
         req.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
-        guard let (data, res) = try? await URLSession.shared.data(for: req),
-              (res as? HTTPURLResponse)?.statusCode == 200,
-              UIImage(data: data) != nil || CGImageSourceCreateWithData(data as CFData, nil) != nil else { return nil }
+        guard let (html, _) = try? await URLSession.shared.data(for: req),
+              let text = String(data: html, encoding: .utf8),
+              let box = text.range(of: "appending_file") else { return nil }
+        let tail = String(text[box.upperBound...])
+        let end = tail.range(of: "</ul>")?.lowerBound ?? tail.endIndex
+        let section = String(tail[..<end]).replacingOccurrences(of: "&amp;", with: "&")
+        guard let re = try? NSRegularExpression(pattern: #"https://image\.dcinside\.com/download\.php\?[^"'\s<>]+"#) else { return nil }
+        let links = re.matches(in: section, range: NSRange(section.startIndex..., in: section))
+            .compactMap { Range($0.range, in: section).map { String(section[$0]) } }
+        // 사진 수와 원본 파일 수가 같을 때만 순서로 짝지음 (다르면 엉뚱한 파일이 저장될 수 있어서)
+        guard links.count == count, index < links.count, let u = URL(string: links[index]) else { return nil }
+        var dl = URLRequest(url: u)
+        dl.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
+        guard let (data, res) = try? await URLSession.shared.data(for: dl),
+              (res as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty,
+              CGImageSourceCreateWithData(data as CFData, nil) != nil else { return nil }
         return data
+    }
+
+    /// m.dcinside.com/board/{id}/{no} (mini·person도) → gall.dcinside.com/.../board/view/?id=&no=
+    nonisolated private static func pcURL(_ url: URL) -> URL? {
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 3, let kind = ["board", "mini", "person"].first(where: { $0 == parts[0] }),
+              parts[2].allSatisfy(\.isNumber) else { return nil }
+        let prefix = kind == "board" ? "" : "/\(kind)"
+        return URL(string: "https://gall.dcinside.com\(prefix)/board/view/?id=\(parts[1])&no=\(parts[2])")
     }
 
     /// 디시 사진 서버는 Referer가 없으면 막으므로 붙여서 요청
@@ -269,7 +291,7 @@ struct ImageViewer: View {
     private func save(albumID: String?) async {
         guard let shown = datas[index] else { return }
         // 모바일 웹의 사진은 원본이 아닐 수 있어서, PC 글 아래 '원본파일 다운로드'와 같은 주소로 받아서 저장
-        let data = await Self.fetchOriginal(item.urls[index]) ?? shown
+        let data = await Self.fetchOriginal(page: item.pageURL, index: index, count: count) ?? shown
         do {
             let album = try await PhotoSaver.save(data, albumID: albumID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)

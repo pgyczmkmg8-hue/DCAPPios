@@ -46,6 +46,9 @@ enum ContentScript {
       // 앱 말머리 탭
       '#dcapp-headbar{display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 6px;margin:0;width:auto;background:#fff;border-bottom:1px solid rgb(223,225,238)}',
       '#dcapp-headbar::-webkit-scrollbar{display:none}',
+      'html.darkmode #dcapp-headbar{background:#272729;border-bottom-color:#3d3d41}',
+      'html.darkmode #dcapp-headbar button{color:#ddd}',
+      'html.darkmode #dcapp-headbar button.on{color:#a9b4f0;border-bottom-color:#a9b4f0}',
       // 말머리 탭: 공식 앱처럼 글자 탭 + 고른 탭 밑줄
       '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:13px 14px 10px;border-radius:0;font-size:14px;line-height:1.2;font-weight:400;color:#222;background:transparent;border-bottom:3px solid transparent;-webkit-appearance:none}',
       '#dcapp-headbar button.on{color:#3b4890;font-weight:600;border-bottom-color:#3b4890}',
@@ -2603,7 +2606,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v117-darklight', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v118-headdark', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

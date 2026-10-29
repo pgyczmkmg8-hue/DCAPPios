@@ -1248,7 +1248,7 @@ extension WebViewModel: WKScriptMessageHandler {
         case "images":
             let urls = (body["urls"] as? [String] ?? []).compactMap(URL.init(string:))
             if !urls.isEmpty {
-                imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0)
+                imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url)
             }
         case "anon":   // 유동 닉네임/비밀번호를 입력하면 기억 (다음에 빈 칸이면 채움)
             let v = body["value"] as? String ?? ""
