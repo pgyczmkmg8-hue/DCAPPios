@@ -114,13 +114,13 @@ enum ContentScript {
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
       '.all-comment-tit .sp-reload{display:none!important}',
       '.all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
-      '.dcapp-sort{display:flex;align-items:center;gap:15px}',
-      '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:2px 0;font-size:20px;color:#8a8a90}',
-      '.dcapp-sort button.on{color:#3b4890;font-weight:600}',
-      '.dcapp-sort svg{width:21px;height:21px;flex:none;color:#b5b5bb}',
+      '.dcapp-sort{display:flex;align-items:center;gap:10px}',
+      '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:0;font-size:16px;color:#8a8a90}',
+      '.dcapp-sort button.on{color:#222;font-weight:600}',
+      '.dcapp-sort svg{width:16px;height:16px;flex:none;color:#b5b5bb}',
       '.dcapp-sort button.on svg{color:#3b4890}',
       'html.darkmode .dcapp-sort button{color:#a5a5ab}',
-      'html.darkmode .dcapp-sort button.on{color:#9db0ff}',
+      'html.darkmode .dcapp-sort button.on{color:#eee}',
       'html.darkmode .dcapp-sort button.on svg{color:#9db0ff}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
@@ -2856,7 +2856,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v133-fontsize', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v134-sortsize', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
