@@ -93,6 +93,7 @@ enum ContentScript {
       '.gallview-tit-box .btm ul.ginfo2>li.dcapp-datehide{display:none!important}',
       '.gallview-tit-box .btm .rt{float:none!important;position:static!important;margin:0 0 0 10px;flex:none}',
       '.gallview-tit-box .btm .rt>*:not(.dcapp-cmtbox){display:none!important}',
+      '.gallview-tit-box .btm .rt>.dcapp-titicon{display:inline-block!important;margin-right:6px;vertical-align:middle}',
       '.gall-thum-btm-inner>ul.ginfo2{display:none!important}',
       '.dcapp-meta{margin-top:9px;font-size:13px;color:#777;font-weight:normal}',
       '.dcapp-meta i{display:inline-block;width:1px;height:10px;margin:0 8px;background:#ccc;vertical-align:-1px}',
@@ -1238,6 +1239,11 @@ enum ContentScript {
       cb.setAttribute('data-k', cnt);
       cb.innerHTML = ICON_CMT + '<span>' + cnt + '</span>';
     }
+    // 모바일/PC 표시 아이콘: 제목 옆 대신 댓글 수 버튼 왼쪽으로 옮김
+    h.querySelectorAll('.tit .sp-icon').forEach(function (ic) {
+      ic.classList.add('dcapp-titicon');
+      if (ic.parentNode !== rt) rt.insertBefore(ic, cb);
+    });
   }
 
   function buildVote() {
@@ -2798,7 +2804,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v129-galleryg', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v130-iconmove', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
