@@ -157,6 +157,13 @@ enum ContentScript {
       '.dcapp-vicons{display:flex;gap:0;margin-left:0;flex:none}',
       '.dcapp-vicons button{width:26px;height:28px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
       '.dcapp-vicons svg{width:18px;height:18px}',
+      '.dcapp-vmain{display:flex;align-items:center;gap:5px;flex:none}',
+      '.dcapp-vote{padding:0 12px}',
+      '.dcapp-postact{display:flex;gap:4px;margin-left:auto;padding-left:16px;flex:none}',
+      '.dcapp-postact button{height:26px;padding:0 9px;border:1px solid #c9c9cf;border-radius:5px;background:none;color:#3b4890;font-size:13px;font-weight:600}',
+      '.dcapp-postact button.del{color:#e53935;border-color:#e8b4b1}',
+      'html.darkmode .dcapp-postact button{border-color:#55565c;color:#9db0ff}',
+      'html.darkmode .dcapp-postact button.del{color:#ff7b72;border-color:#6b4a48}',
       'html.darkmode .dcapp-vbox{border-color:#55565c}',
       'html.darkmode .dcapp-vcell{background:#3d3d41;border-right-color:#55565c;color:#9db0ff}',
       'html.darkmode .dcapp-vbox.down .dcapp-vcell{color:#a5a5ab}',
@@ -1175,16 +1182,15 @@ enum ContentScript {
     (document.head || document.documentElement).appendChild(st);
   }
 
-  // ---------- 글 아래 수정·삭제 버튼 (본인 글 / 유동 글에만 디시가 보여 줌) → 앱이 대신 누르는 버튼으로 ----------
-  var lastPostActions = null;
+  // ---------- 글 아래 수정·삭제 버튼 (본인 글 / 유동 글에만 디시가 보여 줌) → 개추/비추 줄에 앱 버튼으로 ----------
   function postActionButton(kind) {
     return document.querySelector('#view_btn_area button[onclick*="' + (kind === 'delete' ? 'board_delete' : 'board_modify') + '"]');
   }
-  function reportPostActions() {
-    var has = !!(postActionButton('modify') && postActionButton('delete'));
-    if (has === lastPostActions) return;
-    lastPostActions = has;
-    post('postactions', { edit: has });
+  function reportPost() {
+    var b = document.querySelector('.reco-icon-lst .sp-report');
+    if (!b) return 'none';
+    b.click();
+    return 'clicked';
   }
   // ---------- 댓글 입력 칸: 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 ----------
   function fitCommentBox(el) {
@@ -1201,20 +1207,33 @@ enum ContentScript {
   document.addEventListener('input', function (e) { try { fitCommentBox(e.target); } catch (err) {} }, true);
 
   // ---------- 댓글 헤더: '댓글 입력' 버튼 (누르면 댓글 입력창으로) ----------
+  // 댓글 입력 버튼은 document에서 한 번만 받음 (헤더가 다시 그려져도 계속 동작)
+  var cmtInputBound = false;
+  function focusCommentInput() {
+    var ta = document.getElementById('comment_memo');
+    if (!ta) return;
+    // 댓글창이 아래 고정(dock)돼 있으면 위치 이동 없이 포커스만
+    if (!ta.closest('.dcapp-docked')) ta.scrollIntoView({ block: 'center' });
+    ta.focus();
+    if (document.activeElement !== ta) { ta.blur(); ta.focus(); }
+  }
   function buildCommentInputBtn() {
+    if (!cmtInputBound) {
+      cmtInputBound = true;
+      document.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.dcapp-cmtin') : null;
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        focusCommentInput();
+      }, true);
+    }
     var tb = document.querySelector('.all-comment-tit .tit-box');
     if (!tb || document.querySelector('.dcapp-cmtin')) return;
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'dcapp-cmtin';
     b.textContent = '댓글 입력';
-    b.addEventListener('click', function (e) {
-      e.preventDefault();
-      var ta = document.getElementById('comment_memo');
-      if (!ta) return;
-      ta.scrollIntoView({ block: 'center' });
-      ta.focus();
-    });
     tb.parentNode.insertBefore(b, tb.nextSibling);
   }
 
@@ -1407,17 +1426,20 @@ enum ContentScript {
     var v = document.querySelector('.dcapp-vote');
     if (!v) {
       var hasMem = !!area.querySelector('.go-ct'), hasDown = !!document.getElementById('nonrecommend_join');
-      var picks = [['best', '.sp-bestchucon', ICON_BEST], ['pum', '.sp-crosspost', ICON_PUM], ['report', '.sp-report', ICON_REPORT]]
+      var picks = [['best', '.sp-bestchucon', ICON_BEST], ['pum', '.sp-crosspost', ICON_PUM]]
         .filter(function (p) { return area.querySelector(p[1]); });
       v = document.createElement('div');
       v.className = 'dcapp-vote';
-      v.innerHTML =
+      v.innerHTML = '<div class="dcapp-vmain">' +
         '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
         (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="8" dominant-baseline="central" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
         (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
-        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
+        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>' +
+        '</div>';
       area.parentNode.insertBefore(v, area);
       v.addEventListener('click', function (e) {
+        var pa = e.target.closest ? e.target.closest('[data-p]') : null;
+        if (pa) { postAction(pa.getAttribute('data-p')); return; }
         var b = e.target.closest ? e.target.closest('button[data-a], .dcapp-vnum') : null;
         if (!b) return;
         // 별·X 버튼뿐 아니라 숫자 칸을 눌러도 같은 동작 (숫자 칸에는 data-a가 없으니 상자 종류로 찾음)
@@ -1426,6 +1448,17 @@ enum ContentScript {
         var el = document.querySelector(map[key]);
         if (el) el.click();
       });
+    }
+    // 수정·삭제: 본인 글 / 유동 글에서만 (오른쪽 끝)
+    var editable = !!(postActionButton('modify') && postActionButton('delete'));
+    var pa = v.querySelector('.dcapp-postact');
+    if (editable && !pa) {
+      pa = document.createElement('div');
+      pa.className = 'dcapp-postact';
+      pa.innerHTML = '<button type="button" data-p="modify">수정</button><button type="button" data-p="delete" class="del">삭제</button>';
+      v.appendChild(pa);
+    } else if (!editable && pa) {
+      pa.parentNode.removeChild(pa);
     }
     function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
     setText(v.querySelector('.up .dcapp-vnum'), textOf('#recomm_btn') || '0');
@@ -1438,7 +1471,6 @@ enum ContentScript {
   function apply() {
     ensureStyle();
     try { buildArticleHead(); buildVote(); } catch (e) {}
-    try { reportPostActions(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
     try { cacheListIds(); buildNextPrev(); } catch (e) {}
@@ -2427,10 +2459,12 @@ enum ContentScript {
       .catch(function () { return null; });
   }
   function refreshComments() {
+    // 새로고침 버튼이 안 보이면 페이지를 다시 불러오지 말고 댓글 목록만 다시 받고 댓글 최상단으로
+    var box = document.getElementById('comment_box');
     var b = commentRefreshButton();
-    if (!b) return 'none';
-    b.click();
-    var box = document.getElementById('comment_box') || b.closest('[class*="comment"]');
+    if (b) b.click();
+    else if (box && typeof window.comment_list === 'function') window.comment_list(0);
+    else if (!box) return 'none';
     if (box) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
     return 'clicked';
   }
@@ -2960,7 +2994,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v142-cmtinput', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v145-postrow', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -3212,6 +3246,7 @@ enum ContentScript {
     textSelecting: textSelecting,
     refreshComments: refreshComments,
     postAction: postAction,
+    reportPost: reportPost,
     alarmAuthor: alarmAuthor,
     moveWriteFocus: moveWriteFocus,
     focusReply: focusReply,

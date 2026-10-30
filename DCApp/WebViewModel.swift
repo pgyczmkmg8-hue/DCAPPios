@@ -49,7 +49,6 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var canGoBack = false
     @Published var canGoForward = false
     /// 지금 보는 글에 디시의 수정·삭제 버튼이 있음 (로그인 계정 본인 글 / 유동 글) → 앱 버튼으로 대신 누름
-    @Published var postEditable = false
     @Published var isLoading = false
     @Published var progress: Double = 0
 
@@ -659,12 +658,12 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
-    /// 글 수정 / 삭제: 디시 글 아래 버튼(페이지에서는 숨김)을 대신 누름
-    func postModify() {
-        Task { _ = await call("return window.__dcapp ? window.__dcapp.postAction('modify') : false;") }
-    }
-    func postDelete() {
-        Task { _ = await call("return window.__dcapp ? window.__dcapp.postAction('delete') : false;") }
+    /// 글 신고: 디시의 신고 창을 그대로 띄움
+    func reportPost() {
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.reportPost() : 'none';") as? String
+            if r == "none" || r == nil { showToast("신고 화면을 열 수 없어요") }
+        }
     }
 
     // MARK: - 댓글 등록 중 광고 차단 잠시 끄기
@@ -1260,8 +1259,6 @@ extension WebViewModel: WKScriptMessageHandler {
             if !urls.isEmpty {
                 imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url)
             }
-        case "postactions":   // 글 아래 수정·삭제 버튼이 있는지 (본인 글 / 유동 글)
-            postEditable = body["edit"] as? Bool ?? false
         case "automemo":   // 자동메모: 글 목록에서 메모 없는 로그인 계정을 아이디로 메모
             MemoStore.shared.addAuto(body["items"] as? [[String: Any]] ?? [])
         case "anon":   // 유동 닉네임/비밀번호를 입력하면 기억 (다음에 빈 칸이면 채움)
@@ -1384,7 +1381,6 @@ extension WebViewModel: WKNavigationDelegate {
 
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        postEditable = false
         if AdBlock.paused {
             adResumeTask?.cancel()
             AdBlock.setPaused(false, controller: webView.configuration.userContentController)

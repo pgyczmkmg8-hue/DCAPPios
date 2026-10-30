@@ -1179,7 +1179,6 @@ struct BrowserView: View {
     /// 글 볼 때 오른쪽 아래(하단 바 위)에 떠 있는 댓글 새로고침 버튼
     private var refreshButtonPlaced: some View {
         VStack(spacing: 2) {
-            if showsPostEdit { postEditButtons { floatIcon($0, tint: $1) } }
             Button { refreshTapped() } label: {
                 floatIcon("arrow.clockwise", tint: .primary)
             }
@@ -1251,15 +1250,6 @@ struct BrowserView: View {
     /// 새로고침 버튼을 보일 화면: 글 보기 + 글 목록
     private var showsRefresh: Bool { isPostPage || isListPage }
 
-    /// 글 보기에서 수정·삭제 버튼을 보일지 (본인 글 / 유동 글 — 디시가 수정·삭제 버튼을 준 글)
-    private var showsPostEdit: Bool { isPostPage && model.postEditable }
-
-    /// 수정 · 삭제 버튼 (댓글 새로고침 버튼 위에 같이 묶음). 아이콘 모양은 호출한 쪽이 정함
-    @ViewBuilder
-    private func postEditButtons<I: View>(@ViewBuilder icon: @escaping (String, Color) -> I) -> some View {
-        Button { model.postModify() } label: { icon("square.and.pencil", .primary) }
-        Button { model.postDelete() } label: { icon("trash", .red) }
-    }
 
     /// 상단바 양옆 버튼 칸 (제목 가운데 맞춤용)
     static let topSlotWidth: CGFloat = 28
@@ -1397,10 +1387,6 @@ struct BrowserView: View {
     /// 접어 둔 컨트롤바(전개 버튼) — 글 볼 때는 댓글 새로고침과 한 덩어리 (위: 새로고침, 아래: 펼치기)
     private var collapsedBarCore: some View {
         VStack(spacing: 0) {
-            if showsPostEdit {
-                postEditButtons { name, _ in collapsedIcon(name) }
-                Divider().frame(width: 28)
-            }
             if showsRefresh {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1806,10 +1792,17 @@ struct BrowserView: View {
                           systemImage: isFavorite ? "star.fill" : "star")
                 }
             }
-            if currentGallery != nil {
+            // 글 보기에서는 '갤러리 공지' 자리에 신고하기
+            if isPostPage {
+                Button { model.reportPost() } label: {
+                    Label("신고하기", systemImage: "exclamationmark.bubble")
+                }
+            } else if currentGallery != nil {
                 Button { model.openNotice() } label: {
                     Label("갤러리 공지 보기", systemImage: "megaphone")
                 }
+            }
+            if currentGallery != nil {
                 Button { model.openManageLog() } label: {
                     Label("갤러리 관리 내역", systemImage: "list.bullet.clipboard")
                 }
