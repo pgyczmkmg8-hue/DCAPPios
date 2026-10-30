@@ -385,6 +385,10 @@ struct NativeWriteView: View {
                 }
             }
         }
+        // 제목 칸에 커서가 있을 때 본문 칸을 눌러 편집이 시작되면 제목 포커스를 풀어 커서를 본문으로 옮김
+        .onChange(of: session.editingRich) { _, on in
+            if on, focus == .title { focus = nil }
+        }
     }
 
     // MARK: 상단 (테마색): ← … 임시 등록 / 유동 닉네임·비밀번호
