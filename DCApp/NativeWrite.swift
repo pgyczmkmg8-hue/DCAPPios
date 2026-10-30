@@ -501,7 +501,7 @@ struct NativeWriteView: View {
                     .focused($focus, equals: .title)
                     .submitLabel(.next)
                     .onSubmit { focus = nil; session.focusFirstText() }
-                    .padding(.horizontal, 16).padding(.vertical, 16)
+                    .padding(.horizontal, 8).padding(.vertical, 16)
                 Rectangle().fill(DCTheme.navy.opacity(0.7)).frame(height: 1)
 
                 if session.hasCaptcha { captchaRow }
@@ -518,7 +518,7 @@ struct NativeWriteView: View {
                                 .overlay(alignment: .topLeading) {
                                     if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
                                         Text("내용").font(.system(size: 17)).foregroundStyle(Color(uiColor: .placeholderText))
-                                            .padding(.leading, 16).padding(.top, 12)
+                                            .padding(.leading, 8).padding(.top, 12)
                                             .allowsHitTesting(false)
                                     }
                                 }

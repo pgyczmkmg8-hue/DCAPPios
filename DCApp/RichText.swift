@@ -117,7 +117,7 @@ struct RichTextView: UIViewRepresentable {
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.font = UIFont.systemFont(ofSize: RichText.baseSize)
-        tv.textContainerInset = UIEdgeInsets(top: 12, left: 11, bottom: 12, right: 11)
+        tv.textContainerInset = UIEdgeInsets(top: 12, left: 3, bottom: 12, right: 3)
         tv.textContainer.lineFragmentPadding = 0      // 글자·커서가 제목·'내용' 자리표시와 같은 줄(왼쪽 16)에서 시작
         tv.tintColor = UIColor(DCTheme.accent)        // 커서·선택 색을 테마에 맞춤
         tv.typingAttributes = RichText.baseAttributes
