@@ -76,6 +76,9 @@ struct AboutView: View {
             Divider()
             Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
                 .padding(.vertical, 10)
+            Divider()
+            Toggle("성능 숫자 보이기 (메모리·CPU)", isOn: $showPerfHUD)
+                .padding(.vertical, 10)
         }
         .padding(.horizontal, 16)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -113,6 +116,7 @@ struct AboutView: View {
     @State private var confetti = 0
     @State private var image: (name: String, image: UIImage)? = AboutView.pickImage()
     @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
+    @AppStorage("showPerfHUD") private var showPerfHUD = false
     @AppStorage(AdBlock.key) private var adBlock = true
     /// 광고 차단 스위치는 처음엔 숨김 — 사진을 10번 누르면 나타나고 그 뒤로 계속 보임
     @AppStorage("adBlockUnlocked") private var adBlockUnlocked = false

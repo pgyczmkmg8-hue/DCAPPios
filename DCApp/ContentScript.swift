@@ -102,6 +102,13 @@ enum ContentScript {
       'html.darkmode .dcapp-meta i{background:#55565c}',
       'html.darkmode .dcapp-cmtbox{border-color:#55565c;color:#9db0ff}',
       // 개념/비추 버튼: 네모 칸(아이콘 칸 | 숫자) + 실베추·펌·신고는 아이콘만
+      // 글 본문 가독성: 제목·본문 글씨를 키우고 줄 간격을 넓히고, 사진은 가로 폭에 맞춤 (공식앱처럼)
+      '.gallview-tit-box .tit{font-size:20px!important;line-height:1.4!important;font-weight:700!important}',
+      '.thum-txtin{font-size:17px!important;line-height:1.7!important;word-break:keep-all}',
+      '.thum-txtin img{max-width:100%!important;height:auto!important}',
+      '.gall-thum-btm{padding-top:14px!important}',
+      // 댓글 입력 칸: 댓글은 앱의 댓글 도구로 쓰므로 웹 칸은 한 줄짜리로 줄임
+      '#comment_memo.comment-caption{height:44px!important;min-height:0!important;max-height:44px!important;resize:none!important;overflow:hidden!important;white-space:nowrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
       '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
@@ -2775,7 +2782,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v123-voteflex', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v125-cmtline', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

@@ -98,6 +98,7 @@ struct RootView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var favorites: FavoritesStore
     @AppStorage("compactMode") private var compactMode = false
+    @AppStorage("showPerfHUD") private var showPerfHUD = false
     /// 테마가 바뀌면 화면을 새로 그려 상단바·강조색에 바로 반영
     @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
     @Environment(\.colorScheme) private var systemScheme
@@ -191,6 +192,11 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardVisible = false
+        }
+        .overlay(alignment: .top) {
+            if showPerfHUD {
+                PerfHUDView().padding(.top, 4)   // 상단바 위 상태바 줄 바로 아래
+            }
         }
         .animation(.spring(duration: 0.35), value: compactMode)
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
