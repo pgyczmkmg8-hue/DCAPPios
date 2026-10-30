@@ -157,9 +157,12 @@ enum ContentScript {
       '.dcapp-vicons{display:flex;gap:0;margin-left:0;flex:none}',
       '.dcapp-vicons button{width:26px;height:28px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
       '.dcapp-vicons svg{width:18px;height:18px}',
-      '.dcapp-vmain{display:flex;align-items:center;gap:5px;flex:none}',
+      '.dcapp-vmain{display:flex;align-items:center;gap:5px;flex:none;justify-self:center;grid-row:1;grid-column:2}',
+      // 개추/비추는 가운데, 실베추·펌은 오른쪽, 수정·삭제는 그 아래 줄 가운데
+      '.dcapp-vote{display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 12px!important}',
+      '.dcapp-vicons{justify-self:end;grid-row:1;grid-column:3;display:flex;gap:0;margin:0!important}',
       '.dcapp-vote{padding:0 12px}',
-      '.dcapp-postact{display:flex;gap:4px;margin-left:auto;padding-left:16px;flex:none}',
+      '.dcapp-postact{display:flex;gap:4px;grid-row:2;grid-column:1 / -1;justify-self:center;margin:8px 0 0!important;padding:0!important;flex:none}',
       '.dcapp-postact button{height:26px;padding:0 9px;border:1px solid #c9c9cf;border-radius:5px;background:none;color:#3b4890;font-size:13px;font-weight:600}',
       '.dcapp-postact button.del{color:#e53935;border-color:#e8b4b1}',
       'html.darkmode .dcapp-postact button{border-color:#55565c;color:#9db0ff}',
@@ -1437,8 +1440,8 @@ enum ContentScript {
         '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
         (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="8" dominant-baseline="central" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
         (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
-        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>' +
-        '</div>';
+        '</div>' +
+        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
       area.parentNode.insertBefore(v, area);
       v.addEventListener('click', function (e) {
         var pa = e.target.closest ? e.target.closest('[data-p]') : null;
@@ -2997,7 +3000,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v148-memoafter', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v150-postbelow', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

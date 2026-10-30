@@ -664,7 +664,7 @@ struct NativeWriteView: View {
                         .padding(8)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 8)
+            .padding(.horizontal, 8).padding(.vertical, 8)
             // 길게 눌러 끌면 위치 이동
             .draggable(WriteBlockDrag(id: blockID)) {
                 imagePicture(img)
