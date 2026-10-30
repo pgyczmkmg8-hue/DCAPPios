@@ -84,7 +84,7 @@ enum ContentScript {
       '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
       '.dcapp-dory{display:none!important}',
       // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
-      '.dcapp-memo{display:inline;margin:0 8px 0 4px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
+      '.dcapp-memo{display:inline;margin:0 8px 0 8px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
       'html.darkmode .dcapp-memo{color:#ffaa45}',
       // 글 제목 블록: 폴더(스크랩)·갤로그 가기 숨김, 닉네임 아래 한 줄에 조회수|추천|작성일, 오른쪽에 댓글 수 칸
       '.gallview-tit-box .btm{display:flex!important;align-items:center;justify-content:space-between}',
@@ -3000,7 +3000,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v150-postbelow', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v151-memogap', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
