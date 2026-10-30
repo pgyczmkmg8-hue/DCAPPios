@@ -13,10 +13,10 @@ struct RichFormat: Equatable {
 }
 
 enum RichText {
-    static let baseSize: CGFloat = 17
+    static let baseSize: CGFloat = 14
     /// 글자 크기 고르기 (화면 크기 / 디시에 보낼 px)
     static let sizes: [(name: String, size: CGFloat, px: Int?)] = [
-        ("작게", 13, 11), ("보통", 17, nil), ("크게", 22, 18), ("아주 크게", 28, 24),
+        ("작게", 13, 11), ("보통", 14, nil), ("크게", 22, 18), ("아주 크게", 28, 24),
     ]
     /// 글자 색 고르기 (nil = 기본색)
     static let colors: [(name: String, hex: String?)] = [

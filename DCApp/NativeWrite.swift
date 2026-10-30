@@ -517,7 +517,7 @@ struct NativeWriteView: View {
                                 .padding(.horizontal, 5)
                                 .overlay(alignment: .topLeading) {
                                     if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
-                                        Text("내용").font(.system(size: 17)).foregroundStyle(Color(uiColor: .placeholderText))
+                                        Text("내용").font(.system(size: 14)).foregroundStyle(Color(uiColor: .placeholderText))
                                             .padding(.leading, 8).padding(.top, 12)
                                             .allowsHitTesting(false)
                                     }
@@ -748,6 +748,13 @@ struct NativeWriteView: View {
                         .contentShape(Rectangle())
                     }
                     .accessibilityLabel("글자 색")
+                    // 글자 색 옆: 잘못 눌리지 않게 앞에 빈 공간을 두고 디시 원래 화면 버튼
+                    Button { dismissKeyboard(); model.switchToWebWrite() } label: {
+                        toolIcon("safari", on: false)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("디시 원래 화면으로 쓰기")
+                    .padding(.leading, 44)
                 }
                 .padding(.horizontal, 6)
                 .padding(.trailing, 34)
@@ -777,13 +784,6 @@ struct NativeWriteView: View {
                 }
                 .buttonStyle(.plain)
             }
-            // 맨 오른쪽: 디시 원래 글쓰기 화면으로
-            Button { dismissKeyboard(); model.switchToWebWrite() } label: {
-                toolIcon("safari", on: false)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("디시 원래 화면으로 쓰기")
-            .padding(.trailing, 4)
         }
         .frame(height: 50)
         .background(Color(uiColor: Self.toolbarBackground).ignoresSafeArea(edges: .bottom))
