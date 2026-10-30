@@ -645,17 +645,9 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 디시의 댓글 ⟳ 버튼을 대신 누르고, 못 찾으면 페이지를 새로고침한 뒤 댓글 위치로 이동
     func refreshComments() {
-        Task {
-            let r = await call("return window.__dcapp ? window.__dcapp.refreshComments() : 'none';") as? String
-            if r == "scrolled" {
-                // 댓글창으로 이동만 함 (새로고침은 다음에 한 번 더 누르면)
-            } else if r == "clicked" {
-                showToast("댓글을 새로고침했어요")
-            } else {
-                scrollToCommentsAfterLoad = true
-                reload()
-            }
-        }
+        // 댓글만 다시 받으면 다른 기기에서 쓴 새 댓글이 안 보여서, 글을 다시 불러온 뒤 댓글 쪽으로 이동
+        scrollToCommentsAfterLoad = true
+        reload()
     }
 
     /// 글 신고: 디시의 신고 창을 그대로 띄움

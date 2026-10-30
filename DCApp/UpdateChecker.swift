@@ -8,6 +8,8 @@ nonisolated struct AppRelease: Identifiable, Sendable {
     let pageURL: URL         // 릴리스 페이지
     let ipaURL: URL?         // 첨부한 ipa 파일 (있으면)
     var id: String { version }
+    /// 릴리스 글의 '필수 업데이트' 기준 (있으면 이 빌드 이하는 건너뛰기와 상관없이 무조건 알림)
+    var requiredUpTo: String? { UpdateChecker.requiredUpTo(notes) }
 }
 
 /// 앱을 열 때(백그라운드에서 돌아올 때 포함) GitHub Releases의 최신 버전을 확인해서,
@@ -63,9 +65,20 @@ enum UpdateChecker {
            Calendar.current.isDateInToday(last) { return nil }
         guard let latest = await fetchLatest() else { return nil }   // 실패하면 다음에 열 때 다시
         defaults.set(Date(), forKey: lastCheckKey)
+        // 필수 업데이트: 지금 빌드가 기준 빌드 이하면 버전이 같아도, 건너뛰기를 했어도 무조건 알림
+        if let need = latest.requiredUpTo, !isNewer(currentFullVersion, than: need) { return latest }
         guard isVersionNewer(latest.version, than: currentVersion),   // 빌드만 바뀐 건(0.9.0.14 → 0.9.0.15) 조용히
               defaults.string(forKey: skippedKey) != latest.version else { return nil }
         return latest
+    }
+
+    /// 릴리스 글에서 '필수 업데이트' 기준 버전 찾기 — 예: "bug fix: ~0.9.3.3" → "0.9.3.3"
+    /// ('bug fix:' 또는 '필수 업데이트:' 뒤의 버전, 앞의 ~ 와 v는 무시)
+    nonisolated static func requiredUpTo(_ notes: String) -> String? {
+        guard let re = try? NSRegularExpression(pattern: #"(?im)^\s*(?:bug\s*fix|필수\s*업데이트)\s*[:：]\s*~?\s*v?(\d+(?:\.\d+)*)"#),
+              let m = re.firstMatch(in: notes, range: NSRange(notes.startIndex..., in: notes)),
+              let r = Range(m.range(at: 1), in: notes) else { return nil }
+        return String(notes[r])
     }
 
     static func skip(_ version: String) {

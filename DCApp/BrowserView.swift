@@ -1022,7 +1022,11 @@ struct BrowserView: View {
     private var topTitle: some View {
         HStack(spacing: 6) {
             if isHomeScreen {
-                // 홈: 페이지 제목(connecting… 등) 대신 앱 이름
+                // 홈: 페이지 제목(connecting… 등) 대신 앱 이름 (글자 옆에 로고 그림)
+                Image("HomeLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 36)
                 Text("dcAPP").fontWeight(.heavy).italic()
             } else {
                 Text(titleParts.name).lineLimit(1)
@@ -2058,12 +2062,20 @@ extension View {
 /// 컨트롤바 유리: 기본은 가장 투명한 .clear, 설정의 '유리 진하기'를 올리면 밝은 막이 더해짐
 private struct GlassBarModifier: ViewModifier {
     @AppStorage("barGlassTint") private var tint = 0.0
+    @Environment(\.colorScheme) private var colorScheme
 
     @ViewBuilder
     func body(content: Content) -> some View {
         let wash = Color(uiColor: .systemBackground).opacity(tint * 0.6)
         if #available(iOS 26.0, *) {
-            content.glassEffect(.clear.interactive().tint(wash), in: Capsule())
+            // 다크모드에서는 투명 유리가 흐려 안 보여서 불투명한 기본 유리(.regular)를 씀
+            if colorScheme == .dark {
+                content.glassEffect(.regular.interactive(), in: Capsule())
+            } else if tint > 0 {
+                content.glassEffect(.clear.interactive().tint(wash), in: Capsule())
+            } else {
+                content.glassEffect(.clear.interactive(), in: Capsule())
+            }
         } else {
             content
                 .background(.ultraThinMaterial, in: Capsule())

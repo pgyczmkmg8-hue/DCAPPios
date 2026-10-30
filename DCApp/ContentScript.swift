@@ -142,30 +142,46 @@ enum ContentScript {
       'html.darkmode #dcapp-nextrow{color:#eee;border-color:#3d3d41}',
       'html.darkmode #dcapp-nextrow a{color:#eee}',
       'html.darkmode .dcapp-more-btn{border-color:#55565c;color:#9db0ff}',
+      // 홈 순위 외형: 앱 테마 색·글씨에 맞춤
+      '#rank_tap,#rank_gall_type{background:#fff!important;border-bottom:1px solid #e6e6ea!important}',
+      '#rank_tap .tab-lst li a,#rank_gall_type .tab-lst li a{color:#8a8a90;font-weight:600}',
+      '#rank_tap .tab-lst li.on a,#rank_gall_type .tab-lst li.on a{color:#3b4890}',
+      '#swiper-rank .tab-child-lst li{border-bottom:1px solid #f0f0f3}',
+      '#swiper-rank .tab-child-lst li a{padding:10px 16px!important;font-size:15px!important;color:#222!important}',
+      '#swiper-rank .tab-child-lst .num{color:#3b4890;font-weight:700;margin-right:6px}',
+      'html.darkmode #rank_tap,html.darkmode #rank_gall_type{background:#2d2d30!important;border-color:#3d3d41!important}',
+      'html.darkmode #swiper-rank .tab-child-lst li{border-color:#3d3d41}',
+      'html.darkmode #swiper-rank .tab-child-lst li a{color:#eee!important}',
+      // 홈 순위 영역은 좌우 넘김만 되고, 위아래 스크롤은 막음 (touch-action: pan-x)
+      '#swiper-rank,#swiper-hot{touch-action:pan-x!important}',
+      // 넓은 화면(아이패드 가로)에서 좌우에 보이던 회색 여백을 흰색으로
+      'html:not(.darkmode),html:not(.darkmode) body{background-color:#fff!important}',
+      // 홈 순위 아래 좌우 화살표는 필요 없어서 숨김
+      '#gallrank_btprev,#gallrank_btnext,#gallhot_btprev,#gallhot_btnext,#livebest_btprev_rank,#livebest_btnext_rank,#livebest_btprev2_rank,#livebest_btnext2_rank{display:none!important}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
-      '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
+      '.dcapp-vbox{display:flex;align-items:stretch;height:30px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
       '.dcapp-vcell{width:28px;flex:none;border:0;border-right:1px solid #c9c9cf;background:#ececf0;color:#3b4890;display:flex;align-items:center;justify-content:center;padding:0}',
       '.dcapp-vbox.down .dcapp-vcell{color:#8a8a90}',
       '.dcapp-vcell svg{width:16px;height:16px}',
       '.dcapp-vcell.on{background:#3b4890;color:#ffd54a}',
       '.dcapp-vcell.on svg path{fill:#ffd54a}',
-      '.dcapp-vnum{display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;min-width:30px;padding:0 6px;font-size:13px;line-height:1;color:#3b4890}',
+      '.dcapp-vnum{display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;min-width:0;padding:0 8px;font-size:16px;line-height:1;color:#3b4890}',
       '.dcapp-vbox.down .dcapp-vnum{color:#8a8a90}',
-      '.dcapp-vmem{display:flex;align-items:center;justify-content:center;white-space:nowrap;gap:3px;padding:0 6px 0 0;font-size:13px;line-height:1;color:#3b4890}',
+      '.dcapp-vmem{display:flex;align-items:center;justify-content:center;white-space:nowrap;gap:3px;padding:0 6px 0 0;font-size:16px;line-height:1;color:#3b4890}',
       '.dcapp-vmem::before{content:"";width:1px;height:12px;background:#d8d8dd;margin-right:6px}',
-      '.dcapp-vmem svg{width:12px;height:12px;flex:none}',
+      '.dcapp-vmem svg{width:14px;height:14px;flex:none}',
       '.dcapp-vmem b{font-weight:normal}',
       '.dcapp-vicons{display:flex;gap:0;margin-left:0;flex:none}',
-      '.dcapp-vicons button{width:26px;height:28px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
+      '.dcapp-vicons button{width:39px;height:32px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
       '.dcapp-vicons svg{width:18px;height:18px}',
       '.dcapp-vmain{display:flex;align-items:center;gap:5px;flex:none;justify-self:center;grid-row:1;grid-column:2}',
       // 개추/비추는 가운데, 실베추·펌은 오른쪽, 수정·삭제는 그 아래 줄 가운데
       '.dcapp-vote{display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 12px!important}',
-      '.dcapp-vicons{justify-self:end;grid-row:1;grid-column:3;display:flex;gap:0;margin:0!important}',
+      '.dcapp-vicons{display:flex;gap:0;margin:0!important;flex:none}',
       '.dcapp-vote{padding:0 12px}',
-      '.dcapp-postact{display:flex;gap:4px;grid-row:2;grid-column:1 / -1;justify-self:center;margin:8px 0 0!important;padding:0!important;flex:none}',
-      '.dcapp-postact button{height:26px;padding:0 9px;border:1px solid #c9c9cf;border-radius:5px;background:none;color:#3b4890;font-size:13px;font-weight:600}',
+      '.dcapp-postact{display:flex;gap:4px;grid-row:2;grid-column:1 / -1;justify-self:end;margin:16px 0 0!important;padding:0!important;flex:none}',
+      '.dcapp-postact button{width:69px;height:26px;padding:0;border:1px solid #c9c9cf;border-radius:5px;background:none;color:#3b4890;font-size:13px;font-weight:600}',
       '.dcapp-postact button.del{color:#e53935;border-color:#e8b4b1}',
       'html.darkmode .dcapp-postact button{border-color:#55565c;color:#9db0ff}',
       'html.darkmode .dcapp-postact button.del{color:#ff7b72;border-color:#6b4a48}',
@@ -208,7 +224,6 @@ enum ContentScript {
     var fs = cfg.fontSizes || {};
     if (fs.title) rules.push('.gallview-tit-box .tit{font-size:' + fs.title + 'px!important}');
     if (fs.body) rules.push('.thum-txtin{font-size:' + fs.body + 'px!important}');
-    if (fs.cmt) rules.push('li.comment .txt{font-size:' + fs.cmt + 'px!important}');
     if (fs.list) rules.push('.gall-detail-lst .subjectin{font-size:' + fs.list + 'px!important}');
     return rules.join('\n');
   }
@@ -658,6 +673,18 @@ enum ContentScript {
     targets.forEach(function (el) { if (el) el.classList.add('dcapp-hide', 'dcapp-header-hidden'); });
   }
 
+  // ---------- 홈 순위: 한 페이지에 10칸(5칸 두 줄)이 보이도록 좌우 넘김을 두 칸 단위로 ----------
+  function homeRankTwoUp() {
+    if (!isHomePage()) return;
+    [window.swiper, window.swiper_hot].forEach(function (sw) {
+      if (!sw || !sw.params || !sw.el) return;
+      if (sw.params.slidesPerView === 2) return;
+      sw.params.slidesPerView = 2;
+      sw.params.slidesPerGroup = 2;
+      try { sw.update(); } catch (e) {}
+    });
+  }
+  
   // ---------- 홈 화면 → 실북갤 순위만 (펼친 상태) ----------
   function isHomePage() {
     return /(^|\.)m\.dcinside\.com$/.test(location.hostname) && /^\/(index(\.php)?)?$/.test(location.pathname);
@@ -1225,6 +1252,14 @@ enum ContentScript {
     ta.focus();
     if (document.activeElement !== ta) { ta.blur(); ta.focus(); }
   }
+  // 화면에 보이는 댓글 머리글 (디시가 다시 그리면 옛 머리글이 남아 있을 수 있어서 보이는 것을 고름)
+  function commentHeader() {
+    var hs = document.querySelectorAll('.all-comment-tit');
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].querySelector('.tit-box') && hs[i].getBoundingClientRect().height > 0) return hs[i];
+    }
+    return hs.length ? hs[0] : null;
+  }
   function buildCommentInputBtn() {
     if (!cmtInputBound) {
       cmtInputBound = true;
@@ -1236,8 +1271,11 @@ enum ContentScript {
         focusCommentInput();
       }, true);
     }
-    var tb = document.querySelector('.all-comment-tit .tit-box');
-    if (!tb || document.querySelector('.dcapp-cmtin')) return;
+    var hdr = commentHeader();
+    var tb = hdr && hdr.querySelector('.tit-box');
+    if (!tb) return;
+    document.querySelectorAll('.dcapp-cmtin').forEach(function (x) { if (!hdr.contains(x)) x.parentNode.removeChild(x); });
+    if (hdr.querySelector('.dcapp-cmtin')) return;
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'dcapp-cmtin';
@@ -1248,10 +1286,15 @@ enum ContentScript {
   // ---------- 댓글 정렬: 등록순 / 최신순 / 답글순을 체크 버튼으로 (기본 등록순, 선택은 파란색) ----------
   var SORT_ITEMS = [['default', '등록순'], ['new', '최신순'], ['reply', '답글순']];
   var SORT_CHECK = '<svg viewBox="0 0 16 16"><path d="M3 8.4l3.2 3.2L13 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function rebuildCommentHeader() {
+    try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
+  }
   function buildCommentSort() {
-    var sel = document.querySelector('.all-comment-tit select.sel');
-    var rt = document.querySelector('.all-comment-tit .rt');
+    var hdr = commentHeader();
+    var sel = hdr && hdr.querySelector('select.sel');
+    var rt = hdr && hdr.querySelector('.rt');
     if (!sel || !rt) return;
+    document.querySelectorAll('.dcapp-sort').forEach(function (x) { if (!rt.contains(x)) x.parentNode.removeChild(x); });
     var box = rt.querySelector('.dcapp-sort');
     if (!box) {
       box = document.createElement('div');
@@ -1262,9 +1305,14 @@ enum ContentScript {
         b.setAttribute('data-v', it[0]);
         b.innerHTML = '<span class="dcapp-sort-ic"></span>' + it[1];
         b.addEventListener('click', function () {
-          sel.value = it[0];
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          buildCommentSort();
+          // 머리글이 다시 그려졌을 수 있으니 누른 순간의 정렬 select를 찾아서 바꿈 (만들 때의 select는 옛것일 수 있음)
+          var cur = commentHeader();
+          var live = cur && cur.querySelector('select.sel');
+          if (!live) return;
+          live.value = it[0];
+          live.dispatchEvent(new Event('change', { bubbles: true }));
+          // 디시가 댓글 머리글을 새로 그린 뒤에도 버튼이 남도록, 조금 뒤에 몇 번 더 다시 만듦
+          [0, 300, 1000].forEach(function (ms) { setTimeout(rebuildCommentHeader, ms); });
         });
         box.appendChild(b);
       });
@@ -1325,10 +1373,14 @@ enum ContentScript {
     }
     var cached = null;
     try { cached = JSON.parse(sessionStorage.getItem(listCacheKey(gid)) || 'null'); } catch (e) {}
+    var newer = null;
+    if (cached) cached.forEach(function (x) { if (x.no > no && (!newer || x.no < newer.no)) newer = x; });
+    // 내용이 같으면 DOM을 건드리지 않음 — 매번 다시 그리면 변화 감지(MutationObserver)가 apply를 또 불러서 무한 반복되고, 그 사이 댓글 탭이 씹힘
+    var key = !cached ? '' : kind + '/' + gid + '/' + (newer ? newer.no + ':' + newer.t : '-');
+    if (row.getAttribute('data-k') === key) return;
+    row.setAttribute('data-k', key);
     if (!cached) { row.style.display = 'none'; return; }   // 목록을 본 기록이 없으면 숨김
     row.style.display = '';
-    var newer = null;
-    cached.forEach(function (x) { if (x.no > no && (!newer || x.no < newer.no)) newer = x; });
     row.textContent = '';
     var label = document.createElement('span');
     label.className = 'dcapp-nlabel';
@@ -1442,8 +1494,8 @@ enum ContentScript {
         '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
         (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="8" dominant-baseline="central" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
         (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
-        '</div>' +
-        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
+        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>' +
+        '</div>';
       area.parentNode.insertBefore(v, area);
       v.addEventListener('click', function (e) {
         var pa = e.target.closest ? e.target.closest('[data-p]') : null;
@@ -1479,6 +1531,7 @@ enum ContentScript {
   function apply() {
     ensureStyle();
     try { buildArticleHead(); buildVote(); } catch (e) {}
+    try { homeRankTwoUp(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
     try { cacheListIds(); buildNextPrev(); } catch (e) {}
@@ -2064,8 +2117,9 @@ enum ContentScript {
   }
   document.addEventListener('focusin', function (e) {
     if (cfg.dockComment === false) return;
-    var f = commentFieldNear(e.target);
-    if (f) dockOn(f);
+    var f = commentFieldNear(e.target), tapped = e.target;
+    // 포커스가 잡히는 순간 레이아웃을 바꾸면 iOS가 키보드를 안 띄워서, 키보드가 올라온 뒤에 붙임
+    if (f) setTimeout(function () { if (document.activeElement === tapped) dockOn(f); }, 150);
   }, true);
 
   // 디시콘 버튼을 누르면 고정을 풀고(디시 원래 방식대로 목록이 펼쳐지게) 목록이 보이도록 스크롤
@@ -2205,13 +2259,15 @@ enum ContentScript {
   }, true);
   // 댓글창 바깥을 누르면 원래 자리로
   // (키보드 위 ✓ 버튼을 없앴으므로 바깥을 누르면 키보드도 내려감)
-  document.addEventListener('touchstart', function (e) {
-    if (dock.el && !dock.el.contains(e.target)) {
+  // 터치 시작 때 바로 풀면 누르는 도중에 레이아웃이 바뀌어 탭(답글 열기 등)이 씹힘 → 클릭이 끝난 뒤에 풀기
+  document.addEventListener('click', function (e) {
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (dock.el && !(t && dock.el.contains(t))) {
       var a = document.activeElement;
       if (a && dock.el.contains(a) && a.blur) a.blur();
       undock();
     }
-  }, { capture: true, passive: true });
+  }, true);
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', positionDock);
     window.visualViewport.addEventListener('scroll', positionDock);
@@ -2436,13 +2492,18 @@ enum ContentScript {
     var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
     var li = t && t.closest ? t.closest('li.comment, li.comment-add') : null;
     if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area')) return;   // 답글 칸 자체는 제외
+    // 남아 있던 글자 선택은 풀고 진행 (선택이 남아 있어서 첫 탭이 무시되던 문제)
     var sel = window.getSelection && window.getSelection();
-    if (sel && !sel.isCollapsed && String(sel).trim()) return;          // 꾹 눌러 글자 선택 중이면 제외
-    var ta = openedReplyArea(li);
-    if (!ta) return;
-    replyFocusTarget = ta;
-    focusReply();
-    post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
+    if (sel && !sel.isCollapsed) { try { sel.removeAllRanges(); } catch (x) {} }
+    // 디시가 답글 칸을 열 때 조금 늦게 만들 수 있어서, 칸이 생길 때까지 잠깐 기다렸다가 포커스 (첫 탭에서 안 열리던 문제)
+    var replyTries = 0;
+    (function waitForReply() {
+      var ta = openedReplyArea(li);
+      if (!ta) { if (++replyTries < 20) setTimeout(waitForReply, 60); return; }
+      replyFocusTarget = ta;
+      var focused = focusReply();
+      post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
+    })();
   }, false);
 
   // 알림 거르기용: 그 글을 불러와 해당 댓글의 작성자(닉네임·IP·아이디)를 알려줌 (못 찾으면 null)
@@ -2467,13 +2528,18 @@ enum ContentScript {
       .catch(function () { return null; });
   }
   function refreshComments() {
-    // 새로고침 버튼이 안 보이면 페이지를 다시 불러오지 말고 댓글 목록만 다시 받고 댓글 최상단으로
+    // 댓글만 다시 받음 (디시 댓글 새로고침 버튼, 없으면 댓글 목록 다시 받기) — 화면 위치는 그대로 둠
     var box = document.getElementById('comment_box');
     var b = commentRefreshButton();
+    // 다시 받는 동안 디시 쪽 동작(포커스·스크롤)으로 화면이 튀면 처음 위치로 되돌림
+    var y = window.scrollY, tries = 0;
+    var keep = setInterval(function () {
+      if (Math.abs(window.scrollY - y) > 2) window.scrollTo(0, y);
+      if (++tries >= 20) clearInterval(keep);
+    }, 100);
     if (b) b.click();
     else if (box && typeof window.comment_list === 'function') window.comment_list(0);
-    else if (!box) return 'none';
-    if (box) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    else { clearInterval(keep); return 'none'; }
     return 'clicked';
   }
   function scrollToComments() {
@@ -3002,7 +3068,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v152-listmemo', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v183-cmtfixed', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

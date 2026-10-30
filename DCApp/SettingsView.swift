@@ -451,10 +451,9 @@ struct DetailSettingsView: View {
             Section {
                 FontSizeRow(title: "제목", key: "textSizeTitle", base: 18)
                 FontSizeRow(title: "본문", key: "textSizeBody", base: 16)
-                FontSizeRow(title: "댓글", key: "textSizeComment", base: 14)
                 FontSizeRow(title: "목록", key: "textSizeList", base: 14)
                 Button("기본으로 되돌리기", role: .destructive) {
-                    for key in ["textSizeTitle", "textSizeBody", "textSizeComment", "textSizeList"] {
+                    for key in ["textSizeTitle", "textSizeBody", "textSizeList"] {
                         UserDefaults.standard.set(0, forKey: key)
                     }
                     NotificationCenter.default.post(name: DC.filtersChanged, object: nil)

@@ -104,7 +104,6 @@ struct RootView: View {
     @Environment(\.colorScheme) private var systemScheme
     /// GitHub에 새 버전이 있으면 알림창
     @State private var availableUpdate: AppRelease?
-    @State private var updateArt: UIImage?
     /// 처음 켰을 때 기능 소개 (한 번 보면 다시 안 뜸)
     @AppStorage(Tutorial.seenKey) private var tutorialSeen = false
     @State private var showTutorial = false
@@ -271,11 +270,8 @@ struct RootView: View {
         }
         .overlay {
             if let r = availableUpdate {
-                UpdateCard(release: r, image: updateArt) { availableUpdate = nil }
+                UpdateCard(release: r) { availableUpdate = nil }
             }
-        }
-        .onChange(of: availableUpdate?.id) { _, id in
-            if id != nil { updateArt = UpdateArt.random() }   // 알림창을 띄울 때마다 그림을 새로 고름
         }
         .onReceive(NotificationCenter.default.publisher(for: DCNotify.openURL)) { note in
             if let url = note.object as? URL { DCNotify.pendingURL = nil; router.open(url) }
