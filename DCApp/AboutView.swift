@@ -77,9 +77,11 @@ struct AboutView: View {
             Divider()
             Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
                 .padding(.vertical, 10)
-            Divider()
-            Toggle("성능 숫자 보이기 (메모리·CPU)", isOn: $showPerfHUD)
-                .padding(.vertical, 10)
+            if PerfHUDSettings.toggleVisible {
+                Divider()
+                Toggle("성능 숫자 보이기 (메모리·CPU)", isOn: $showPerfHUD)
+                    .padding(.vertical, 10)
+            }
         }
         .padding(.horizontal, 16)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))

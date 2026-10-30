@@ -4,6 +4,10 @@ import WebKit
 import Darwin
 
 /// 디버그용 성능 숫자: 앱 메모리(phys_footprint)와 CPU 사용률 (설정 → 버전 정보에서 켬)
+/// 설정의 토글을 보여줄지. 릴리즈에서는 false로 숨기고, 테스트 빌드에서만 true로 바꿔서 빌드
+enum PerfHUDSettings {
+    static let toggleVisible = false
+}
 /// 웹페이지는 WebKit의 별도 프로세스(WebContent)에서 돌아서 여기 숫자에는 빠짐
 enum PerfSampler {
     nonisolated static func footprintMB() -> Double {

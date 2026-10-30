@@ -194,7 +194,7 @@ struct RootView: View {
             keyboardVisible = false
         }
         .overlay(alignment: .top) {
-            if showPerfHUD {
+            if showPerfHUD && PerfHUDSettings.toggleVisible {
                 PerfHUDView(webView: router.mainBrowser.webView).padding(.top, 4)   // 상단바 위 상태바 줄 바로 아래
             }
         }
