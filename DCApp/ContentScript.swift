@@ -104,13 +104,24 @@ enum ContentScript {
       'html.darkmode .dcapp-cmtbox{border-color:#55565c;color:#9db0ff}',
       // 개념/비추 버튼: 네모 칸(아이콘 칸 | 숫자) + 실베추·펌·신고는 아이콘만
       // 글 본문 가독성: 제목·본문 글씨를 키우고 줄 간격을 넓히고, 사진은 가로 폭에 맞춤 (공식앱처럼)
-      '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:700!important}',
+      '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:400!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:17px!important;line-height:1.7!important;word-break:keep-all}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
+      // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
+      '.all-comment-tit .sp-reload{display:none!important}',
+      '.all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
+      '.dcapp-sort{display:flex;align-items:center;gap:10px}',
+      '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:2px 0;font-size:13px;color:#8a8a90}',
+      '.dcapp-sort button.on{color:#3b4890;font-weight:600}',
+      '.dcapp-sort svg{width:14px;height:14px;flex:none;color:#b5b5bb}',
+      '.dcapp-sort button.on svg{color:#3b4890}',
+      'html.darkmode .dcapp-sort button{color:#a5a5ab}',
+      'html.darkmode .dcapp-sort button.on{color:#9db0ff}',
+      'html.darkmode .dcapp-sort button.on svg{color:#9db0ff}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
       '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
@@ -119,7 +130,7 @@ enum ContentScript {
       '.dcapp-vcell svg{width:16px;height:16px}',
       '.dcapp-vcell.on{background:#3b4890;color:#ffd54a}',
       '.dcapp-vcell.on svg path{fill:#ffd54a}',
-      '.dcapp-vnum{display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;min-width:0;padding:0 6px;font-size:13px;line-height:1;color:#3b4890}',
+      '.dcapp-vnum{display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;min-width:30px;padding:0 6px;font-size:13px;line-height:1;color:#3b4890}',
       '.dcapp-vbox.down .dcapp-vnum{color:#8a8a90}',
       '.dcapp-vmem{display:flex;align-items:center;justify-content:center;white-space:nowrap;gap:3px;padding:0 6px 0 0;font-size:13px;line-height:1;color:#3b4890}',
       '.dcapp-vmem::before{content:"";width:1px;height:12px;background:#d8d8dd;margin-right:6px}',
@@ -1165,6 +1176,41 @@ enum ContentScript {
   }
   document.addEventListener('input', function (e) { try { fitCommentBox(e.target); } catch (err) {} }, true);
 
+  // ---------- 댓글 정렬: 등록순 / 최신순 / 답글순을 체크 버튼으로 (기본 등록순, 선택은 파란색) ----------
+  var SORT_ITEMS = [['default', '등록순'], ['new', '최신순'], ['reply', '답글순']];
+  var SORT_OFF = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+  var SORT_ON = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-4.8" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function buildCommentSort() {
+    var sel = document.querySelector('.all-comment-tit select.sel');
+    var rt = document.querySelector('.all-comment-tit .rt');
+    if (!sel || !rt) return;
+    var box = rt.querySelector('.dcapp-sort');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'dcapp-sort';
+      SORT_ITEMS.forEach(function (it) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('data-v', it[0]);
+        b.innerHTML = '<span class="dcapp-sort-ic"></span>' + it[1];
+        b.addEventListener('click', function () {
+          sel.value = it[0];
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          buildCommentSort();
+        });
+        box.appendChild(b);
+      });
+      rt.appendChild(box);
+    }
+    box.querySelectorAll('button').forEach(function (b) {
+      var on = sel.value === b.getAttribute('data-v');
+      b.classList.toggle('on', on);
+      var ic = b.querySelector('.dcapp-sort-ic');
+      var html = on ? SORT_ON : SORT_OFF;
+      if (ic.getAttribute('data-k') !== html) { ic.setAttribute('data-k', html); ic.innerHTML = html; }
+    });
+  }
+
   function postAction(kind) {
     var b = postActionButton(kind);
     if (!b) return false;
@@ -1258,15 +1304,17 @@ enum ContentScript {
       v.className = 'dcapp-vote';
       v.innerHTML =
         '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
-        (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="12" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
+        (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="8" dominant-baseline="central" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
         (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
         '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
       area.parentNode.insertBefore(v, area);
       v.addEventListener('click', function (e) {
-        var b = e.target.closest ? e.target.closest('button[data-a]') : null;
+        var b = e.target.closest ? e.target.closest('button[data-a], .dcapp-vnum') : null;
         if (!b) return;
+        // 별·X 버튼뿐 아니라 숫자 칸을 눌러도 같은 동작 (숫자 칸에는 data-a가 없으니 상자 종류로 찾음)
+        var key = b.getAttribute('data-a') || (b.closest('.dcapp-vbox').classList.contains('up') ? 'up' : 'down');
         var map = { up: '#recommend_join', down: '#nonrecommend_join', best: '.reco-icon-lst .sp-bestchucon', pum: '.reco-icon-lst .sp-crosspost', report: '.reco-icon-lst .sp-report' };
-        var el = document.querySelector(map[b.getAttribute('data-a')]);
+        var el = document.querySelector(map[key]);
         if (el) el.click();
       });
     }
@@ -1283,6 +1331,7 @@ enum ContentScript {
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { reportPostActions(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
+    try { buildCommentSort(); } catch (e) {}
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
@@ -2804,7 +2853,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v130-iconmove', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v132-commentsort', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
