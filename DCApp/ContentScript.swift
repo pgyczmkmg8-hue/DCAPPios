@@ -108,6 +108,8 @@ enum ContentScript {
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt{font-size:14px!important}',
+      // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
+      '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
@@ -2858,7 +2860,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v135-fontdefaults', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v136-bodymin', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

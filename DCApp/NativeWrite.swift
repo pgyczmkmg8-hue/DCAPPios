@@ -336,6 +336,8 @@ struct NativeWriteView: View {
 
     private enum Field: Hashable { case nick, pw, title, captcha }
     @FocusState private var focus: Field?
+    /// 글자 크기 슬라이더 (도구 줄의 글자 크기 버튼)
+    @State private var showSizeSlider = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showPhotoPicker = false
     /// 앱 전용 사진 고르기 (한 장씩 눌러서만 선택)
@@ -561,11 +563,19 @@ struct NativeWriteView: View {
         .padding(.horizontal, 16).padding(.top, 12)
     }
 
+    /// 사진을 끌 때 놓을 자리: 색칠된 큰 칸 (놓으면 여기 들어감)
     private func dropLine(active: Bool) -> some View {
-        Rectangle().fill(DCTheme.accent)
-            .frame(height: active ? 3 : 0)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(DCTheme.accent.opacity(0.16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(DCTheme.accent, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            )
+            .frame(height: active ? 64 : 0)
+            .opacity(active ? 1 : 0)
             .padding(.horizontal, 16)
-            .animation(.easeOut(duration: 0.12), value: active)
+            .padding(.vertical, active ? 6 : 0)
+            .animation(.easeOut(duration: 0.15), value: active)
     }
 
     private func drop(_ items: [WriteBlockDrag], before target: UUID?) -> Bool {
@@ -696,17 +706,25 @@ struct NativeWriteView: View {
                     // 글자 꾸미기: 굵게 / 기울임 / 크기 / 색 (고른 글자, 없으면 앞으로 칠 글자)
                     tool("bold", "굵게", on: session.format.bold) { session.applyFormat { $0.bold.toggle() } }
                     tool("italic", "기울임", on: session.format.italic) { session.applyFormat { $0.italic.toggle() } }
-                    Menu {
-                        ForEach(RichText.sizes.indices, id: \.self) { i in
-                            let opt = RichText.sizes[i]
-                            Button { session.applyFormat { $0.size = opt.size } } label: {
-                                if session.format.size == opt.size { Label(opt.name, systemImage: "checkmark") } else { Text(opt.name) }
-                            }
-                        }
-                    } label: {
+                    Button { showSizeSlider = true } label: {
                         toolIcon("textformat.size", on: session.format.size != RichText.baseSize)
                     }
                     .accessibilityLabel("글자 크기")
+                    .popover(isPresented: $showSizeSlider) {
+                        VStack(spacing: 12) {
+                            Text("글자 크기 \(Int(session.format.size))pt")
+                                .font(.headline)
+                            Slider(value: Binding(
+                                get: { Double(session.format.size) },
+                                set: { v in session.applyFormat { $0.size = CGFloat(v.rounded()) } }
+                            ), in: 10...32, step: 1)
+                            Button("기본 크기로") { session.applyFormat { $0.size = RichText.baseSize } }
+                                .font(.subheadline)
+                        }
+                        .padding(20)
+                        .frame(width: 300)
+                        .presentationCompactAdaptation(.popover)
+                    }
                     Menu {
                         ForEach(RichText.colors.indices, id: \.self) { i in
                             let opt = RichText.colors[i]
