@@ -116,6 +116,8 @@ enum ContentScript {
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
       '.all-comment-tit .sp-reload{display:none!important}',
+      '.dcapp-cmtin{margin-left:8px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:none;color:#3b4890;font-size:12px;font-weight:600;flex:none}',
+      'html.darkmode .dcapp-cmtin{border-color:#55565c;color:#9db0ff}',
       '.all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
       '.dcapp-sort{display:flex;align-items:center;gap:15px}',
       '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:6px 0;font-size:16px;color:#8a8a90}',
@@ -1198,6 +1200,24 @@ enum ContentScript {
   }
   document.addEventListener('input', function (e) { try { fitCommentBox(e.target); } catch (err) {} }, true);
 
+  // ---------- 댓글 헤더: '댓글 입력' 버튼 (누르면 댓글 입력창으로) ----------
+  function buildCommentInputBtn() {
+    var tb = document.querySelector('.all-comment-tit .tit-box');
+    if (!tb || document.querySelector('.dcapp-cmtin')) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dcapp-cmtin';
+    b.textContent = '댓글 입력';
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      var ta = document.getElementById('comment_memo');
+      if (!ta) return;
+      ta.scrollIntoView({ block: 'center' });
+      ta.focus();
+    });
+    tb.parentNode.insertBefore(b, tb.nextSibling);
+  }
+
   // ---------- 댓글 정렬: 등록순 / 최신순 / 답글순을 체크 버튼으로 (기본 등록순, 선택은 파란색) ----------
   var SORT_ITEMS = [['default', '등록순'], ['new', '최신순'], ['reply', '답글순']];
   var SORT_CHECK = '<svg viewBox="0 0 16 16"><path d="M3 8.4l3.2 3.2L13 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -1420,7 +1440,7 @@ enum ContentScript {
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { reportPostActions(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
-    try { buildCommentSort(); } catch (e) {}
+    try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
     try { cacheListIds(); buildNextPrev(); } catch (e) {}
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
@@ -2189,6 +2209,9 @@ enum ContentScript {
 
   // ---------- 댓글 새로고침: 디시 댓글 머리글의 ⟳ 버튼을 대신 눌러줌 ----------
   function commentRefreshButton() {
+    // 댓글 헤더의 새로고침(sp-reload)은 숨겨 둬도 눌러지도록 먼저 찾음
+    var hiddenReload = document.querySelector('.all-comment-tit .sp-reload');
+    if (hiddenReload) return hiddenReload;
     var cands = document.querySelectorAll('[class*="refresh"], [class*="reload"], [onclick*="omment"], [href*="omment"]');
     for (var i = 0; i < cands.length; i++) {
       var c = cands[i];
@@ -2404,12 +2427,6 @@ enum ContentScript {
       .catch(function () { return null; });
   }
   function refreshComments() {
-    // 댓글창이 화면 아래에 있으면(아직 댓글에 못 간 상태) 새로고침 대신 댓글창으로 이동
-    var cbox = document.getElementById('comment_box');
-    if (cbox && cbox.getBoundingClientRect().top > window.innerHeight * 0.5) {
-      cbox.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      return 'scrolled';
-    }
     var b = commentRefreshButton();
     if (!b) return 'none';
     b.click();
@@ -2943,7 +2960,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v139-hidesearch', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v142-cmtinput', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

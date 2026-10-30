@@ -2057,14 +2057,24 @@ struct DiagnosticView: View {
 // MARK: - 리퀴드 글라스 캡슐 (iOS 26 이상은 진짜 유리 효과, 그 아래는 비슷한 반투명 재질)
 
 extension View {
-    @ViewBuilder
     func glassBar() -> some View {
+        modifier(GlassBarModifier())
+    }
+}
+
+/// 컨트롤바 유리: 기본은 가장 투명한 .clear, 설정의 '유리 진하기'를 올리면 밝은 막이 더해짐
+private struct GlassBarModifier: ViewModifier {
+    @AppStorage("barGlassTint") private var tint = 0.0
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let wash = Color(uiColor: .systemBackground).opacity(tint * 0.6)
         if #available(iOS 26.0, *) {
-            // .clear: 가장 투명한 유리 (기본 .regular보다 뒤 화면이 많이 비침)
-            self.glassEffect(.clear.interactive(), in: Capsule())
+            content.glassEffect(.clear.interactive().tint(wash), in: Capsule())
         } else {
-            self
+            content
                 .background(.ultraThinMaterial, in: Capsule())
+                .background(Capsule().fill(wash))
                 .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.12), radius: 14, y: 4)
         }

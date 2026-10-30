@@ -373,6 +373,8 @@ struct DetailSettingsView: View {
     @AppStorage("hideSiteHeader") private var hideSiteHeader = true
     @AppStorage("homeRankOnly") private var homeRankOnly = true
     @AppStorage("hideDory") private var hideDory = true
+    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
+    @AppStorage("barGlassTint") private var barGlassTint = 0.0
 
     private var sensitivityLabel: String {
         switch Int(swipeSensitivity) {
@@ -420,6 +422,29 @@ struct DetailSettingsView: View {
                     .onChange(of: hideDory) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
+            }
+
+            // 컨트롤바 유리 진하기 (0 = 가장 투명)
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("컨트롤바 유리 진하기")
+                        Spacer()
+                        Text("\(Int(barGlassTint * 100))%").foregroundStyle(.secondary)
+                    }
+                    Slider(value: $barGlassTint, in: 0...1, step: 0.05)
+                }
+                Button("기본(가장 투명)으로", role: .destructive) { barGlassTint = 0 }
+                    .disabled(barGlassTint == 0)
+            } footer: {
+                Text("0%가 가장 투명합니다. 올리면 유리 위에 밝은 막이 더해져 버튼이 또렷해져요.")
+            }
+
+            // 스크롤할 때 컨트롤바·새로고침 숨기기 (컨트롤바 버튼 화면과 같은 설정)
+            Section {
+                Toggle("스크롤할 때 컨트롤바·새로고침 숨기기", isOn: $autoHideBar)
+            } footer: {
+                Text("스크롤하는 동안 컨트롤바와 댓글 새로고침 버튼이 화면 밖으로 들어갔다가, 멈추면 다시 나와요. 끄면 항상 보여요.")
             }
 
             // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
