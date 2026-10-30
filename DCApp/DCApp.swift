@@ -104,6 +104,7 @@ struct RootView: View {
     @Environment(\.colorScheme) private var systemScheme
     /// GitHub에 새 버전이 있으면 알림창
     @State private var availableUpdate: AppRelease?
+    @State private var updateArt: UIImage?
     /// 처음 켰을 때 기능 소개 (한 번 보면 다시 안 뜸)
     @AppStorage(Tutorial.seenKey) private var tutorialSeen = false
     @State private var showTutorial = false
@@ -268,21 +269,13 @@ struct RootView: View {
             guard availableUpdate == nil else { return }
             Task { if let r = await UpdateChecker.checkIfDue() { availableUpdate = r } }
         }
-        .alert(availableUpdate.map { "새 버전 \($0.version)" } ?? "",
-               isPresented: Binding(get: { availableUpdate != nil }, set: { if !$0 { availableUpdate = nil } }),
-               presenting: availableUpdate) { r in
-            // 버전 정보 → 업데이트에서 고른 앱(Feather/SideStore/LiveContainer)으로 바로 설치
-            let installer = UpdateView.Installer.current
-            if let ipa = r.ipaURL, let url = installer.installURL(for: ipa) {
-                Button("\(installer.name)로 바로 설치") { UIApplication.shared.open(url) }
+        .overlay {
+            if let r = availableUpdate {
+                UpdateCard(release: r, image: updateArt) { availableUpdate = nil }
             }
-            Button("다운로드") { UIApplication.shared.open(r.ipaURL ?? r.pageURL) }
-            Button("릴리스 노트 보기") { UIApplication.shared.open(r.pageURL) }
-            Button("이 버전 건너뛰기") { UpdateChecker.skip(r.version) }
-            Button("나중에", role: .cancel) {}
-        } message: { r in
-            let notes = r.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-            Text("지금 버전: \(UpdateChecker.currentVersion)" + (notes.isEmpty ? "" : "\n\n" + String(notes.prefix(300))))
+        }
+        .onChange(of: availableUpdate?.id) { _, id in
+            if id != nil { updateArt = UpdateArt.random() }   // 알림창을 띄울 때마다 그림을 새로 고름
         }
         .onReceive(NotificationCenter.default.publisher(for: DCNotify.openURL)) { note in
             if let url = note.object as? URL { DCNotify.pendingURL = nil; router.open(url) }

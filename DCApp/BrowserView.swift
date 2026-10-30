@@ -1339,6 +1339,7 @@ struct BrowserView: View {
     /// 가로 막대: 설정 ⋮만 보이는 상태
     @State private var barMenuMode = false
     @State private var barMenuChangedAt = Date.distantPast
+    @State private var barMenuIdleSince = Date.distantPast
     @State private var galleryBarWidth: CGFloat = 0
     @State private var sideBarHeight: CGFloat = 0
     /// 세로 막대 위치 (가운데 기준 위아래 거리, 저장)
@@ -1356,8 +1357,15 @@ struct BrowserView: View {
         return min(max(y, -limit), limit)
     }
 
+    /// 둘째 칸이 열린 뒤 막대를 마지막으로 건드린 시각 (30초 지나면 첫째 칸으로)
+    private func barMenuIdleTick() {
+        guard barMenuMode, Date().timeIntervalSince(barMenuIdleSince) > 30 else { return }
+        setBarMenuMode(false)
+    }
+
     private func setBarMenuMode(_ on: Bool) {
         barMenuChangedAt = Date()
+        barMenuIdleSince = Date()
         withAnimation(.spring(duration: 0.3)) { barMenuMode = on }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
@@ -1487,6 +1495,9 @@ struct BrowserView: View {
                         }
                     }
             )
+            // 둘째 칸이 열린 채 30초 동안 막대를 건드리지 않으면 첫째 칸으로 돌아감
+            .simultaneousGesture(DragGesture(minimumDistance: 0).onEnded { _ in barMenuIdleSince = Date() })
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in barMenuIdleTick() }
             .barSwitchGesture(onActive: barGestureChanged) { t in
                 // 설정 ⋮만 보이는 상태(또는 방금 원래대로 돌린 직후)에는 접지 않음
                 guard !barMenuMode, Date().timeIntervalSince(barMenuChangedAt) > 0.6 else { return }
@@ -1554,6 +1565,9 @@ struct BrowserView: View {
                             }
                         }
                 )
+                // 둘째 칸이 열린 채 30초 동안 막대를 건드리지 않으면 첫째 칸으로 돌아감
+                .simultaneousGesture(DragGesture(minimumDistance: 0).onEnded { _ in barMenuIdleSince = Date() })
+                .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in barMenuIdleTick() }
                 .barSwitchGesture(onActive: barGestureChanged) { t in
                     guard !barMenuMode, Date().timeIntervalSince(barMenuChangedAt) > 0.6 else { return }
                     guard !sideMoving, Date().timeIntervalSince(sideMovedAt) > 0.5 else { return }
