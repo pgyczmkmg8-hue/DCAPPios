@@ -155,6 +155,8 @@ final class NativeWriteSession: ObservableObject {
     func focusFirstText() {
         if let b = blocks.first(where: { $0.image == nil }) { focusRequest = b.id }
     }
+    /// 글자 칸의 키보드를 내림 (제목으로 옮길 때)
+    func resignActiveText() { activeTextView?.resignFirstResponder() }
 
     init(galleryID: String) { self.galleryID = galleryID }
 
@@ -572,6 +574,19 @@ struct NativeWriteView: View {
     }
 
     /// 키보드 내리기 (제목·닉네임 칸과 글자 칸 모두)
+    /// 제목 → 내용: 제목에서 '>' / 내용 → 제목: 내용에서 '<' (글자 칸은 글 끝에 커서)
+    private func moveWriteFocus(forward: Bool) {
+        if forward {
+            guard focus == .title else { return }
+            focus = nil
+            session.focusFirstText()
+        } else {
+            guard focus == nil, session.editingRich else { return }
+            session.resignActiveText()
+            focus = .title
+        }
+    }
+
     private func dismissKeyboard() {
         focus = nil
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -724,6 +739,17 @@ struct NativeWriteView: View {
             }
             Divider().frame(height: 24)
             if keyboardUp {
+                // 제목 ⇄ 내용 이동 (웹 글쓰기의 < > 와 같음)
+                Button { moveWriteFocus(forward: false) } label: {
+                    toolIcon("chevron.left", on: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("제목으로")
+                Button { moveWriteFocus(forward: true) } label: {
+                    toolIcon("chevron.right", on: false)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("내용으로")
                 Button { dismissKeyboard() } label: {
                     toolIcon("keyboard.chevron.compact.down", on: false)
                 }
