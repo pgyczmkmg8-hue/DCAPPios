@@ -113,7 +113,7 @@ enum ContentScript {
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
-      '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
+      '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
       '.all-comment-tit .sp-reload{display:none!important}',
       '.dcapp-cmtin{margin-left:8px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:none;color:#3b4890;font-size:12px;font-weight:600;flex:none}',
@@ -2994,7 +2994,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v145-postrow', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v147-cmtleft', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
