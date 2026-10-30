@@ -422,6 +422,23 @@ struct DetailSettingsView: View {
                     }
             }
 
+            // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
+            Section {
+                FontSizeRow(title: "제목", key: "textSizeTitle", base: 16)
+                FontSizeRow(title: "본문", key: "textSizeBody", base: 17)
+                FontSizeRow(title: "댓글", key: "textSizeComment", base: 15)
+                Button("기본으로 되돌리기", role: .destructive) {
+                    for key in ["textSizeTitle", "textSizeBody", "textSizeComment"] {
+                        UserDefaults.standard.set(0, forKey: key)
+                    }
+                    NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                }
+            } header: {
+                Text("글자 크기")
+            } footer: {
+                Text("글 화면의 제목·본문·댓글 글자 크기입니다. 기본값은 제목 16, 본문 17, 댓글 15pt입니다.")
+            }
+
             // 화면 정리
             Section {
                 Toggle("실시간 베스트 알림 숨기기", isOn: $filters.settings.hideBestNotice)
@@ -814,5 +831,28 @@ struct ToolsSettingsView: View {
         }
         .navigationTitle("도구")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 글자 크기 한 줄 (스테퍼). 0이면 기본값(base)을 쓰고, 기본값과 같게 고치면 0으로 저장
+private struct FontSizeRow: View {
+    let title: String
+    let base: Int
+    @AppStorage private var stored: Int
+
+    init(title: String, key: String, base: Int) {
+        self.title = title
+        self.base = base
+        _stored = AppStorage(wrappedValue: 0, key)
+    }
+
+    var body: some View {
+        let current = stored == 0 ? base : stored
+        Stepper(value: Binding(get: { current }, set: { stored = $0 == base ? 0 : $0 }), in: 10...28) {
+            LabeledContent(title, value: "\(current)pt")
+        }
+        .onChange(of: stored) { _, _ in
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+        }
     }
 }

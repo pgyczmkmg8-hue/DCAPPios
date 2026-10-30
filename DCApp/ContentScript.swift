@@ -114,10 +114,10 @@ enum ContentScript {
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
       '.all-comment-tit .sp-reload{display:none!important}',
       '.all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
-      '.dcapp-sort{display:flex;align-items:center;gap:10px}',
-      '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:2px 0;font-size:13px;color:#8a8a90}',
+      '.dcapp-sort{display:flex;align-items:center;gap:15px}',
+      '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:2px 0;font-size:20px;color:#8a8a90}',
       '.dcapp-sort button.on{color:#3b4890;font-weight:600}',
-      '.dcapp-sort svg{width:14px;height:14px;flex:none;color:#b5b5bb}',
+      '.dcapp-sort svg{width:21px;height:21px;flex:none;color:#b5b5bb}',
       '.dcapp-sort button.on svg{color:#3b4890}',
       'html.darkmode .dcapp-sort button{color:#a5a5ab}',
       'html.darkmode .dcapp-sort button.on{color:#9db0ff}',
@@ -169,11 +169,16 @@ enum ContentScript {
       'html.darkmode #dcapp-pager a.on{background:#5a6bc4;color:#fff}',
       '.dcapp-dock-head{display:flex!important;align-items:center!important;justify-content:space-between!important;height:44px!important;padding:0 6px 0 16px!important;border-bottom:1px solid rgba(127,127,127,.18)!important;font-size:15px!important;color:#888!important}',
       '.dcapp-dock-close{width:44px!important;height:44px!important;font-size:22px!important;line-height:44px!important;color:#888!important;background:none!important;border:0!important;padding:0!important}',
+      '.dcapp-docked .all-comment-tit{display:none!important}',
       '.dcapp-docked{position:fixed!important;left:0!important;right:0!important;bottom:auto!important;width:auto!important;max-width:none!important;margin:0!important;z-index:2147483000!important;max-height:60vh!important;overflow-y:auto!important;box-shadow:0 -4px 14px rgba(0,0,0,.14)!important;box-sizing:border-box!important;transform:none!important}'
     ];
     (cfg.selectors || []).forEach(function (s) {
       if (s && validSel(s)) rules.push(s + '{display:none!important}');
     });
+    var fs = cfg.fontSizes || {};
+    if (fs.title) rules.push('.gallview-tit-box .tit{font-size:' + fs.title + 'px!important}');
+    if (fs.body) rules.push('.thum-txtin{font-size:' + fs.body + 'px!important}');
+    if (fs.cmt) rules.push('li.comment .txt{font-size:' + fs.cmt + 'px!important}');
     return rules.join('\n');
   }
   function ensureStyle() {
@@ -1178,8 +1183,7 @@ enum ContentScript {
 
   // ---------- 댓글 정렬: 등록순 / 최신순 / 답글순을 체크 버튼으로 (기본 등록순, 선택은 파란색) ----------
   var SORT_ITEMS = [['default', '등록순'], ['new', '최신순'], ['reply', '답글순']];
-  var SORT_OFF = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
-  var SORT_ON = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-4.8" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var SORT_CHECK = '<svg viewBox="0 0 16 16"><path d="M3 8.4l3.2 3.2L13 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function buildCommentSort() {
     var sel = document.querySelector('.all-comment-tit select.sel');
     var rt = document.querySelector('.all-comment-tit .rt');
@@ -1206,8 +1210,7 @@ enum ContentScript {
       var on = sel.value === b.getAttribute('data-v');
       b.classList.toggle('on', on);
       var ic = b.querySelector('.dcapp-sort-ic');
-      var html = on ? SORT_ON : SORT_OFF;
-      if (ic.getAttribute('data-k') !== html) { ic.setAttribute('data-k', html); ic.innerHTML = html; }
+      if (ic.getAttribute('data-k') !== SORT_CHECK) { ic.setAttribute('data-k', SORT_CHECK); ic.innerHTML = SORT_CHECK; }
     });
   }
 
@@ -2853,7 +2856,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v132-commentsort', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v133-fontsize', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
