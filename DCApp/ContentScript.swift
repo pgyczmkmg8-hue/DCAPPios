@@ -966,7 +966,9 @@ enum ContentScript {
     if (texts.length) m = { t: texts.join(' · ') };
     // 자동메모: 글 목록의 로그인 계정(아이디 있음, 유동 아님)에 보이는 메모가 하나도 없으면 아이디로 메모
     if (!texts.length && cfg.autoMemo && u.kind === 'post' && idn.id && !idn.ip) {
-      if (cfg.autoMemo === 'all' || gid) queueAutoMemo(idn.id, cfg.autoMemo === 'all' ? '' : gid);
+      var okGallery = cfg.autoMemo === 'all' || (cfg.autoMemo === 'gallery' && gid) ||
+        (cfg.autoMemo === 'selected' && gid && (cfg.autoMemoGalleries || []).indexOf(gid) >= 0);
+      if (okGallery) queueAutoMemo(idn.id, cfg.autoMemo === 'all' ? '' : gid);
     }
     var host = nk.parentNode;
     // 닉네임 칸(ginfo-area) 안에서는 닉네임·IP·갤로그 아이콘 뒤에 메모를 둠
@@ -3068,7 +3070,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v184-title16', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v185-automemo', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

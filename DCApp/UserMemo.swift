@@ -14,12 +14,30 @@ struct UserMemo: Codable, Hashable, Identifiable {
 
 /// 자동메모 설정 (설정 → 차단 → 자동메모). 기본은 꺼짐
 enum AutoMemo {
+    /// 메모를 달 범위
+    enum Mode: String, CaseIterable, Identifiable {
+        case all, gallery, selected
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .all: "모든 갤러리"
+            case .gallery: "갤러리마다"
+            case .selected: "선택한 갤러리만"
+            }
+        }
+    }
     static let enabledKey = "autoMemo"
-    static let allKey = "autoMemoAllGalleries"      // true = 모든 갤러리에 메모, false = 본 갤러리에만
+    static let modeKey = "autoMemoMode"
+    static let allKey = "autoMemoAllGalleries"      // 예전 설정 (모드 키가 아직 없을 때만 읽음)
+    static let selectedKey = "autoMemoGalleries"    // '선택한 갤러리만'에서 고른 갤러리 아이디들
     static var enabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
-    static var allGalleries: Bool { UserDefaults.standard.object(forKey: allKey) as? Bool ?? true }
-    /// 페이지 스크립트에 넘길 값: "" = 꺼짐 / "all" / "gallery"
-    static var scriptValue: String { !enabled ? "" : (allGalleries ? "all" : "gallery") }
+    static var mode: Mode {
+        if let raw = UserDefaults.standard.string(forKey: modeKey), let m = Mode(rawValue: raw) { return m }
+        return (UserDefaults.standard.object(forKey: allKey) as? Bool ?? true) ? .all : .gallery
+    }
+    static var selectedIDs: [String] { UserDefaults.standard.stringArray(forKey: selectedKey) ?? [] }
+    /// 페이지 스크립트에 넘길 값: "" = 꺼짐 / "all" / "gallery" / "selected"
+    static var scriptValue: String { enabled ? mode.rawValue : "" }
 }
 
 @MainActor
@@ -83,8 +101,15 @@ final class MemoStore: ObservableObject {
         for item in items {
             guard let id = (item["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else { continue }
             let g = (item["g"] as? String) ?? ""
-            let scope: String? = AutoMemo.allGalleries ? nil : (g.isEmpty ? nil : g)
-            if !AutoMemo.allGalleries && g.isEmpty { continue }
+            let scope: String?
+            switch AutoMemo.mode {
+            case .all:
+                scope = nil
+            case .gallery, .selected:
+                guard !g.isEmpty else { continue }
+                if AutoMemo.mode == .selected && !AutoMemo.selectedIDs.contains(g) { continue }
+                scope = g
+            }
             let exists = (memos + added).contains { $0.kind == .id && $0.value == id && ($0.gallery == nil || $0.gallery == scope) }
             if exists { continue }
             added.append(UserMemo(kind: .id, value: id, text: id, gallery: scope))

@@ -74,7 +74,7 @@ struct SettingsView: View {
                         LabeledContent {
                             Text(filters.settings.enabled ? "켜짐" : "꺼짐")
                         } label: {
-                            Label("차단", systemImage: "hand.raised")
+                            Label("차단 / 메모", systemImage: "hand.raised")
                         }
                     }
                     NavigationLink { DetailSettingsView() } label: {
@@ -312,10 +312,41 @@ struct AccountSettingsView: View {
 
 // MARK: - 차단
 
+/// 자동메모 '선택한 갤러리만'에서 고르는 갤러리 목록 (방문한 갤러리 기준)
+struct AutoMemoGalleryList: View {
+    @ObservedObject private var visited = VisitedStore.shared
+    @State private var selected = Set(AutoMemo.selectedIDs)
+
+    private var galleries: [Gallery] {
+        var seen = Set<String>()
+        return visited.items.map(\.gallery).filter { seen.insert($0.galleryID).inserted }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(galleries) { g in
+                    Toggle(g.name, isOn: Binding(
+                        get: { selected.contains(g.galleryID) },
+                        set: { on in
+                            if on { selected.insert(g.galleryID) } else { selected.remove(g.galleryID) }
+                            UserDefaults.standard.set(Array(selected).sorted(), forKey: AutoMemo.selectedKey)
+                            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                        }))
+                }
+            } footer: {
+                Text("방문한 적 있는 갤러리만 나와요. 여기서 고른 갤러리의 글 목록에서만 자동메모를 달아요.")
+            }
+        }
+        .navigationTitle("갤러리 고르기")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct BlockSettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
     @AppStorage(AutoMemo.enabledKey) private var autoMemo = false
-    @AppStorage(AutoMemo.allKey) private var autoMemoAll = true
+    @State private var autoMemoMode = AutoMemo.mode
 
     var body: some View {
         Form {
@@ -347,18 +378,23 @@ struct BlockSettingsView: View {
             Section {
                 Toggle("자동메모", isOn: $autoMemo)
                 if autoMemo {
-                    Picker("메모 범위", selection: $autoMemoAll) {
-                        Text("모든 갤러리").tag(true)
-                        Text("갤러리마다").tag(false)
+                    Picker("메모 범위", selection: $autoMemoMode) {
+                        ForEach(AutoMemo.Mode.allCases) { m in Text(m.label).tag(m) }
+                    }
+                    if autoMemoMode == .selected {
+                        NavigationLink("갤러리 고르기") { AutoMemoGalleryList() }
                     }
                 }
             } footer: {
-                Text("글 목록을 불러올 때 메모가 없는 로그인 계정(유동 제외)에 닉네임이 아닌 아이디를 자동으로 메모해요. '갤러리마다'는 본 갤러리에서만 보이는 메모로 달아요.")
+                Text("글 목록을 불러올 때 메모가 없는 로그인 계정(유동 제외)에 닉네임이 아닌 아이디를 자동으로 메모해요. '갤러리마다'는 본 갤러리에서만 보이는 메모로 달아요. '선택한 갤러리만'은 고른 갤러리에서만 달아요.")
             }
         }
         .onChange(of: autoMemo) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
-        .onChange(of: autoMemoAll) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
-        .navigationTitle("차단")
+        .onChange(of: autoMemoMode) { _, v in
+            UserDefaults.standard.set(v.rawValue, forKey: AutoMemo.modeKey)
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+        }
+        .navigationTitle("차단 / 메모")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
