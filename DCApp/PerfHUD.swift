@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import WebKit
 import Darwin
 
 /// 디버그용 성능 숫자: 앱 메모리(phys_footprint)와 CPU 사용률 (설정 → 버전 정보에서 켬)
@@ -46,6 +47,9 @@ enum PerfSampler {
 final class PerfHUD: ObservableObject {
     @Published var memMB: Double = 0
     @Published var cpu: Double = 0
+    /// 현재 페이지의 DOM 노드 수 (페이지 메모리 대신 쓰는 참고값)
+    @Published var domNodes: Int = 0
+    var webView: WKWebView?
     private var timer: AnyCancellable?
 
     func start() {
@@ -60,22 +64,27 @@ final class PerfHUD: ObservableObject {
     private func sample() {
         memMB = PerfSampler.footprintMB()
         cpu = PerfSampler.cpuPercent()
+        guard let webView else { return }
+        webView.evaluateJavaScript("document.getElementsByTagName('*').length") { [weak self] result, _ in
+            Task { @MainActor in self?.domNodes = (result as? NSNumber)?.intValue ?? 0 }
+        }
     }
 }
 
 /// 화면 위에 뜨는 작은 숫자판 (터치는 막지 않음)
 struct PerfHUDView: View {
     @StateObject private var hud = PerfHUD()
+    let webView: WKWebView
 
     var body: some View {
-        Text(String(format: "메모리 %.0fMB · CPU %.0f%%", hud.memMB, hud.cpu))
+        Text(String(format: "앱 %.0fMB · CPU %.0f%% · 페이지 노드 %d", hud.memMB, hud.cpu, hud.domNodes))
             .font(.system(size: 11, weight: .semibold, design: .monospaced))
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.black.opacity(0.7), in: Capsule())
             .allowsHitTesting(false)
-            .onAppear { hud.start() }
+            .onAppear { hud.webView = webView; hud.start() }
             .onDisappear { hud.stop() }
     }
 }

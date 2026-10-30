@@ -94,21 +94,22 @@ enum ContentScript {
       '.gallview-tit-box .btm .rt{float:none!important;position:static!important;margin:0 0 0 10px;flex:none}',
       '.gallview-tit-box .btm .rt>*:not(.dcapp-cmtbox){display:none!important}',
       '.gall-thum-btm-inner>ul.ginfo2{display:none!important}',
-      '.dcapp-meta{margin-top:5px;font-size:13px;color:#777;font-weight:normal}',
+      '.dcapp-meta{margin-top:9px;font-size:13px;color:#777;font-weight:normal}',
       '.dcapp-meta i{display:inline-block;width:1px;height:10px;margin:0 8px;background:#ccc;vertical-align:-1px}',
-      '.dcapp-cmtbox{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border:1px solid #c9c9cf;border-radius:6px;background:transparent;color:#3b4890;font-size:16px;font-weight:600}',
-      '.dcapp-cmtbox svg{width:17px;height:17px}',
+      '.dcapp-cmtbox{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:transparent;color:#3b4890;font-size:11px;font-weight:600}',
+      '.dcapp-cmtbox svg{width:11px;height:11px}',
       'html.darkmode .dcapp-meta{color:#a5a5ab}',
       'html.darkmode .dcapp-meta i{background:#55565c}',
       'html.darkmode .dcapp-cmtbox{border-color:#55565c;color:#9db0ff}',
       // 개념/비추 버튼: 네모 칸(아이콘 칸 | 숫자) + 실베추·펌·신고는 아이콘만
       // 글 본문 가독성: 제목·본문 글씨를 키우고 줄 간격을 넓히고, 사진은 가로 폭에 맞춤 (공식앱처럼)
-      '.gallview-tit-box .tit{font-size:20px!important;line-height:1.4!important;font-weight:700!important}',
+      '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:700!important}',
+      '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:17px!important;line-height:1.7!important;word-break:keep-all}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
       '.gall-thum-btm{padding-top:14px!important}',
-      // 댓글 입력 칸: 댓글은 앱의 댓글 도구로 쓰므로 웹 칸은 한 줄짜리로 줄임
-      '#comment_memo.comment-caption{height:44px!important;min-height:0!important;max-height:44px!important;resize:none!important;overflow:hidden!important;white-space:nowrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
+      // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
+      '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 16px!important;box-sizing:border-box!important;line-height:20px!important}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
       '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
@@ -121,7 +122,7 @@ enum ContentScript {
       '.dcapp-vbox.down .dcapp-vnum{color:#8a8a90}',
       '.dcapp-vmem{display:flex;align-items:center;justify-content:center;white-space:nowrap;gap:3px;padding:0 6px 0 0;font-size:13px;line-height:1;color:#3b4890}',
       '.dcapp-vmem::before{content:"";width:1px;height:12px;background:#d8d8dd;margin-right:6px}',
-      '.dcapp-vmem svg{width:10px;height:10px}',
+      '.dcapp-vmem svg{width:12px;height:12px;flex:none}',
       '.dcapp-vmem b{font-weight:normal}',
       '.dcapp-vicons{display:flex;gap:0;margin-left:0;flex:none}',
       '.dcapp-vicons button{width:26px;height:28px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
@@ -1149,6 +1150,20 @@ enum ContentScript {
     lastPostActions = has;
     post('postactions', { edit: has });
   }
+  // ---------- 댓글 입력 칸: 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 ----------
+  function fitCommentBox(el) {
+    if (!el || el.id !== 'comment_memo') return;
+    var cs = getComputedStyle(el);
+    var lh = parseFloat(cs.lineHeight) || 20;
+    var pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    var maxH = lh * 10 + pad;
+    el.style.height = 'auto';
+    var h = Math.max(parseFloat(cs.minHeight) || 0, Math.min(el.scrollHeight, maxH));
+    el.style.height = h + 'px';
+    el.style.overflowY = el.scrollHeight > maxH + 1 ? 'auto' : 'hidden';
+  }
+  document.addEventListener('input', function (e) { try { fitCommentBox(e.target); } catch (err) {} }, true);
+
   function postAction(kind) {
     var b = postActionButton(kind);
     if (!b) return false;
@@ -1237,7 +1252,7 @@ enum ContentScript {
       v.className = 'dcapp-vote';
       v.innerHTML =
         '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
-        (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="#9a9aa0"/></svg><b></b></span>' : '') + '</div>' +
+        (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#9a9aa0"/><text x="8" y="12" font-size="11" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">g</text></svg><b></b></span>' : '') + '</div>' +
         (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
         '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
       area.parentNode.insertBefore(v, area);
@@ -1261,6 +1276,7 @@ enum ContentScript {
     ensureStyle();
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { reportPostActions(); } catch (e) {}
+    try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
@@ -2782,7 +2798,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v125-cmtline', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v129-galleryg', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });

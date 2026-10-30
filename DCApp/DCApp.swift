@@ -195,7 +195,7 @@ struct RootView: View {
         }
         .overlay(alignment: .top) {
             if showPerfHUD {
-                PerfHUDView().padding(.top, 4)   // 상단바 위 상태바 줄 바로 아래
+                PerfHUDView(webView: router.mainBrowser.webView).padding(.top, 4)   // 상단바 위 상태바 줄 바로 아래
             }
         }
         .animation(.spring(duration: 0.35), value: compactMode)
