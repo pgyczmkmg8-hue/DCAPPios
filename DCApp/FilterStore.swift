@@ -173,7 +173,7 @@ final class FilterStore: ObservableObject {
             "selectors": s.hiddenElements.map(\.selector),
             "hideBest": s.hideBestNotice,
             "dockComment": UserDefaults.standard.object(forKey: "dockComment") as? Bool ?? true,
-            "fontSizes": ["title": UserDefaults.standard.integer(forKey: "textSizeTitle"), "body": UserDefaults.standard.integer(forKey: "textSizeBody"), "cmt": UserDefaults.standard.integer(forKey: "textSizeComment")],   // 글자 크기 (0 = 기본)
+            "fontSizes": ["title": UserDefaults.standard.integer(forKey: "textSizeTitle"), "body": UserDefaults.standard.integer(forKey: "textSizeBody"), "cmt": UserDefaults.standard.integer(forKey: "textSizeComment"), "list": UserDefaults.standard.integer(forKey: "textSizeList")],   // 글자 크기 (0 = 기본)
             "hideHeader": UserDefaults.standard.object(forKey: "hideSiteHeader") as? Bool ?? true,
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,

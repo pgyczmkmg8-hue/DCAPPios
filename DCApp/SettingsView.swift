@@ -424,11 +424,12 @@ struct DetailSettingsView: View {
 
             // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
             Section {
-                FontSizeRow(title: "제목", key: "textSizeTitle", base: 16)
-                FontSizeRow(title: "본문", key: "textSizeBody", base: 17)
-                FontSizeRow(title: "댓글", key: "textSizeComment", base: 15)
+                FontSizeRow(title: "제목", key: "textSizeTitle", base: 18)
+                FontSizeRow(title: "본문", key: "textSizeBody", base: 16)
+                FontSizeRow(title: "댓글", key: "textSizeComment", base: 14)
+                FontSizeRow(title: "목록", key: "textSizeList", base: 14)
                 Button("기본으로 되돌리기", role: .destructive) {
-                    for key in ["textSizeTitle", "textSizeBody", "textSizeComment"] {
+                    for key in ["textSizeTitle", "textSizeBody", "textSizeComment", "textSizeList"] {
                         UserDefaults.standard.set(0, forKey: key)
                     }
                     NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
@@ -436,7 +437,7 @@ struct DetailSettingsView: View {
             } header: {
                 Text("글자 크기")
             } footer: {
-                Text("글 화면의 제목·본문·댓글 글자 크기입니다. 기본값은 제목 16, 본문 17, 댓글 15pt입니다.")
+                Text("글 화면의 제목·본문·댓글과 글 목록 제목의 글자 크기입니다. 기본값은 제목 18, 본문 16, 댓글 14, 목록 14pt입니다.")
             }
 
             // 화면 정리
