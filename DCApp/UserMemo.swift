@@ -12,6 +12,16 @@ struct UserMemo: Codable, Hashable, Identifiable {
     var id: String { uid ?? "\(kind.rawValue):\(value)@\(gallery ?? "*")" }
 }
 
+/// 자동메모 설정 (설정 → 차단 → 자동메모). 기본은 꺼짐
+enum AutoMemo {
+    static let enabledKey = "autoMemo"
+    static let allKey = "autoMemoAllGalleries"      // true = 모든 갤러리에 메모, false = 본 갤러리에만
+    static var enabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
+    static var allGalleries: Bool { UserDefaults.standard.object(forKey: allKey) as? Bool ?? true }
+    /// 페이지 스크립트에 넘길 값: "" = 꺼짐 / "all" / "gallery"
+    static var scriptValue: String { !enabled ? "" : (allGalleries ? "all" : "gallery") }
+}
+
 @MainActor
 final class MemoStore: ObservableObject {
     static let shared = MemoStore()
@@ -64,6 +74,23 @@ final class MemoStore: ObservableObject {
     }
 
     func remove(_ m: UserMemo) { memos.removeAll { $0.id == m.id } }
+
+    /// 자동메모: 글 목록에서 메모가 없는 로그인 계정을 아이디로 메모 (유동은 건드리지 않음).
+    /// items = [{ id, g }] — g는 글 목록의 갤러리 아이디. '갤러리마다' 설정이면 그 갤러리 전용, 아니면 모든 갤러리
+    func addAuto(_ items: [[String: Any]]) {
+        guard AutoMemo.enabled else { return }
+        var added: [UserMemo] = []
+        for item in items {
+            guard let id = (item["id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty else { continue }
+            let g = (item["g"] as? String) ?? ""
+            let scope: String? = AutoMemo.allGalleries ? nil : (g.isEmpty ? nil : g)
+            if !AutoMemo.allGalleries && g.isEmpty { continue }
+            let exists = (memos + added).contains { $0.kind == .id && $0.value == id && ($0.gallery == nil || $0.gallery == scope) }
+            if exists { continue }
+            added.append(UserMemo(kind: .id, value: id, text: id, gallery: scope))
+        }
+        if !added.isEmpty { memos.append(contentsOf: added) }
+    }
 
     /// 백업 복원용
     func replaceAll(_ list: [UserMemo]) { memos = Self.withUIDs(list) }

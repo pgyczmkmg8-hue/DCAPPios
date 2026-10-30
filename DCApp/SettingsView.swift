@@ -314,6 +314,8 @@ struct AccountSettingsView: View {
 
 struct BlockSettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
+    @AppStorage(AutoMemo.enabledKey) private var autoMemo = false
+    @AppStorage(AutoMemo.allKey) private var autoMemoAll = true
 
     var body: some View {
         Form {
@@ -340,7 +342,22 @@ struct BlockSettingsView: View {
             } footer: {
                 Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
             }
+
+            // 자동메모
+            Section {
+                Toggle("자동메모", isOn: $autoMemo)
+                if autoMemo {
+                    Picker("메모 범위", selection: $autoMemoAll) {
+                        Text("모든 갤러리").tag(true)
+                        Text("갤러리마다").tag(false)
+                    }
+                }
+            } footer: {
+                Text("글 목록을 불러올 때 메모가 없는 로그인 계정(유동 제외)에 닉네임이 아닌 아이디를 자동으로 메모해요. '갤러리마다'는 본 갤러리에서만 보이는 메모로 달아요.")
+            }
         }
+        .onChange(of: autoMemo) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
+        .onChange(of: autoMemoAll) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
         .navigationTitle("차단")
         .navigationBarTitleDisplayMode(.inline)
     }

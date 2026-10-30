@@ -32,6 +32,8 @@ enum ContentScript {
       '.dcapp-hide{display:none!important}',
       // 사이트 자체의 우측 하단 버튼 묶음(댓글 바로가기 등) — 앱의 새로고침 버튼으로 대신함
       '.fab-wrap{display:none!important}',
+      // 글 아래 목록보기·글쓰기·수정·삭제 버튼 줄 — 앱 컨트롤바/수정·삭제 버튼으로 대신함 (수정·삭제는 숨긴 채로 앱이 대신 누름)
+      '#view_btn_area{display:none!important}',
       // 글 화면 맨 아래: 사진(실베·개념·디시미디어·디시이슈 탭) · 다음 검색 · 푸터
       'section.grid:has(.view-btm-con),section.grid:has(.outside-search-box),body:has(.view-btm-con) .footer,body:has(.view-btm-con) .adv-group{display:none!important}',
       '.dcapp-pinned-off{display:none!important}',
@@ -84,6 +86,47 @@ enum ContentScript {
       // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
       '.dcapp-memo{display:inline;margin:0 8px 0 4px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
       'html.darkmode .dcapp-memo{color:#ffaa45}',
+      // 글 제목 블록: 폴더(스크랩)·갤로그 가기 숨김, 닉네임 아래 한 줄에 조회수|추천|작성일, 오른쪽에 댓글 수 칸
+      '.gallview-tit-box .btm{display:flex!important;align-items:center;justify-content:space-between}',
+      '.gallview-tit-box .btm ul.ginfo2{float:none!important;flex:1;min-width:0}',
+      '.gallview-tit-box .btm ul.ginfo2>li{display:block!important;float:none!important}',
+      '.gallview-tit-box .btm ul.ginfo2>li.dcapp-datehide{display:none!important}',
+      '.gallview-tit-box .btm .rt{float:none!important;position:static!important;margin:0 0 0 10px;flex:none}',
+      '.gallview-tit-box .btm .rt>*:not(.dcapp-cmtbox){display:none!important}',
+      '.gall-thum-btm-inner>ul.ginfo2{display:none!important}',
+      '.dcapp-meta{margin-top:5px;font-size:13px;color:#777;font-weight:normal}',
+      '.dcapp-meta i{display:inline-block;width:1px;height:10px;margin:0 8px;background:#ccc;vertical-align:-1px}',
+      '.dcapp-cmtbox{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border:1px solid #c9c9cf;border-radius:6px;background:transparent;color:#3b4890;font-size:16px;font-weight:600}',
+      '.dcapp-cmtbox svg{width:17px;height:17px}',
+      'html.darkmode .dcapp-meta{color:#a5a5ab}',
+      'html.darkmode .dcapp-meta i{background:#55565c}',
+      'html.darkmode .dcapp-cmtbox{border-color:#55565c;color:#9db0ff}',
+      // 개념/비추 버튼: 네모 칸(아이콘 칸 | 숫자) + 실베추·펌·신고는 아이콘만
+      '.reco-area{display:none!important}',
+      '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
+      '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
+      '.dcapp-vcell{width:28px;flex:none;border:0;border-right:1px solid #c9c9cf;background:#ececf0;color:#3b4890;display:flex;align-items:center;justify-content:center;padding:0}',
+      '.dcapp-vbox.down .dcapp-vcell{color:#8a8a90}',
+      '.dcapp-vcell svg{width:16px;height:16px}',
+      '.dcapp-vcell.on{background:#3b4890;color:#ffd54a}',
+      '.dcapp-vcell.on svg path{fill:#ffd54a}',
+      '.dcapp-vnum{display:flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;min-width:0;padding:0 6px;font-size:13px;line-height:1;color:#3b4890}',
+      '.dcapp-vbox.down .dcapp-vnum{color:#8a8a90}',
+      '.dcapp-vmem{display:flex;align-items:center;justify-content:center;white-space:nowrap;gap:3px;padding:0 6px 0 0;font-size:13px;line-height:1;color:#3b4890}',
+      '.dcapp-vmem::before{content:"";width:1px;height:12px;background:#d8d8dd;margin-right:6px}',
+      '.dcapp-vmem svg{width:10px;height:10px}',
+      '.dcapp-vmem b{font-weight:normal}',
+      '.dcapp-vicons{display:flex;gap:0;margin-left:0;flex:none}',
+      '.dcapp-vicons button{width:26px;height:28px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#7d7d84;padding:0}',
+      '.dcapp-vicons svg{width:18px;height:18px}',
+      'html.darkmode .dcapp-vbox{border-color:#55565c}',
+      'html.darkmode .dcapp-vcell{background:#3d3d41;border-right-color:#55565c;color:#9db0ff}',
+      'html.darkmode .dcapp-vbox.down .dcapp-vcell{color:#a5a5ab}',
+      'html.darkmode .dcapp-vcell.on{background:#3b4890;color:#ffd54a}',
+      'html.darkmode .dcapp-vnum,html.darkmode .dcapp-vmem{color:#9db0ff}',
+      'html.darkmode .dcapp-vbox.down .dcapp-vnum{color:#a5a5ab}',
+      'html.darkmode .dcapp-vmem::before{background:#55565c}',
+      'html.darkmode .dcapp-vicons button{color:#a5a5ab}',
       // 내 글·댓글: 닉네임 글자 둘레를 어두운 하늘색 상자로 칠함(흰 글자), 디시가 내 댓글에 칠하는 파란 배경은 지움
       // 닉네임 글자만 감싼 span에 칠해서 글씨 크기에 딱 맞게 (버튼·칸 여백까지 칠하지 않도록)
       // 연한 하늘색 상자에 글자가 위아래 가운데 오도록 (inline-flex로 상자 높이를 글자에 맞춤)
@@ -838,6 +881,10 @@ enum ContentScript {
       });
     });
     if (texts.length) m = { t: texts.join(' · ') };
+    // 자동메모: 글 목록의 로그인 계정(아이디 있음, 유동 아님)에 보이는 메모가 하나도 없으면 아이디로 메모
+    if (!texts.length && cfg.autoMemo && u.kind === 'post' && idn.id && !idn.ip) {
+      if (cfg.autoMemo === 'all' || gid) queueAutoMemo(idn.id, cfg.autoMemo === 'all' ? '' : gid);
+    }
     var next = nk.nextElementSibling;
     var tag = next && next.classList.contains('dcapp-memo') ? next : null;
     if (m) {
@@ -1084,8 +1131,129 @@ enum ContentScript {
     (document.head || document.documentElement).appendChild(st);
   }
 
+  // ---------- 글 아래 수정·삭제 버튼 (본인 글 / 유동 글에만 디시가 보여 줌) → 앱이 대신 누르는 버튼으로 ----------
+  var lastPostActions = null;
+  function postActionButton(kind) {
+    return document.querySelector('#view_btn_area button[onclick*="' + (kind === 'delete' ? 'board_delete' : 'board_modify') + '"]');
+  }
+  function reportPostActions() {
+    var has = !!(postActionButton('modify') && postActionButton('delete'));
+    if (has === lastPostActions) return;
+    lastPostActions = has;
+    post('postactions', { edit: has });
+  }
+  function postAction(kind) {
+    var b = postActionButton(kind);
+    if (!b) return false;
+    b.click();
+    return true;
+  }
+
+  // ---------- 자동메모: 글 목록에서 메모가 없는 로그인 계정을 아이디로 메모 요청 (유동은 제외) ----------
+  var autoMemoSeen = {}, autoMemoQueue = [], autoMemoTimer = null;
+  function queueAutoMemo(id, gid) {
+    var key = gid + '|' + id;
+    if (autoMemoSeen[key]) return;
+    autoMemoSeen[key] = true;
+    autoMemoQueue.push({ id: id, g: gid });
+    if (autoMemoTimer) return;
+    autoMemoTimer = setTimeout(function () {
+      autoMemoTimer = null;
+      var items = autoMemoQueue; autoMemoQueue = [];
+      if (items.length) post('automemo', { items: items });
+    }, 300);
+  }
+
+  // ---------- 글 제목 블록 · 개념/비추 버튼 개편 (글 화면) ----------
+  function icon24(inner) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+  }
+  var ICON_STAR = icon24('<path d="M12 3.6l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 16.9l-5.3 2.8 1.1-5.9-4.3-4.1 5.9-.8z"/>');
+  var ICON_X = icon24('<path d="M5 5l14 14M19 5L5 19"/>');
+  var ICON_CMT = icon24('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>');
+  var ICON_BEST = icon24('<circle cx="12" cy="12" r="9.2"/><path d="M10 7.6h2.7a2 2 0 0 1 0 4H10zM10 11.6h3.2a2.2 2.2 0 0 1 0 4.4H10z"/>');
+  var ICON_PUM = icon24('<path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>');
+  var ICON_REPORT = icon24('<path d="M5 21V4M5 4h13l-2.5 4.5L18 13H5"/>');
+  function textOf(sel) { var el = document.querySelector(sel); return el ? el.textContent.trim() : ''; }
+
+  function buildArticleHead() {
+    var h = articleHead();
+    if (!h) return;
+    var btm = h.querySelector('.btm'), stat = document.querySelector('.gall-thum-btm-inner > ul.ginfo2');
+    if (!btm || !stat) return;
+    var ul = btm.querySelector('ul.ginfo2'), rt = btm.querySelector('.rt');
+    if (!ul) return;
+    if (!rt) { rt = document.createElement('div'); rt.className = 'rt'; btm.appendChild(rt); }
+    // 닉네임 아래 한 줄: 조회수 | 추천 | 작성일
+    var lis = Array.prototype.filter.call(ul.children, function (c) { return c.tagName === 'LI' && !c.classList.contains('dcapp-meta'); });
+    var dateLi = lis[1];
+    if (dateLi && !dateLi.classList.contains('dcapp-datehide')) dateLi.classList.add('dcapp-datehide');
+    var parts = [];
+    for (var i = 0; i < 2; i++) { if (stat.children[i]) parts.push(txt(stat.children[i])); }
+    if (dateLi) parts.push(txt(dateLi));
+    var key = parts.join('\n');
+    var meta = ul.querySelector('.dcapp-meta');
+    if (!meta) { meta = document.createElement('li'); meta.className = 'dcapp-meta'; ul.appendChild(meta); }
+    if (meta.getAttribute('data-k') !== key) {
+      meta.setAttribute('data-k', key);
+      meta.textContent = '';
+      parts.forEach(function (p, n) {
+        if (n) meta.appendChild(document.createElement('i'));
+        meta.appendChild(document.createTextNode(p));
+      });
+    }
+    // 오른쪽: 댓글 수 칸 (누르면 댓글창 맨 위로)
+    var cnt = textOf('.btn-commentgo .point-red') || '0';
+    var cb = rt.querySelector('.dcapp-cmtbox');
+    if (!cb) {
+      cb = document.createElement('button');
+      cb.type = 'button';
+      cb.className = 'dcapp-cmtbox';
+      cb.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); scrollToComments(); });
+      rt.appendChild(cb);
+    }
+    if (cb.getAttribute('data-k') !== cnt) {
+      cb.setAttribute('data-k', cnt);
+      cb.innerHTML = ICON_CMT + '<span>' + cnt + '</span>';
+    }
+  }
+
+  function buildVote() {
+    var area = document.querySelector('.reco-area');
+    if (!area || !area.parentNode) return;
+    var v = document.querySelector('.dcapp-vote');
+    if (!v) {
+      var hasMem = !!area.querySelector('.go-ct'), hasDown = !!document.getElementById('nonrecommend_join');
+      var picks = [['best', '.sp-bestchucon', ICON_BEST], ['pum', '.sp-crosspost', ICON_PUM], ['report', '.sp-report', ICON_REPORT]]
+        .filter(function (p) { return area.querySelector(p[1]); });
+      v = document.createElement('div');
+      v.className = 'dcapp-vote';
+      v.innerHTML =
+        '<div class="dcapp-vbox up"><button type="button" class="dcapp-vcell" data-a="up">' + ICON_STAR + '</button><span class="dcapp-vnum"></span>' +
+        (hasMem ? '<span class="dcapp-vmem"><svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="#9a9aa0"/></svg><b></b></span>' : '') + '</div>' +
+        (hasDown ? '<div class="dcapp-vbox down"><button type="button" class="dcapp-vcell" data-a="down">' + ICON_X + '</button><span class="dcapp-vnum"></span></div>' : '') +
+        '<div class="dcapp-vicons">' + picks.map(function (p) { return '<button type="button" data-a="' + p[0] + '">' + p[2] + '</button>'; }).join('') + '</div>';
+      area.parentNode.insertBefore(v, area);
+      v.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('button[data-a]') : null;
+        if (!b) return;
+        var map = { up: '#recommend_join', down: '#nonrecommend_join', best: '.reco-icon-lst .sp-bestchucon', pum: '.reco-icon-lst .sp-crosspost', report: '.reco-icon-lst .sp-report' };
+        var el = document.querySelector(map[b.getAttribute('data-a')]);
+        if (el) el.click();
+      });
+    }
+    function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
+    setText(v.querySelector('.up .dcapp-vnum'), textOf('#recomm_btn') || '0');
+    setText(v.querySelector('.up .dcapp-vmem b'), textOf('#recomm_btn_member') || '0');
+    setText(v.querySelector('.down .dcapp-vnum'), textOf('#nonrecomm_btn') || '0');
+    var rj = document.getElementById('recommend_join'), cell = v.querySelector('.up .dcapp-vcell');
+    if (rj && cell) cell.classList.toggle('on', rj.classList.contains('on'));
+  }
+
   function apply() {
     ensureStyle();
+    try { buildArticleHead(); buildVote(); } catch (e) {}
+    try { reportPostActions(); } catch (e) {}
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
@@ -2607,7 +2775,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v119-minedark', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v123-voteflex', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -2858,6 +3026,7 @@ enum ContentScript {
     lastTouchInHScroll: function () { return lastTouchInHScroll; },
     textSelecting: textSelecting,
     refreshComments: refreshComments,
+    postAction: postAction,
     alarmAuthor: alarmAuthor,
     moveWriteFocus: moveWriteFocus,
     focusReply: focusReply,

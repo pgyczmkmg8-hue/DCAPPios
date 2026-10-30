@@ -607,7 +607,7 @@ struct BrowserView: View {
     private var layer2: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer1)
-            .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제" : "차단",
+            .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제/메모/갤로그" : "차단/메모/갤로그",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
                                 titleVisibility: .visible,
@@ -1096,14 +1096,14 @@ struct BrowserView: View {
                 // 양쪽을 같은 폭(칸 수 × 28 + 간격)으로 맞춰야 가운데 제목이 한쪽으로 밀리지 않음
                 // 단 듀오는 상단바 오른쪽 절반이 시계·카메라 줄이라 제목을 왼쪽에 두므로 빈 칸 생략
                 if topSlots > 0 {
-                    if !duoTopBar || showsKeyboardBack {
+                    if !duoTopBar || showsTopBack {
                         ToolbarItem(placement: .topBarLeading) {
                             HStack(spacing: Self.topSlotSpacing) {
-                                if showsKeyboardBack {
-                                    backButton { Image(systemName: "chevron.backward") }
+                                if showsTopBack {
+                                    backButton { Image(systemName: "arrow.left") }
                                         .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                                 }
-                                ForEach(0..<(duoTopBar ? 0 : topSlots - (showsKeyboardBack ? 1 : 0)), id: \.self) { _ in
+                                ForEach(0..<(duoTopBar ? 0 : topSlots - (showsTopBack ? 1 : 0)), id: \.self) { _ in
                                     Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                                         .accessibilityHidden(true)
                                 }
@@ -1178,8 +1178,11 @@ struct BrowserView: View {
     /// 듀오처럼 오른쪽에 넓은 안전 영역(시계·카메라 줄)이 있으면 그 빈 줄의 맨 아래(하단 바 옆)에 넣음
     /// 글 볼 때 오른쪽 아래(하단 바 위)에 떠 있는 댓글 새로고침 버튼
     private var refreshButtonPlaced: some View {
-        Button { refreshTapped() } label: {
-            floatIcon("arrow.clockwise", tint: .primary)
+        VStack(spacing: 2) {
+            if showsPostEdit { postEditButtons { floatIcon($0, tint: $1) } }
+            Button { refreshTapped() } label: {
+                floatIcon("arrow.clockwise", tint: .primary)
+            }
         }
         .padding(4)
         .glassBar()
@@ -1248,6 +1251,16 @@ struct BrowserView: View {
     /// 새로고침 버튼을 보일 화면: 글 보기 + 글 목록
     private var showsRefresh: Bool { isPostPage || isListPage }
 
+    /// 글 보기에서 수정·삭제 버튼을 보일지 (본인 글 / 유동 글 — 디시가 수정·삭제 버튼을 준 글)
+    private var showsPostEdit: Bool { isPostPage && model.postEditable }
+
+    /// 수정 · 삭제 버튼 (댓글 새로고침 버튼 위에 같이 묶음). 아이콘 모양은 호출한 쪽이 정함
+    @ViewBuilder
+    private func postEditButtons<I: View>(@ViewBuilder icon: @escaping (String, Color) -> I) -> some View {
+        Button { model.postModify() } label: { icon("square.and.pencil", .primary) }
+        Button { model.postDelete() } label: { icon("trash", .red) }
+    }
+
     /// 상단바 양옆 버튼 칸 (제목 가운데 맞춤용)
     static let topSlotWidth: CGFloat = 28
     static let topSlotSpacing: CGFloat = 14
@@ -1257,7 +1270,9 @@ struct BrowserView: View {
         hwKeyboard.connected && UIDevice.current.userInterfaceIdiom != .phone
     }
     /// 양쪽 모두 이 칸 수만큼 차지 (모자란 쪽은 빈 칸)
-    private var topSlots: Int { max(topTrailingCount, showsKeyboardBack ? 1 : 0) }
+    /// 상단바 왼쪽 뒤로가기 화살표: 글 볼 때(디시 아래 목록보기 버튼을 대신함) + 하드웨어 키보드(아이패드)
+    private var showsTopBack: Bool { isPostPage || showsKeyboardBack }
+    private var topSlots: Int { max(topTrailingCount, showsTopBack ? 1 : 0) }
     /// 듀오처럼 상단바 오른쪽에 시계·카메라가 겹쳐 그려지는 화면인지
     /// (세로 화면은 오른쪽 안전 영역이 0이라 폭으로 구분 — 일반 아이폰은 가장 넓은 Pro Max도 440pt)
     private var duoTopBar: Bool {
@@ -1374,6 +1389,10 @@ struct BrowserView: View {
     /// 접어 둔 컨트롤바(전개 버튼) — 글 볼 때는 댓글 새로고침과 한 덩어리 (위: 새로고침, 아래: 펼치기)
     private var collapsedBarCore: some View {
         VStack(spacing: 0) {
+            if showsPostEdit {
+                postEditButtons { name, _ in collapsedIcon(name) }
+                Divider().frame(width: 28)
+            }
             if showsRefresh {
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -1864,6 +1883,7 @@ struct BrowserView: View {
         }
         searchPostsButton(req)
         memoButton(req)
+        gallogButton(req)
         Button("취소", role: .cancel) {}
     }
 
@@ -1898,6 +1918,7 @@ struct BrowserView: View {
         }
         searchPostsButton(req)
         memoButton(req)
+        gallogButton(req)
         Button("취소", role: .cancel) {}
     }
 
@@ -1906,6 +1927,14 @@ struct BrowserView: View {
     private func searchPostsButton(_ req: BlockRequest) -> some View {
         if let g = gallery, !req.nick.isEmpty {
             Button("작성글 검색: \(req.nick)") { model.load(g.searchURL(req.nick, type: .name)) }
+        }
+    }
+
+    /// 고닉·반고닉의 갤로그로 이동 (유동은 갤로그가 없음)
+    @ViewBuilder
+    private func gallogButton(_ req: BlockRequest) -> some View {
+        if !req.userID.isEmpty, let url = URL(string: "https://m.dcinside.com/gallog/\(req.userID)") {
+            Button("갤로그 가기") { model.load(url) }
         }
     }
 

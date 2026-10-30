@@ -180,6 +180,7 @@ final class FilterStore: ObservableObject {
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
             "floatBar": UserDefaults.standard.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
             "memos": MemoStore.shared.memos.map { ["k": $0.kind.rawValue, "v": $0.value, "t": $0.text, "g": $0.gallery ?? ""] },   // 유저 메모
+            "autoMemo": AutoMemo.scriptValue,   // 자동메모 ("" 꺼짐 / all / gallery)
             "anon": ["nick": AnonStore.nick, "pw": AnonStore.password],   // 유동 닉/비번 자동 채우기
             "tint": (DCTheme.current.pageTint as Any?) ?? NSNull(),   // 웹페이지 속 디시 파란색 → 테마 색   // 내 글·댓글 닉네임 형광펜용
         ]
