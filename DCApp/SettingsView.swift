@@ -449,7 +449,7 @@ struct DetailSettingsView: View {
 
             // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
             Section {
-                FontSizeRow(title: "제목", key: "textSizeTitle", base: 18)
+                FontSizeRow(title: "제목", key: "textSizeTitle", base: 16)
                 FontSizeRow(title: "본문", key: "textSizeBody", base: 16)
                 FontSizeRow(title: "목록", key: "textSizeList", base: 14)
                 Button("기본으로 되돌리기", role: .destructive) {
