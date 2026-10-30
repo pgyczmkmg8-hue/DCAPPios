@@ -936,14 +936,17 @@ enum ContentScript {
     if (!texts.length && cfg.autoMemo && u.kind === 'post' && idn.id && !idn.ip) {
       if (cfg.autoMemo === 'all' || gid) queueAutoMemo(idn.id, cfg.autoMemo === 'all' ? '' : gid);
     }
-    var next = nk.nextElementSibling;
-    var tag = next && next.classList.contains('dcapp-memo') ? next : null;
+    var host = nk.parentNode;
+    // 닉네임 칸(ginfo-area) 안에서는 닉네임·IP·갤로그 아이콘 뒤에 메모를 둠
+    var kids = Array.prototype.filter.call(host.children, function (c) { return !c.classList.contains('dcapp-memo'); });
+    var anchor = host.classList.contains('ginfo-area') && kids.length ? kids[kids.length - 1] : nk;
+    var tag = host.querySelector(':scope > .dcapp-memo');
     if (m) {
       if (!tag) {
         tag = document.createElement('span');
         tag.className = 'dcapp-memo';
-        nk.parentNode.insertBefore(tag, nk.nextSibling);
       }
+      if (tag.parentNode !== host || tag.previousElementSibling !== anchor) host.insertBefore(tag, anchor.nextSibling);
       if (tag.textContent !== m.t) tag.textContent = m.t;
     } else if (tag) {
       tag.parentNode.removeChild(tag);
@@ -2994,7 +2997,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v147-cmtleft', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v148-memoafter', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
