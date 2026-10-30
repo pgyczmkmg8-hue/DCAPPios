@@ -125,6 +125,17 @@ enum ContentScript {
       'html.darkmode .dcapp-sort button{color:#a5a5ab}',
       'html.darkmode .dcapp-sort button.on{color:#eee}',
       'html.darkmode .dcapp-sort button.on svg{color:#9db0ff}',
+      // 글 아래 목록: 이전글 1개만 보이고 나머지는 '글목록 더보기'로 접음 / 다음글 1개(없으면 '다음 글 없음')
+      'ul#view_next:not(.dcapp-more-open) > li.dcapp-fold{display:none!important}',
+      '.dcapp-more-li{padding:10px 16px}',
+      '.dcapp-more-btn{width:100%;height:40px;border:1px solid #c9c9cf;border-radius:8px;background:none;color:#3b4890;font-size:14px;font-weight:600}',
+      '#dcapp-nextrow{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:15px;color:#222;border-bottom:1px solid #eee;min-width:0}',
+      '#dcapp-nextrow .dcapp-nlabel{flex:none;color:#8a8a90;font-size:13px}',
+      '#dcapp-nextrow a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#222}',
+      '#dcapp-nextrow .dcapp-none{color:#8a8a90}',
+      'html.darkmode #dcapp-nextrow{color:#eee;border-color:#3d3d41}',
+      'html.darkmode #dcapp-nextrow a{color:#eee}',
+      'html.darkmode .dcapp-more-btn{border-color:#55565c;color:#9db0ff}',
       '.reco-area{display:none!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
       '.dcapp-vbox{display:flex;align-items:stretch;height:28px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
@@ -1218,6 +1229,75 @@ enum ContentScript {
     });
   }
 
+  // ---------- 글 아래 목록: 다음글 1개 · 이전글 1개만 보이고 나머지는 '글목록 더보기'로 접기 ----------
+  var POST_RE = /\/(board|mini|person)\/([^\/]+)\/(\d+)/;
+  function listCacheKey(gid) { return 'dcapp-list:' + gid; }
+  // 글목록 화면을 볼 때 그 갤러리의 글번호·제목을 기억 (다음글 찾기용)
+  function cacheListIds() {
+    if (POST_RE.test(location.pathname)) return;
+    var gid = currentGalleryId();
+    if (!gid) return;
+    var items = [];
+    document.querySelectorAll('ul.gall-detail-lst:not(#view_next) > li a.lt').forEach(function (a) {
+      var m = (a.getAttribute('href') || '').match(POST_RE);
+      if (m && m[2] === gid) items.push({ no: parseInt(m[3], 10), t: txt(a.querySelector('.subjectin') || a) });
+    });
+    if (!items.length) return;
+    var json = JSON.stringify(items.slice(0, 60));
+    try { if (sessionStorage.getItem(listCacheKey(gid)) !== json) sessionStorage.setItem(listCacheKey(gid), json); } catch (e) {}
+  }
+  function buildNextPrev() {
+    var vn = document.getElementById('view_next');
+    var m = location.pathname.match(POST_RE);
+    if (!vn || !m) return;
+    var kind = m[1], gid = m[2], no = parseInt(m[3], 10);
+    var lis = vn.querySelectorAll(':scope > li');
+    if (lis.length > 1 && !vn.querySelector('.dcapp-more-li')) {
+      var more = document.createElement('li');
+      more.className = 'dcapp-more-li';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dcapp-more-btn';
+      btn.textContent = '글목록 더보기';
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var open = vn.classList.toggle('dcapp-more-open');
+        btn.textContent = open ? '접기' : '글목록 더보기';
+      });
+      more.appendChild(btn);
+      lis[0].parentNode.insertBefore(more, lis[1] || null);
+      Array.prototype.forEach.call(lis, function (li, i) { if (i > 0) li.classList.add('dcapp-fold'); });
+    }
+    var row = document.getElementById('dcapp-nextrow');
+    if (!row) {
+      row = document.createElement('div');
+      row.id = 'dcapp-nextrow';
+      vn.parentNode.insertBefore(row, vn);
+    }
+    var cached = null;
+    try { cached = JSON.parse(sessionStorage.getItem(listCacheKey(gid)) || 'null'); } catch (e) {}
+    if (!cached) { row.style.display = 'none'; return; }   // 목록을 본 기록이 없으면 숨김
+    row.style.display = '';
+    var newer = null;
+    cached.forEach(function (x) { if (x.no > no && (!newer || x.no < newer.no)) newer = x; });
+    row.textContent = '';
+    var label = document.createElement('span');
+    label.className = 'dcapp-nlabel';
+    label.textContent = '다음글';
+    row.appendChild(label);
+    if (newer) {
+      var a = document.createElement('a');
+      a.href = 'https://m.dcinside.com/' + kind + '/' + gid + '/' + newer.no;
+      a.textContent = newer.t;
+      row.appendChild(a);
+    } else {
+      var none = document.createElement('span');
+      none.className = 'dcapp-none';
+      none.textContent = '다음 글 없음';
+      row.appendChild(none);
+    }
+  }
+
   function postAction(kind) {
     var b = postActionButton(kind);
     if (!b) return false;
@@ -1339,6 +1419,7 @@ enum ContentScript {
     try { reportPostActions(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { buildCommentSort(); } catch (e) {}
+    try { cacheListIds(); buildNextPrev(); } catch (e) {}
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
@@ -2860,7 +2941,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v136-bodymin', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v137-nextprev', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
