@@ -366,13 +366,25 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// 개념글 목록 2페이지 이상이면 바로 앞 페이지 주소
+    private var recommendPrevPageURL: URL? {
+        guard let url = webView.url, url.query?.contains("recommend=1") == true,
+              SavedPostStore.postInfo(url) == nil,
+              var c = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let page = c.queryItems?.first(where: { $0.name == "page" })?.value.flatMap(Int.init), page > 1 else { return nil }
+        c.queryItems = c.queryItems?.map { $0.name == "page" ? URLQueryItem(name: "page", value: String(page - 1)) : $0 }
+        return c.url
+    }
+
     /// 지금 '뒤로' 할 수 있는 게 있는지
     var canSwipeBack: Bool {
-        allHeadURLOnBack != nil || opensGalleriesOnBack || postGalleryOnBack != nil || backTarget() != nil
+        recommendPrevPageURL != nil || allHeadURLOnBack != nil || opensGalleriesOnBack || postGalleryOnBack != nil || backTarget() != nil
     }
 
     func swipeBack() {
-        if let url = webView.url, url.query?.contains("recommend=1") == true,
+        if let prev = recommendPrevPageURL {
+            load(prev)        // 개념글 2페이지 이상 → 그 전 페이지 (전체글로 가지 않음)
+        } else if let url = webView.url, url.query?.contains("recommend=1") == true,
            let g = Gallery.parse(url), SavedPostStore.postInfo(url) == nil {
             // 개념글 목록에서 → 같은 갤러리의 전체글로
             load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
