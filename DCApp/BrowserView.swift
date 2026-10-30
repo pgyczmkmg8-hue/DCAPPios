@@ -2060,10 +2060,11 @@ extension View {
     @ViewBuilder
     func glassBar() -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular.interactive(), in: Capsule())
+            // .clear: 가장 투명한 유리 (기본 .regular보다 뒤 화면이 많이 비침)
+            self.glassEffect(.clear.interactive(), in: Capsule())
         } else {
             self
-                .background(.regularMaterial, in: Capsule())
+                .background(.ultraThinMaterial, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.12), radius: 14, y: 4)
         }

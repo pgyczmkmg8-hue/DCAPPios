@@ -126,9 +126,11 @@ enum ContentScript {
       'html.darkmode .dcapp-sort button.on{color:#eee}',
       'html.darkmode .dcapp-sort button.on svg{color:#9db0ff}',
       // 글 아래 목록: 이전글 1개만 보이고 나머지는 '글목록 더보기'로 접음 / 다음글 1개(없으면 '다음 글 없음')
+      // 글 아래 디시 검색창과 '더보기'(⌄) 표시는 숨김
+      'section.grid:has(.con-search-box),.con-search-box,#viewlistMore{display:none!important}',
       'ul#view_next:not(.dcapp-more-open) > li.dcapp-fold{display:none!important}',
-      '.dcapp-more-li{padding:10px 16px}',
-      '.dcapp-more-btn{width:100%;height:40px;border:1px solid #c9c9cf;border-radius:8px;background:none;color:#3b4890;font-size:14px;font-weight:600}',
+      'ul#view_next > li.dcapp-more-li{display:block!important;width:100%!important;box-sizing:border-box!important;padding:10px 16px!important;margin:0!important;border:0!important;background:none!important}',
+      '.dcapp-more-btn{display:block;width:100%;box-sizing:border-box;height:40px;padding:0 12px;margin:0;text-align:center;border:1px solid #c9c9cf;border-radius:8px;background:none;color:#3b4890;font-size:14px;font-weight:600;line-height:1}',
       '#dcapp-nextrow{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:15px;color:#222;border-bottom:1px solid #eee;min-width:0}',
       '#dcapp-nextrow .dcapp-nlabel{flex:none;color:#8a8a90;font-size:13px}',
       '#dcapp-nextrow a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#222}',
@@ -2941,7 +2943,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v137-nextprev', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v139-hidesearch', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
