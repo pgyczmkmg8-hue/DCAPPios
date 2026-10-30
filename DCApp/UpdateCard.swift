@@ -25,7 +25,7 @@ enum UpdateArt {
     }
 }
 
-/// 새 버전 알림창 (그림 256×256 고정, 그 아래 글과 버튼)
+/// 새 버전 알림창 (그림 128×128, 그 아래 글과 버튼)
 struct UpdateCard: View {
     let release: AppRelease
     let image: UIImage?
@@ -49,8 +49,10 @@ struct UpdateCard: View {
                         Color.gray.opacity(0.2)
                     }
                 }
-                .frame(width: 256, height: 256)
-                .clipped()
+                .frame(width: 128, height: 128)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity)
 
                 VStack(spacing: 10) {
                     Text("새 버전 \(release.version)")
