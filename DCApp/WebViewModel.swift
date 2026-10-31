@@ -52,6 +52,8 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var progress: Double = 0
 
+    /// 댓글 링크를 눌렀을 때 물어볼 주소 (대댓글 달기 / 링크로 이동)
+    @Published var commentLink: URL?
     @Published var blockRequest: BlockRequest? {
         didSet {   // 차단 메뉴가 닫히면 길게 누르며 생긴 글자 선택도 풀기
             if blockRequest == nil, oldValue != nil {
@@ -252,6 +254,11 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     func load(_ url: URL) { webView.load(URLRequest(url: url)) }
+    /// 댓글 링크 선택 창에서 '대댓글 달기'
+    func replyToPendingComment() {
+        commentLink = nil
+        Task { _ = await call("return window.__dcapp ? window.__dcapp.replyPending() : false;") }
+    }
     /// 뒤로가기: 지나온 페이지를 거꾸로 짚어서 '돌아갈 만한' 가장 최근 페이지로 바로 감
     func goBack() {
         if let target = backTarget() { _ = webView.go(to: target) } else { _ = webView.goBack() }
@@ -1306,6 +1313,8 @@ extension WebViewModel: WKScriptMessageHandler {
             case "done": showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
             default: break
             }
+        case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
+            if let s = body["href"] as? String, let u = URL(string: s) { commentLink = u }
         case "wantfocus":   // 댓글을 눌러 답글 칸이 열림 → 키보드 띄우기 (스크립트 focus 허용)
             FocusUnlock.allow(for: 1.5)
             Task {

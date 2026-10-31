@@ -633,6 +633,17 @@ struct BrowserView: View {
                     } message: { req in
                         Text("\(req.snippet.isEmpty ? "(내용 없음)" : req.snippet)\n같은 모양의 요소 \(req.count)개가 숨겨져요.")
                     }
+                    .confirmationDialog("댓글 링크",
+                                        isPresented: Binding(get: { model.commentLink != nil },
+                                                             set: { if !$0 { model.commentLink = nil } }),
+                                        titleVisibility: .visible,
+                                        presenting: model.commentLink) { url in
+                        Button("대댓글 달기") { model.replyToPendingComment() }
+                        Button("링크로 이동") { model.commentLink = nil; model.load(url) }
+                        Button("취소", role: .cancel) { model.commentLink = nil }
+                    } message: { url in
+                        Text(url.absoluteString)
+                    }
             }
     }
 

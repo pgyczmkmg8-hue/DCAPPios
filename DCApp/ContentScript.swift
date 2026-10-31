@@ -2488,16 +2488,11 @@ enum ContentScript {
     }
     tsRefocus.prev = st;
   }, 300);
-  // 디시의 답글 열기(body에 걸린 click)가 끝난 뒤에 실행되도록 document의 버블 단계에서
-  document.addEventListener('click', function (e) {
-    if (!e.isTrusted) return;
-    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
-    var li = t && t.closest ? t.closest('li.comment, li.comment-add') : null;
-    if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area')) return;   // 답글 칸 자체는 제외
+  // 답글 칸을 열고 포커스를 옮김 (디시가 답글 칸을 열 때 조금 늦게 만들 수 있어서 칸이 생길 때까지 기다림)
+  function openReplyFor(li) {
     // 남아 있던 글자 선택은 풀고 진행 (선택이 남아 있어서 첫 탭이 무시되던 문제)
     var sel = window.getSelection && window.getSelection();
     if (sel && !sel.isCollapsed) { try { sel.removeAllRanges(); } catch (x) {} }
-    // 디시가 답글 칸을 열 때 조금 늦게 만들 수 있어서, 칸이 생길 때까지 잠깐 기다렸다가 포커스 (첫 탭에서 안 열리던 문제)
     var replyTries = 0;
     (function waitForReply() {
       var ta = openedReplyArea(li);
@@ -2506,7 +2501,40 @@ enum ContentScript {
       var focused = focusReply();
       post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
     })();
+  }
+  // 디시의 답글 열기(body에 걸린 click)가 끝난 뒤에 실행되도록 document의 버블 단계에서
+  document.addEventListener('click', function (e) {
+    if (!e.isTrusted) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    var li = t && t.closest ? t.closest('li.comment, li.comment-add') : null;
+    if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area')) return;   // 답글 칸 자체는 제외
+    openReplyFor(li);
   }, false);
+
+  // 댓글 안의 링크를 누르면 → 바로 넘어가지 않고, 앱이 '대댓글 달기 / 링크로 이동'을 물어봄
+  var pendingReplyLi = null;
+  document.addEventListener('click', function (e) {
+    if (!e.isTrusted) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    var a = t && t.closest ? t.closest('a[href]') : null;
+    if (!a) return;
+    var li = a.closest('li.comment, li.comment-add');
+    if (!li || /^comment_addDiv/.test(li.id || '') || a.closest('.ginfo-area, form, button, input, textarea')) return;
+    if (/^\s*(#|javascript:)/i.test(a.getAttribute('href') || '')) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    pendingReplyLi = li;
+    post('cmtlink', { href: a.href });
+  }, true);
+  // 앱에서 '대댓글 달기'를 고르면: 댓글 본문을 눌러 디시가 답글 칸을 열게 하고 포커스
+  function replyPending() {
+    var li = pendingReplyLi;
+    pendingReplyLi = null;
+    if (!li || !document.body.contains(li)) return false;
+    (li.querySelector('.usertxt, .txt, p') || li).click();
+    openReplyFor(li);
+    return true;
+  }
 
   // 알림 거르기용: 그 글을 불러와 해당 댓글의 작성자(닉네임·IP·아이디)를 알려줌 (못 찾으면 null)
   function alarmAuthor(gid, no, cno) {
@@ -3070,7 +3098,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v186-automemocmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v188-cmtlink', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -3326,6 +3354,7 @@ enum ContentScript {
     alarmAuthor: alarmAuthor,
     moveWriteFocus: moveWriteFocus,
     focusReply: focusReply,
+    replyPending: replyPending,
     headTabs: headTabs,
     openNotice: openNotice,
     focusTitle: focusTitle,
