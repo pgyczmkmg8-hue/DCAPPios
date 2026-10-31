@@ -777,7 +777,7 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     /// 글 수정: 원래 올라가 있던 사진 미리보기 (디시 이미지 서버는 Referer가 있어야 보여줌)
-    private func loadRemotePreviews(_ s: NativeWriteSession) {
+    func loadRemotePreviews(_ s: NativeWriteSession) {
         let targets = s.images.filter { $0.preview == nil }.compactMap { img in img.remoteURL.map { (img.id, $0) } }
         for (id, url) in targets {
             Task {

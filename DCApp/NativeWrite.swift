@@ -375,7 +375,10 @@ struct NativeWriteView: View {
             DcconPickerSheet(model: model)
         }
         .sheet(isPresented: $showDraftPicker) {
-            DraftPickerSheet(galleryID: session.galleryID) { d in session.apply(d) }
+            DraftPickerSheet(galleryID: session.galleryID) { d in
+                session.apply(d)
+                model.loadRemotePreviews(session)   // 디시 서버 사진은 미리보기를 따로 받아야 보임 (불러온 임시저장)
+            }
         }
         .onAppear {
             guard !didFocus else { return }
