@@ -540,6 +540,14 @@ enum ContentScript {
     if (!s || /^data:/.test(s)) return '';
     try { return new URL(s, location.href).href; } catch (e) { return ''; }
   }
+  /// 글 속 사진·움짤의 원본 주소 (움짤은 자리표시 이미지 대신 data-gif / video의 ori-data)
+  function galleryMediaURL(x) {
+    var s = '';
+    if (x.tagName === 'VIDEO') s = x.getAttribute('ori-data') || x.getAttribute('data-gif') || x.currentSrc || x.src || '';
+    else if (x.classList && x.classList.contains('gif-mp4')) s = x.getAttribute('data-gif') || '';
+    if (s) { try { return new URL(s, location.href).href; } catch (e) { return ''; } }
+    return imgURL(x);
+  }
   function dcconKey(m) {
     if (!m || !m.tagName || !/^(IMG|VIDEO)$/.test(m.tagName)) return null;
     var s = mediaSrc(m);
@@ -1774,16 +1782,17 @@ enum ContentScript {
     }
     // (닉네임 탭은 디시 원래 동작(답글 등) 그대로 — 앱 차단·메모 메뉴는 길게 누르기로만)
     // 글 속 사진 탭 → 앱 사진 보기 (아래로 쓸어 닫기 / 확대 / 넘기기)
-    var tapped = target && target.closest ? target.closest('img') : null;
+    // (움짤은 사진 자리에 <video class="dc_mv">가 들어와서 디시 웹 확대창이 뜸 → 같이 앱 사진 보기로)
+    var tapped = target && target.closest ? target.closest('img, video.dc_mv') : null;
     var abody = tapped ? articleBody() : null;
     if (abody && abody.contains(tapped) && !dcconKey(tapped)) {
-      var shots = Array.prototype.filter.call(abody.querySelectorAll('img'), function (x) {
-        return !dcconKey(x) && imgURL(x) && ((x.naturalWidth || x.width) > 40 || x === tapped);
+      var shots = Array.prototype.filter.call(abody.querySelectorAll('img, video.dc_mv'), function (x) {
+        return !dcconKey(x) && galleryMediaURL(x) && (x.tagName === 'VIDEO' || (x.naturalWidth || x.width) > 40 || x === tapped);
       });
       var at = shots.indexOf(tapped);
       if (at >= 0) {
         e.preventDefault(); e.stopPropagation();
-        post('images', { urls: shots.map(imgURL), index: at });
+        post('images', { urls: shots.map(galleryMediaURL), index: at });
         return;
       }
     }
@@ -3098,7 +3107,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v189-replysize', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v190-gifviewer', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
