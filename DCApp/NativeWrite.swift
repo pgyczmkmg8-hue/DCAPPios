@@ -520,7 +520,7 @@ struct NativeWriteView: View {
                                 .padding(.horizontal, 5)
                                 .overlay(alignment: .topLeading) {
                                     if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
-                                        Text("내용").font(.system(size: 14)).foregroundStyle(Color(uiColor: .placeholderText))
+                                        Text("내용").font(.system(size: 16)).foregroundStyle(Color(uiColor: .placeholderText))
                                             .padding(.leading, 8).padding(.top, 12)
                                             .allowsHitTesting(false)
                                     }

@@ -109,7 +109,7 @@ enum ContentScript {
       '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:400!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
-      'li.comment .txt{font-size:14px!important}',
+      'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
       // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
       '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
@@ -3098,7 +3098,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v188-cmtlink', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v189-replysize', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
