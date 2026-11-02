@@ -876,6 +876,20 @@ final class WebViewModel: NSObject, ObservableObject {
                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
                                    parts: s.draftParts())
         s.submitting = true
+        var bodyBlocks: [[String: Any]] = s.blocks.compactMap { b -> [String: Any]? in
+            if let img = b.image {
+                if let raw = img.rawHTML { return ["t": "raw", "html": raw] }      // 수정: 원래 있던 칸 그대로
+                return ["t": "image", "b64": img.data.base64EncodedString(), "mime": img.mime, "ext": img.ext]
+            }
+            return b.text.isEmpty ? nil : ["t": "text", "text": b.text, "html": RichText.html(b.rich)]   // 꾸미기 포함
+        }
+        // 꼬릿말: 계정(유동 포함)·갤러리에 맞는 한 줄을 본문 맨 아래에 (글 수정으로 이미 들어 있으면 또 붙이지 않음)
+        let footerAccount: String? = s.isAnon ? FooterRule.anon : CredentialStore.currentAccountID
+        if let f = FooterStore.shared.text(account: footerAccount, gallery: s.galleryID) {
+            let line = FooterFormat.plain(f)
+            let already = s.blocks.contains { ($0.image?.rawHTML?.contains(line) ?? false) || $0.text.contains(line) }
+            if !already { bodyBlocks.append(["t": "text", "text": "\n" + line, "html": FooterFormat.html(f)]) }
+        }
         let payload: [String: Any] = [
             "title": title,
             "nick": s.isAnon && !s.nickLocked ? s.nick : NSNull(),
@@ -883,14 +897,8 @@ final class WebViewModel: NSObject, ObservableObject {
             "captcha": s.hasCaptcha ? s.captcha : NSNull(),
             "head": s.head,
             "imgSize": WriteImageSize.current.rawValue,
-            // 본문 순서 그대로: 글자 칸 / 사진 칸
-            "blocks": s.blocks.compactMap { b -> [String: Any]? in
-                if let img = b.image {
-                    if let raw = img.rawHTML { return ["t": "raw", "html": raw] }      // 수정: 원래 있던 칸 그대로
-                    return ["t": "image", "b64": img.data.base64EncodedString(), "mime": img.mime, "ext": img.ext]
-                }
-                return b.text.isEmpty ? nil : ["t": "text", "text": b.text, "html": RichText.html(b.rich)]   // 꾸미기 포함
-            },
+            // 본문 순서 그대로: 글자 칸 / 사진 칸 (+ 꼬릿말)
+            "blocks": bodyBlocks,
         ]
         Task {
             let r = await call("return window.__dcapp ? await window.__dcapp.nativeSubmit(p) : 'noscript';", ["p": payload]) as? String ?? "error"

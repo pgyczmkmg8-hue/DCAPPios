@@ -889,6 +889,21 @@ struct ToolsSettingsView: View {
             } footer: {
                 Text("글쓰기 화면에 미리 등록한 사진을 자동으로 첨부해요.")
             }
+
+            // 꼬릿말
+            Section {
+                NavigationLink { FooterSettingsView() } label: {
+                    LabeledContent {
+                        Text(FooterStore.enabled ? "\(FooterStore.shared.rules.count)개 · 켜짐" : "꺼짐")
+                    } label: {
+                        Label("꼬릿말", systemImage: "text.append")
+                    }
+                }
+            } header: {
+                Text("꼬릿말")
+            } footer: {
+                Text("글 맨 아래에 '-내용' 한 줄을 회색 12px로 붙여요. 계정(유동 포함)·갤러리마다 따로 정할 수 있어요.")
+            }
         }
         .navigationTitle("도구")
         .navigationBarTitleDisplayMode(.inline)

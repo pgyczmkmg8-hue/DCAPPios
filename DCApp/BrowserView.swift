@@ -240,6 +240,13 @@ struct BrowserView: View {
     /// 차단·메모 버튼: 무엇을 할지 고르는 창
     @State private var showBlockMemoChoice = false
     private var writeGalleryID: String? { model.url.flatMap(AutoImageStore.writeGalleryID) }
+    /// 꼬릿말을 정할 갤러리 (갤러리 목록·글 보기·글쓰기 화면)
+    private var footerGalleryID: String? { writeGalleryID ?? currentGallery?.id }
+    /// 꼬릿말을 정할 계정: 글쓰기 중이면 그 글의 신분(유동/로그인), 아니면 지금 로그인한 계정 (없으면 유동)
+    private var footerAccountKey: String {
+        if let s = model.nativeWrite { return s.isAnon ? FooterRule.anon : (CredentialStore.currentAccountID ?? FooterRule.all) }
+        return CredentialStore.currentAccountID ?? FooterRule.anon
+    }
 
     // 글쓰기 화면의 계정 버튼에 표시할 현재 계정
     @State private var currentAccount: String? = CredentialStore.currentAccountID
@@ -300,6 +307,7 @@ struct BrowserView: View {
     /// 듀오처럼 오른쪽 안전 영역이 넓으면 웹페이지가 그 줄까지 씀
     private var fillsTrailing: Bool { trailingInset >= 56 }
     @Environment(\.horizontalSizeClass) private var hSizeClass
+    @State private var showFooterEditor = false
     @Environment(\.verticalSizeClass) private var vSizeClass
     @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
@@ -632,6 +640,9 @@ struct BrowserView: View {
                         Button("취소", role: .cancel) { model.clearPick() }
                     } message: { req in
                         Text("\(req.snippet.isEmpty ? "(내용 없음)" : req.snippet)\n같은 모양의 요소 \(req.count)개가 숨겨져요.")
+                    }
+                    .sheet(isPresented: $showFooterEditor) {
+                        FooterQuickSheet(account: footerAccountKey, gallery: footerGalleryID ?? FooterRule.all)
                     }
                     .confirmationDialog("댓글 링크",
                                         isPresented: Binding(get: { model.commentLink != nil },
@@ -1823,6 +1834,11 @@ struct BrowserView: View {
             if currentGallery != nil {
                 Button { model.openManageLog() } label: {
                     Label("갤러리 관리 내역", systemImage: "list.bullet.clipboard")
+                }
+            }
+            if footerGalleryID != nil {
+                Button { showFooterEditor = true } label: {
+                    Label("꼬릿말 설정", systemImage: "text.append")
                 }
             }
             // (글 보관함은 갤러리 창의 '보관함' 탭으로)
