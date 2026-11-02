@@ -1034,11 +1034,14 @@ struct BrowserView: View {
         HStack(spacing: 6) {
             if isHomeScreen {
                 // 홈: 페이지 제목(connecting… 등) 대신 앱 이름 (글자 옆에 로고 그림)
+                // 로고 폭을 정해 둠 (폭이 정해지지 않으면 아이패드에서 처음 열 때 글자가 'dcA…'로 잘림)
                 Image("HomeLogo")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 36)
+                    .frame(width: 34, height: 36)
                 Text("dcAPP").fontWeight(.heavy).italic()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             } else {
                 Text(titleParts.name).lineLimit(1)
                 if let b = titleParts.badge { badgeView(b) }

@@ -156,6 +156,8 @@ enum ContentScript {
       '#swiper-rank,#swiper-hot{touch-action:pan-x!important}',
       // 넓은 화면(아이패드 가로)에서 좌우에 보이던 회색 여백을 흰색으로
       'html:not(.darkmode),html:not(.darkmode) body{background-color:#fff!important}',
+      // 아주 넓은 화면(아이패드 가로 1400px 이상)에서 디시가 목록·글 칸 양옆에 두는 64px 여백을 없애 끝까지 쓰게
+      '.brick-wid{margin-left:0!important;margin-right:0!important;max-width:none!important;width:auto!important;min-width:0!important}',
       // 홈 순위 아래 좌우 화살표는 필요 없어서 숨김
       '#gallrank_btprev,#gallrank_btnext,#gallhot_btprev,#gallhot_btnext,#livebest_btprev_rank,#livebest_btnext_rank,#livebest_btprev2_rank,#livebest_btnext2_rank{display:none!important}',
       '.reco-area{display:none!important}',
@@ -3107,7 +3109,28 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v190-gifviewer', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v192-wide', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
+    try {
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+      document.body.appendChild(probe);
+      var pcs = getComputedStyle(probe);
+      var safe = pcs.paddingTop + ' ' + pcs.paddingRight + ' ' + pcs.paddingBottom + ' ' + pcs.paddingLeft;
+      document.body.removeChild(probe);
+      var vv = window.visualViewport;
+      var vp = document.querySelector('meta[name="viewport"]');
+      out.push('screen: inner=' + innerWidth + 'x' + innerHeight + ' client=' + document.documentElement.clientWidth + ' screen=' + screen.width + 'x' + screen.height +
+        ' vv=' + (vv ? Math.round(vv.width) + 'x' + Math.round(vv.height) + ' scale=' + vv.scale : '-') + ' dpr=' + devicePixelRatio);
+      out.push('viewport meta: ' + (vp ? vp.content : '(없음)') + ' | safe-area(t r b l): ' + safe);
+      ['html', 'body', '.container', '.gall-detail-lst', '.sec-wrap', '.main-wrapping'].forEach(function (sel) {
+        var el = document.querySelector(sel);
+        if (!el) return;
+        var r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        out.push('box ' + sel + ': left=' + Math.round(r.left) + ' width=' + Math.round(r.width) + ' margin=' + cs.marginLeft + '/' + cs.marginRight +
+          ' padding=' + cs.paddingLeft + '/' + cs.paddingRight + ' bg=' + cs.backgroundColor + ' maxW=' + cs.maxWidth);
+      });
+    } catch (e) { out.push('layout diag error: ' + e.message); }
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
