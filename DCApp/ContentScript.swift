@@ -118,6 +118,10 @@ enum ContentScript {
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
       // 앱 댓글 입력창을 쓰면: 글 아래 댓글창은 한 줄 입력칸 모양으로 (닉네임·비밀번호·코드·디시콘·등록은 앱 입력창에 있음). 글자콘 창은 화면 밖에 두고 앱이 조작
       'html.dcapp-nc .comment-write{border:0!important;background:transparent!important}',
+      // 컨트롤바가 세로 막대일 때: 댓글 입력칸을 화면(분할이면 글 화면) 아래에 고정 — 입력칸만 (댓글 수·새로고침·본문·댓글 위로 머리글은 없음)
+      'html.dcapp-pin .comment-write-btm{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
+      'html.darkmode.dcapp-pin .comment-write-btm{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
+      'html.dcapp-pin body{padding-bottom:84px!important}',
       'html.dcapp-nc .comment-write-btm{padding:10px 12px!important}',
       'html.dcapp-nc #comment_write .who,html.dcapp-nc #comment_write .btm-wrt-btns,html.dcapp-nc [id^="comment_addDiv"]:not([data-dcapp-show]){height:0!important;overflow:hidden!important;visibility:hidden!important;margin:0!important;padding:0!important;border:0!important;min-height:0!important}',
       'html.dcapp-nc #comment_write #comment_memo.comment-caption{height:44px!important;min-height:44px!important;border:1px solid #d6d8e2!important;border-radius:22px!important;background:#f2f3f8!important;padding:11px 18px!important;font-size:15px!important;line-height:20px!important;overflow:hidden!important;box-shadow:none!important}',
@@ -2498,6 +2502,8 @@ enum ContentScript {
     var on = nativeCmtOn();
     var root = document.documentElement;
     if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
+    var pin = on && cfg.pinComment === true;
+    if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
     Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
       if (on && isCommentField(t)) {
         if (!t.hasAttribute('readonly')) { t.setAttribute('readonly', ''); t.setAttribute('data-dcapp-ro', '1'); }
@@ -3275,7 +3281,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v193-nativecmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v194-pincmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

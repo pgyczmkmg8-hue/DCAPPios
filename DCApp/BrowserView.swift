@@ -271,6 +271,9 @@ struct BrowserView: View {
     let fallbackTitle: String
     /// 왼쪽 위 ☰ 버튼 (홈 탭의 메인 브라우저에서만 표시, 다른 곳은 뒤로가기 버튼 자리)
     var showsMenuButton = false
+    /// 분할 화면의 왼쪽(목록) 화면이면 목록이 쓰는 폭 — 이 화면은 창 전체 폭으로 그려지고(컨트롤바가 창 오른쪽 끝에 놓이게),
+    /// 웹페이지·하단 바 같은 내용만 이 폭 안에 둠
+    var splitListWidth: CGFloat? = nil
 
 
     // 갤러리 내 검색
@@ -338,6 +341,8 @@ struct BrowserView: View {
     /// 오른쪽 빈 줄 폭을 다시 읽고, 메인 화면이면 앱 전체(RootView)에도 알려 줌 → 상단바가 빈 줄을 침범하지 않게 가림
     @State private var lastTopBarBottom: CGFloat = 0
     private func updateSideColumn(top: CGFloat) {
+        syncCommentPin()
+        if model.isDetailPane, top > 20, abs(router.splitTopHeight - top) > 0.5 { router.splitTopHeight = top }
         lastTopBarBottom = top
         applySideColumn()
         // 접기·펴기·앱 전환 직후엔 안전 영역 값이 잠깐 0으로 읽힐 때가 있어서 조금 뒤에 한 번 더 읽음
@@ -368,10 +373,11 @@ struct BrowserView: View {
     }
 
     /// 이미 만들어진 브라우저(홈 탭의 메인 브라우저 등)를 화면에 붙일 때
-    init(model: WebViewModel, fallbackTitle: String, showsMenuButton: Bool = false) {
+    init(model: WebViewModel, fallbackTitle: String, showsMenuButton: Bool = false, splitListWidth: CGFloat? = nil) {
         _model = StateObject(wrappedValue: model)
         self.fallbackTitle = fallbackTitle
         self.showsMenuButton = showsMenuButton
+        self.splitListWidth = splitListWidth
     }
 
     private var filters: FilterStore { FilterStore.shared }
@@ -402,6 +408,11 @@ struct BrowserView: View {
 
     /// 상단바 제목: 갤러리 안이면 갤러리 이름, 아니면 페이지 제목
     private var titleText: String {
+        // 분할 화면의 오른쪽(글) 화면: 갤러리 이름이 아니라 글 제목
+        if model.isDetailPane {
+            let t = Gallery.cleanTitle(model.title)
+            return t.isEmpty ? fallbackTitle : t
+        }
         if let g = gallery { return g.name }
         return model.title.isEmpty ? fallbackTitle : Gallery.cleanTitle(model.title)
     }
@@ -409,6 +420,7 @@ struct BrowserView: View {
     /// 상단 갤러리 이름: '갤러리' 글자는 빼고, 마이너(Ⓜ)·미니(mi)·인물(사람) 표시를 따로
     private enum GalleryBadge { case minor, mini, person }
     private var titleParts: (name: String, badge: GalleryBadge?) {
+        if model.isDetailPane { return (titleText, nil) }
         guard let g = gallery else { return (titleText, nil) }
         let raw = g.name
         let name = raw.replacingOccurrences(of: #"\s*(마이너|미니|인물)?\s*갤러리$"#, with: "", options: .regularExpression)
@@ -419,6 +431,32 @@ struct BrowserView: View {
         case .board: badge = (raw.contains("마이너 갤러리") || model.title.contains("마이너 갤러리")) ? .minor : nil
         }
         return (name.isEmpty ? raw : name, badge)
+    }
+
+    /// 분할 화면 왼쪽(목록) 상단바: 목록 폭 안에 제목(+글 목록이면 필터 버튼)
+    private var splitTopBar: some View {
+        HStack(spacing: 8) {
+            Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+            topTitle.frame(maxWidth: .infinity, alignment: .center)
+            Group {
+                if isListPage {
+                    Button { showListFilter = true } label: {
+                        Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("게시물 필터")
+                } else {
+                    Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .frame(width: splitListWidth ?? 0, height: max(router.splitTopHeight, 44))   // 오른쪽 글 화면 상단바와 같은 높이
+        .background(DCTheme.navy)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -460,6 +498,8 @@ struct BrowserView: View {
     /// 웹뷰 + 상단바 + 하단 바 + 키보드 감지
     private var layer1: some View {
         WebView(model: model)
+            .modifier(SplitPane(width: splitListWidth))
+            .safeAreaInset(edge: .top, spacing: 0) { if splitListWidth != nil { splitTopBar } }   // 분할 화면의 목록: 시스템 내비게이션 바 대신
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             .ignoresSafeArea(.container, edges: fillsTrailing ? [.bottom, .trailing] : .bottom)
@@ -477,7 +517,10 @@ struct BrowserView: View {
             }
             .background {
                 // 예비: 웹페이지 폭만큼은 화면 맨 위까지 (위 방법이 안 먹히는 경우 대비)
-                DCTheme.navy.ignoresSafeArea(.container, edges: .top)
+                // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
+                if splitListWidth == nil {
+                    DCTheme.navy.ignoresSafeArea(.container, edges: .top)
+                }
             }
             .overlay(alignment: .top) { topOverlay }
             .overlay {
@@ -556,7 +599,7 @@ struct BrowserView: View {
                 .animation(.easeOut(duration: 0.2), value: barTucked)
             }
             // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
-            .navigationTitle(duoTopBar && !(showsMenuButton && model.isWritePage) ? "" : titleText)
+            .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
@@ -582,6 +625,7 @@ struct BrowserView: View {
                                 .onChange(of: g.size.height) { _, h in bottomBarHeight = h }
                         }
                     }
+                    .modifier(SplitBottom(listWidth: splitListWidth, totalWidth: viewSize.width))
                     .transition(.opacity)
                 }
             }
@@ -1082,14 +1126,14 @@ struct BrowserView: View {
     private var topBar: some ToolbarContent {
         // 듀오: 상단바 오른쪽이 시계·카메라 줄이라 제목이 길면 '…'로 줄지 않고 통째로 사라짐
         // → 오른쪽 버튼과 겹치지 않는 고정 폭을 줌 (가운데 정렬은 그대로)
-        if duoTopBar && !(showsMenuButton && model.isWritePage) {
+        if duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage) {
             ToolbarItem(placement: .principal) {
                 topTitle.frame(width: duoTitleWidth)
             }
         } else {
             ToolbarItem(placement: .principal) {
                 // 제목이 길면(디시 첫 화면 제목 등) 넓은 화면에서 양옆 버튼 자리를 밀어내 로그인 버튼이 사라짐 → 폭 제한
-                topTitle.frame(maxWidth: 240)
+                topTitle.frame(maxWidth: model.isDetailPane ? 520 : 240)
             }
         }
         if showsMenuButton {
@@ -1183,7 +1227,7 @@ struct BrowserView: View {
                     .noGlassBackground()
                 }
             }
-        } else {
+        } else if !model.isDetailPane {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if currentGallery != nil {
                     Button { toggleFavorite() } label: {
@@ -1630,7 +1674,20 @@ struct BrowserView: View {
     }
 
     /// 웹페이지 아래에 하단 바 높이만큼 스크롤 여백 (바에 가려지지 않게)
+    /// 컨트롤바가 세로 막대면 글 아래 댓글 입력칸을 화면 아래에 고정
+    private func syncCommentPin() {
+        guard showsMenuButton else { return }
+        CommentPin.update(usesSideBar)
+    }
+
     private func updateBottomInset() {
+        syncCommentPin()
+        if splitListWidth != nil {
+            // 분할 화면: 하단 바는 오른쪽(글) 화면 아래에 떠 있으므로 여백은 글 화면 쪽에 줌
+            model.setBottomBarInset(0)
+            router.detailBrowser.setBottomBarInset(keyboardVisible || bottomBarHeight == 0 ? 0 : bottomBarHeight + 24)
+            return
+        }
         // 바 높이만 비우면 페이지 맨 아래(페이지 번호 등)가 바 테두리에 걸림 → 여유를 더 줌
         model.setBottomBarInset(keyboardVisible || bottomBarHeight == 0 ? 0 : bottomBarHeight + 24)
     }
@@ -2281,5 +2338,35 @@ private struct BarSwitchGesture: ViewModifier {
                         onActive(false)
                     }
             )
+    }
+}
+
+
+/// 분할 화면의 왼쪽(목록) 화면: 내용을 정해 준 폭 안(왼쪽)에 두고, 바깥은 창 전체 폭으로 되돌려 둠
+private struct SplitPane: ViewModifier {
+    let width: CGFloat?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let w = width {
+            content.frame(width: w).frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content
+        }
+    }
+}
+
+/// 분할 화면: 가로 하단 바는 왼쪽(목록) 아래가 아니라 오른쪽(글) 화면 아래에 띄움
+private struct SplitBottom: ViewModifier {
+    let listWidth: CGFloat?
+    let totalWidth: CGFloat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let l = listWidth {
+            content.frame(width: max(totalWidth - l, 200)).frame(maxWidth: .infinity, alignment: .trailing)
+        } else {
+            content
+        }
     }
 }

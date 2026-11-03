@@ -840,6 +840,7 @@ struct ToolsSettingsView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
     @AppStorage("dockComment") private var dockComment = true
     @AppStorage("nativeComment") private var nativeComment = true
+    @AppStorage("splitView") private var splitView = true
     @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
     @AppStorage(WriteImageSize.key) private var imageSize = WriteImageSize.original.rawValue
 
@@ -878,6 +879,15 @@ struct ToolsSettingsView: View {
                 Text("댓글")
             } footer: {
                 Text("앱 댓글 입력창을 켜면 댓글 칸이나 대댓글을 눌렀을 때 앱이 만든 입력창이 키보드 위에 떠요(유동 닉네임·비밀번호·코드, 디시콘 포함). 등록은 디시 댓글 양식으로 그대로 보내져요. 끄면 디시 원래 댓글 칸을 써요. 아래 '키보드 위에 붙이기'는 앱 댓글 입력창을 끈 경우에만 쓰여요.\n댓글 입력칸을 누르면 닉네임·비밀번호·코드·디시콘 버튼이 있는 댓글창 전체가 키보드 바로 위로 올라와요. 댓글창 바깥을 누르면 원래 자리로 돌아가요.")
+            }
+
+            // 분할 화면
+            Section {
+                Toggle("가로 분할 화면", isOn: $splitView)
+            } header: {
+                Text("화면")
+            } footer: {
+                Text("아이패드·듀오 펼침처럼 가로로 넓을 때 왼쪽에 글 목록, 오른쪽에 글을 나란히 보여요. 목록에서 글을 누르면 오른쪽에서 열려요. 세로로 돌리면 한 화면으로 돌아가요.")
             }
 
             // 자짤

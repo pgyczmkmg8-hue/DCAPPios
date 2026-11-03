@@ -178,6 +178,7 @@ final class FilterStore: ObservableObject {
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
             "nativeComment": UserDefaults.standard.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
+            "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
             "floatBar": UserDefaults.standard.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
@@ -190,5 +191,18 @@ final class FilterStore: ObservableObject {
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return "{}" }
         return json
+    }
+}
+
+
+/// 컨트롤바가 세로 막대일 때 글 아래 댓글 입력칸을 화면 아래에 고정할지 (컨트롤바 쪽 화면이 알려 줌)
+@MainActor
+enum CommentPin {
+    private(set) static var enabled = false
+
+    static func update(_ on: Bool) {
+        guard on != enabled else { return }
+        enabled = on
+        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)     // 열려 있는 모든 페이지에 새 설정 전달
     }
 }

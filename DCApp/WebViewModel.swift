@@ -160,6 +160,15 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.publisher(for: \.estimatedProgress)
             .receive(on: DispatchQueue.main).assign(to: &$progress)
 
+        // 다른 화면(분할 화면의 오른쪽)에서 글을 읽으면 이 목록의 읽은 글 표시 갱신
+        NotificationCenter.default.publisher(for: Self.postReadNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self, (note.object as AnyObject?) !== self else { return }
+                self.refreshReadMarks()
+            }
+            .store(in: &cancellables)
+
         // 다른 탭에서 로그인/로그아웃하면 새로고침
         NotificationCenter.default.publisher(for: DC.sessionChanged)
             .receive(on: DispatchQueue.main)
@@ -420,6 +429,13 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 갤러리 목록 화면에서 스와이프했을 때 할 일 (메인 화면에서는 "갤러리" 창 열기)
     var onGallerySwipe: (() -> Void)?
+    /// 분할 화면: 글 주소로 가는 이동을 오른쪽(글) 화면이 대신 열 때 (true면 이 화면은 이동하지 않음)
+    var postInterceptor: ((URL) -> Bool)?
+    /// 분할 화면의 왼쪽에 글이 열렸을 때 (오른쪽으로 옮기기 위해)
+    var postLanded: ((URL) -> Void)?
+    static let postReadNotification = Notification.Name("DCPostRead")
+    /// 분할 화면의 오른쪽(글) 화면인지 — 뒤로 갈 곳이 없어도 글 목록으로 가지 않음
+    var isDetailPane = false
 
     /// 지금 화면이 갤러리 글 목록인지 (글 보기·글쓰기 화면은 아님)
     var isGalleryListPage: Bool {
@@ -518,6 +534,10 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     func swipeBack() {
+        if isDetailPane {
+            if webView.canGoBack { webView.goBack() }
+            return
+        }
         if let prev = recommendPrevPageURL {
             load(prev)        // 개념글 2페이지 이상 → 그 전 페이지 (전체글로 가지 않음)
         } else if let url = webView.url, url.query?.contains("recommend=1") == true,
@@ -1195,6 +1215,7 @@ final class WebViewModel: NSObject, ObservableObject {
         guard let url = webView.url else { return }
         if let key = PostKey.from(url) {
             ReadPostStore.shared.markRead(key, title: Gallery.cleanTitle(title))
+            NotificationCenter.default.post(name: Self.postReadNotification, object: self)
             let pending = pendingWritten
             Task {
                 let info = await call("return window.__dcapp ? window.__dcapp.articleIdentity() : null;") as? [String: Any]
@@ -1211,13 +1232,19 @@ final class WebViewModel: NSObject, ObservableObject {
                 WrittenStore.shared.add(WrittenItem(kind: .post, key: key, title: realTitle.isEmpty ? p.title : realTitle,
                                                     snippet: "", date: Date(), who: who))
             }
-        } else if let g = Gallery.parse(url), isGalleryListPage {
-            let prefix = g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")
-            let keys = ReadPostStore.shared.readKeys(gallery: prefix + g.id)
-            Task {
-                await call("if (window.__dcapp) window.__dcapp.setReadPosts(k); return true;", ["k": Array(keys)])
-                applyListFilter()
-            }
+        } else if Gallery.parse(url) != nil, isGalleryListPage {
+            refreshReadMarks()
+        }
+    }
+
+    /// 글 목록에서 읽은 글을 보라색으로 (분할 화면에서 오른쪽 글을 읽으면 왼쪽 목록도 바로 갱신)
+    func refreshReadMarks() {
+        guard let url = webView.url, let g = Gallery.parse(url), isGalleryListPage else { return }
+        let prefix = g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")
+        let keys = ReadPostStore.shared.readKeys(gallery: prefix + g.id)
+        Task {
+            await call("if (window.__dcapp) window.__dcapp.setReadPosts(k); return true;", ["k": Array(keys)])
+            applyListFilter()
         }
     }
 
@@ -1532,6 +1559,12 @@ extension WebViewModel: WKNavigationDelegate {
             askOpenExternal(url)
             return .cancel
         }
+        // 분할 화면: 글 목록에서 글을 누르면 이 화면은 그대로 두고 오른쪽 화면에서 열기
+        if navigationAction.targetFrame?.isMainFrame ?? true, let interceptor = postInterceptor,
+           navigationAction.navigationType != .reload, navigationAction.navigationType != .backForward,
+           PostKey.from(url) != nil, webView.url.flatMap({ PostKey.from($0) }) == nil, interceptor(url) {
+            return .cancel
+        }
         // 글쓰기 주소로 이동을 시작하면 앱 글쓰기 화면부터 띄움 (양식은 로딩이 끝난 뒤 읽음)
         if navigationAction.targetFrame?.isMainFrame ?? true, Self.nativeWriteEnabled, nativeSkipURL != url,
            let gid = AutoImageStore.writeGalleryID(from: url),
@@ -1572,6 +1605,7 @@ extension WebViewModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
+        if let u = webView.url, PostKey.from(u) != nil { postLanded?(u) }
 
         // 읽은 글 기록 + 방금 쓴 글이면 작성한 글 기록 + 목록이면 읽은 글 보라색
         recordHistory()

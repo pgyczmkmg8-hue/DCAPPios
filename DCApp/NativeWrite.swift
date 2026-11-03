@@ -551,6 +551,8 @@ struct NativeWriteView: View {
                     .focused($focus, equals: .title)
                     .submitLabel(.next)
                     .onSubmit { focus = nil; session.focusFirstText() }
+                    // 하드웨어 키보드 Tab: 제목 → 본문
+                    .onKeyPress(.tab) { focus = nil; session.focusFirstText(); return .handled }
                     .padding(.horizontal, 8).padding(.vertical, 16)
                 Rectangle().fill(DCTheme.navy.opacity(0.7)).frame(height: 1)
 
