@@ -37,6 +37,31 @@ struct GalleryAutoRule: Codable, Equatable {
     var useCommon = true        // 이 갤러리 전용 자짤이 없을 때 공통 자짤 쓰기
 }
 
+/// 자짤 범위 키: 갤러리 ID만 = 모든 계정에서, "@계정#갤러리" = 그 계정(계정이 비어 있으면 유동)에서만
+/// (예전에 저장한 갤러리 ID 키는 그대로 '모든 계정'으로 동작)
+enum AutoImageScope {
+    static func key(account: String?, gallery: String) -> String {
+        guard let a = account else { return gallery }
+        return "@\(a)#\(gallery)"
+    }
+
+    static func parse(_ key: String) -> (account: String?, gallery: String) {
+        guard key.hasPrefix("@"), let h = key.firstIndex(of: "#") else { return (nil, key) }
+        return (String(key[key.index(after: key.startIndex)..<h]), String(key[key.index(after: h)...]))
+    }
+
+    static func accountLabel(_ a: String?) -> String {
+        guard let a else { return "모든 계정" }
+        return a.isEmpty ? "유동" : a
+    }
+
+    /// 글을 쓰는 신분: isAnon을 알면 유동("")/로그인 계정, 모르면 지금 로그인한 계정 (없으면 nil)
+    static func currentAccount(isAnon: Bool? = nil) -> String? {
+        if isAnon == true { return "" }
+        return CredentialStore.currentAccountID
+    }
+}
+
 struct AutoImageSettings: Codable {
     var enabled = false
     var mode: AutoImageMode = .auto
@@ -106,22 +131,30 @@ final class AutoImageStore: ObservableObject {
     }
 
     /// 이 갤러리에 쓸 자짤 1장 고르기: 갤러리 전용 자짤이 있으면 그중에서, 없으면 공통 자짤 중에서 랜덤
-    func pick(for galleryID: String) -> AutoImage? {
-        candidates(for: galleryID).randomElement()
+    func pick(for galleryID: String, account: String? = nil) -> AutoImage? {
+        candidates(for: galleryID, account: account).randomElement()
     }
 
     /// 이 갤러리에서 쓸 수 있는 자짤들: 전용 자짤이 있으면 그것만, 없으면(공통 허용 시) 공통 자짤
-    func candidates(for galleryID: String) -> [AutoImage] {
+    /// (계정+갤러리 전용 > 갤러리 전용(모든 계정) > 공통 순. account를 모르면 nil)
+    func candidates(for galleryID: String, account: String? = nil) -> [AutoImage] {
+        if let a = account {
+            let pair = AutoImageScope.key(account: a, gallery: galleryID)
+            let own = settings.images.filter { $0.galleries.contains(pair) }
+            if !own.isEmpty { return own }
+        }
         let specific = settings.images.filter { $0.galleries.contains(galleryID) }
         if !specific.isEmpty { return specific }
-        guard rule(for: galleryID).useCommon else { return [] }
+        guard rule(for: galleryID, account: account).useCommon else { return [] }
         return settings.images.filter { $0.galleries.isEmpty }
     }
 
     // MARK: 갤러리별 설정
 
-    func rule(for galleryID: String) -> GalleryAutoRule {
-        settings.rules?[galleryID] ?? GalleryAutoRule()
+    /// galleryID에는 범위 키도 넣을 수 있음. account를 주면 그 계정 전용 설정을 먼저 찾음
+    func rule(for galleryID: String, account: String? = nil) -> GalleryAutoRule {
+        if let a = account, let r = settings.rules?[AutoImageScope.key(account: a, gallery: galleryID)] { return r }
+        return settings.rules?[galleryID] ?? GalleryAutoRule()
     }
 
     func setRule(_ rule: GalleryAutoRule, for galleryID: String) {
@@ -138,8 +171,8 @@ final class AutoImageStore: ObservableObject {
     }
 
     /// 이 갤러리에서 실제로 적용되는 (사용 여부, 방식)
-    func effective(for galleryID: String) -> (enabled: Bool, mode: AutoImageMode) {
-        switch rule(for: galleryID).mode {
+    func effective(for galleryID: String, account: String? = nil) -> (enabled: Bool, mode: AutoImageMode) {
+        switch rule(for: galleryID, account: account).mode {
         case .inherit: (settings.enabled, settings.mode)
         case .auto: (true, .auto)
         case .manual: (true, .manual)
@@ -228,10 +261,13 @@ struct AutoImageSettingsView: View {
     @State private var isImporting = false
     @State private var showGalleryPicker = false
 
-    private func galleryName(_ gid: String) -> String {
-        favorites.items.first { $0.galleryID == gid }?.name
+    /// key: 갤러리 ID 또는 범위 키(계정+갤러리) → '계정 · 갤러리 이름'
+    private func galleryName(_ key: String) -> String {
+        let (account, gid) = AutoImageScope.parse(key)
+        let name = favorites.items.first { $0.galleryID == gid }?.name
             ?? VisitedStore.shared.items.first { $0.gallery.galleryID == gid }?.gallery.name
             ?? gid
+        return account == nil ? name : "\(AutoImageScope.accountLabel(account)) · \(name)"
     }
 
     private func summary(_ gid: String) -> String {
@@ -297,12 +333,12 @@ struct AutoImageSettingsView: View {
                     for i in offsets { store.removeRule(for: list[i]) }
                 }
                 Button { showGalleryPicker = true } label: {
-                    Label("갤러리 추가", systemImage: "plus.circle")
+                    Label("계정·갤러리 추가", systemImage: "plus.circle")
                 }
             } header: {
-                Text("갤러리별 설정")
+                Text("계정·갤러리별 설정")
             } footer: {
-                Text("갤러리마다 자짤을 켜고 끄거나, 첨부 방식과 전용 자짤을 따로 정할 수 있어요. 목록에 없는 갤러리는 위의 기본 설정을 따라요. 글쓰기 화면의 '자짤' 버튼을 길게 눌러도 바로 설정할 수 있어요.")
+                Text("계정(유동 포함)과 갤러리 조합마다 자짤을 켜고 끄거나, 첨부 방식과 전용 자짤을 따로 정할 수 있어요. 목록에 없는 조합은 갤러리 설정(모든 계정) → 위의 기본 설정 순으로 따라요. 글쓰기 화면의 '자짤' 버튼을 길게 눌러도 바로 설정할 수 있어요.")
             }
         }
         .navigationTitle("자짤")
@@ -363,9 +399,19 @@ struct AutoImageDetailView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @Environment(\.dismiss) private var dismiss
     @State private var newID = ""
+    /// 아래 갤러리 체크를 어느 계정 범위로 할지 (nil = 모든 계정)
+    @State private var scopeAccount: String?
 
     private var current: AutoImage {
         store.settings.images.first { $0.id == image.id } ?? image
+    }
+
+    private func scopeKey(_ gallery: String) -> String { AutoImageScope.key(account: scopeAccount, gallery: gallery) }
+
+    private func scopeLabel(_ key: String) -> String {
+        let (a, g) = AutoImageScope.parse(key)
+        let name = favorites.items.first { $0.galleryID == g }?.name ?? g
+        return a == nil ? name : "\(AutoImageScope.accountLabel(a)) · \(name)"
     }
 
     var body: some View {
@@ -383,14 +429,15 @@ struct AutoImageDetailView: View {
                     get: { current.galleries.isEmpty },
                     set: { if $0 { store.setGalleries([], for: image) } }
                 ))
+                AccountScopePicker(account: $scopeAccount)
                 ForEach(favorites.items) { g in
                     Button {
-                        toggle(g.galleryID)
+                        toggle(scopeKey(g.galleryID))
                     } label: {
                         HStack {
                             Text(g.name).foregroundStyle(.primary)
                             Spacer()
-                            if current.galleries.contains(g.galleryID) {
+                            if current.galleries.contains(scopeKey(g.galleryID)) {
                                 Image(systemName: "checkmark").foregroundStyle(.tint)
                             }
                         }
@@ -401,25 +448,27 @@ struct AutoImageDetailView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     Button("추가") {
-                        let id = newID.trimmingCharacters(in: .whitespaces)
-                        if !id.isEmpty && !current.galleries.contains(id) {
+                        let id = scopeKey(newID.trimmingCharacters(in: .whitespaces))
+                        if !newID.trimmingCharacters(in: .whitespaces).isEmpty && !current.galleries.contains(id) {
                             store.setGalleries(current.galleries + [id], for: image)
                         }
                         newID = ""
                     }
                 }
-                let extra = current.galleries.filter { id in !favorites.items.contains { $0.galleryID == id } }
+                // 즐겨찾기 목록의 지금 계정 범위 체크가 아닌 항목들 (다른 계정 범위·즐겨찾기 밖 갤러리)
+                let shown = Set(favorites.items.map { scopeKey($0.galleryID) })
+                let extra = current.galleries.filter { !shown.contains($0) }
                 ForEach(extra, id: \.self) { id in
                     HStack {
-                        Text(id)
+                        Text(scopeLabel(id))
                         Spacer()
                         Button(role: .destructive) { toggle(id) } label: { Image(systemName: "minus.circle") }
                     }
                 }
             } header: {
-                Text("적용할 갤러리")
+                Text("적용할 계정·갤러리")
             } footer: {
-                Text("갤러리를 고르면 그 갤러리에서만 이 자짤을 써요. 아무것도 안 고르면 전용 자짤이 없는 모든 갤러리에서 써요.")
+                Text("계정과 갤러리를 고르면 그 조합에서만 이 자짤을 써요. 계정을 '모든 계정'으로 두면 그 갤러리의 모든 계정에서 써요. 아무것도 안 고르면 전용 자짤이 없는 모든 곳에서 써요.")
             }
 
             Section {
@@ -508,10 +557,14 @@ struct GalleryIDPicker: View {
     @ObservedObject private var visited = VisitedStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var typed = ""
+    @State private var account: String?
 
     var body: some View {
         NavigationStack {
             List {
+                Section("계정") {
+                    AccountScopePicker(account: $account)
+                }
                 Section("직접 입력") {
                     HStack {
                         TextField("갤러리 ID", text: $typed)
@@ -547,7 +600,27 @@ struct GalleryIDPicker: View {
     private func pick(_ id: String) {
         let v = id.trimmingCharacters(in: .whitespaces)
         guard !v.isEmpty else { return }
-        onPick(v)
+        onPick(AutoImageScope.key(account: account, gallery: v))   // 계정을 골랐으면 '계정+갤러리' 범위 키
         dismiss()
+    }
+}
+
+
+/// 계정 범위 고르기: 모든 계정 / 유동 / 저장된 계정
+struct AccountScopePicker: View {
+    @Binding var account: String?
+
+    private var accounts: [String] {
+        var ids = CredentialStore.all().map(\.id)
+        if let a = account, !a.isEmpty, !ids.contains(a) { ids.append(a) }
+        return ids
+    }
+
+    var body: some View {
+        Picker("계정", selection: $account) {
+            Text("모든 계정").tag(String?.none)
+            Text("유동").tag(String?.some(""))
+            ForEach(accounts, id: \.self) { Text($0).tag(String?.some($0)) }
+        }
     }
 }

@@ -503,7 +503,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func attachAutoImage(force: Bool) {
         let store = AutoImageStore.shared
         guard let url = webView.url, let galleryID = AutoImageStore.writeGalleryID(from: url) else { return }
-        guard let img = store.pick(for: galleryID),
+        guard let img = store.pick(for: galleryID, account: AutoImageScope.currentAccount()),
               let data = try? Data(contentsOf: store.fileURL(img)) else {
             if force { showToast("등록된 자짤이 없어요 (설정 → 자짤)") }
             return
@@ -716,19 +716,22 @@ final class WebViewModel: NSObject, ObservableObject {
     private func startNativeWrite(_ gid: String) {
         let s = NativeWriteSession(galleryID: gid)
         nativeWrite = s
-        // 자짤 (자동 첨부로 설정된 갤러리)
-        let eff = AutoImageStore.shared.effective(for: gid)
-        if eff.enabled && eff.mode == .auto { addAutoImage(to: s, silent: true) }
         // 이어쓰기 / 로그인 후 돌아옴
+        var restored = false
         if let d = pendingDraft {
             pendingDraft = nil; keptWrite = nil
-            s.apply(d)
+            s.apply(d); restored = true
         } else if let k = keptWrite {
             keptWrite = nil
-            if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft) }
+            if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft); restored = true }
         }
         Task {
             guard let info = await readWriteInfo(s) else { return }
+            // 자짤 (자동 첨부로 설정된 계정·갤러리): 유동/로그인은 글쓰기 양식을 읽은 뒤에야 알 수 있음
+            if info["mode"] as? String != "modify" && !restored {
+                let eff = AutoImageStore.shared.effective(for: gid, account: AutoImageScope.currentAccount(isAnon: s.isAnon))
+                if eff.enabled && eff.mode == .auto { addAutoImage(to: s, silent: true) }
+            }
             // 글 수정: 원래 제목·내용(글자·사진 순서 그대로) 불러오기
             if info["mode"] as? String == "modify" {
                 s.title = info["title"] as? String ?? ""
@@ -834,7 +837,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func addAutoImage(to s: NativeWriteSession? = nil, silent: Bool = false) {
         guard let s = s ?? nativeWrite else { return }
         let store = AutoImageStore.shared
-        guard let img = store.pick(for: s.galleryID),
+        guard let img = store.pick(for: s.galleryID, account: AutoImageScope.currentAccount(isAnon: s.isAnon)),
               let data = try? Data(contentsOf: store.fileURL(img)) else {
             if !silent { showToast("등록된 자짤이 없어요 (설정 → 자짤)") }
             return
@@ -1479,7 +1482,7 @@ extension WebViewModel: WKNavigationDelegate {
             nativeWrite = nil
         }
         if let gid = writeGID, !nativeHandled {
-            let eff = AutoImageStore.shared.effective(for: gid)   // 갤러리별 설정 반영
+            let eff = AutoImageStore.shared.effective(for: gid, account: AutoImageScope.currentAccount())   // 계정·갤러리별 설정 반영
             if eff.enabled && eff.mode == .auto { attachAutoImage(force: false) }
         }
 

@@ -240,6 +240,14 @@ struct BrowserView: View {
     /// 차단·메모 버튼: 무엇을 할지 고르는 창
     @State private var showBlockMemoChoice = false
     private var writeGalleryID: String? { model.url.flatMap(AutoImageStore.writeGalleryID) }
+    /// 자짤 설정에 쓸 계정 범위 (알 수 없으면 nil = 모든 계정)
+    private var autoScopeAccount: String? { footerAccountKey == FooterRule.all ? nil : footerAccountKey }
+    /// 자짤 설정 화면 제목: 범위 키(계정+갤러리) → '계정 · 갤러리 이름'
+    private func autoScopeName(_ key: String) -> String {
+        let (a, g) = AutoImageScope.parse(key)
+        let name = favorites.items.first { $0.galleryID == g }?.name ?? gallery?.name ?? g
+        return a == nil ? name : "\(AutoImageScope.accountLabel(a)) · \(name)"
+    }
     /// 꼬릿말을 정할 갤러리 (갤러리 목록·글 보기·글쓰기 화면)
     private var footerGalleryID: String? { writeGalleryID ?? currentGallery?.id }
     /// 꼬릿말을 정할 계정: 글쓰기 중이면 그 글의 신분(유동/로그인), 아니면 지금 로그인한 계정 (없으면 유동)
@@ -883,7 +891,7 @@ struct BrowserView: View {
                                         set: { if !$0 { autoImageGallery = nil } })) {
                 if let gid = autoImageGallery {
                     NavigationStack {
-                        GalleryAutoImageView(galleryID: gid, name: gallery?.name ?? gid)
+                        GalleryAutoImageView(galleryID: gid, name: autoScopeName(gid))
                             .toolbar {
                                 ToolbarItem(placement: .confirmationAction) {
                                     Button("완료") { autoImageGallery = nil }
@@ -977,17 +985,17 @@ struct BrowserView: View {
     private var modeBanner: some View {
             // 글쓰기: 로그인 / 임시저장 / 불러오기 / 등록은 상단바로 옮김 → 여기엔 자짤만
             if model.isWritePage, let gid = writeGalleryID,
-               autoImages.effective(for: gid).enabled || !autoImages.settings.images.isEmpty {
+               autoImages.effective(for: gid, account: autoScopeAccount).enabled || !autoImages.settings.images.isEmpty {
                 HStack(spacing: 8) {
                     Spacer()
-                    if autoImages.effective(for: gid).enabled {
+                    if autoImages.effective(for: gid, account: autoScopeAccount).enabled {
                         // 누르면 자짤 첨부, 길게 누르면 이 갤러리 자짤 설정
                         Menu {
                             Button { model.attachAutoImage(force: true) } label: {
                                 Label("자짤 첨부", systemImage: "photo.badge.plus")
                             }
-                            Button { autoImageGallery = gid } label: {
-                                Label("이 갤러리 자짤 설정", systemImage: "slider.horizontal.3")
+                            Button { autoImageGallery = AutoImageScope.key(account: autoScopeAccount, gallery: gid) } label: {
+                                Label("이 계정·갤러리 자짤 설정", systemImage: "slider.horizontal.3")
                             }
                         } label: {
                             Text("자짤")
@@ -995,7 +1003,7 @@ struct BrowserView: View {
                             model.attachAutoImage(force: true)
                         }
                     } else {
-                        Button("자짤 꺼짐") { autoImageGallery = gid }
+                        Button("자짤 꺼짐") { autoImageGallery = AutoImageScope.key(account: autoScopeAccount, gallery: gid) }
                             .foregroundStyle(.secondary)
                     }
                 }
