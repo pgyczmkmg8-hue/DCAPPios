@@ -400,11 +400,25 @@ struct NativeWriteView: View {
     @State private var confirmSubmitCancel = false
     /// 화면 크기(접기·펴기) 바뀔 때 올려서 상단바 배치를 다시 읽게 함
     @State private var sizeTick = 0
+    @Environment(\.verticalSizeClass) private var vSizeClass
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            content
+        Group {
+            if vSizeClass == .compact {
+                // 가로로 눕힌 폰: 키보드가 화면 대부분을 가려서 위쪽(닉네임·말머리)이 잘리므로 상단바 아래 전체를 한 번에 스크롤
+                ScrollView {
+                    VStack(spacing: 0) {
+                        header
+                        contentBody
+                    }
+                }
+                .scrollDismissesKeyboard(.interactively)
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    content
+                }
+            }
         }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
             sizeTick &+= 1
@@ -608,7 +622,11 @@ struct NativeWriteView: View {
     // MARK: 본문: 말머리 / 제목 / 코드 / 사진 / 내용
 
     private var content: some View {
-        ScrollView {
+        ScrollView { contentBody }
+            .scrollDismissesKeyboard(.interactively)
+    }
+
+    private var contentBody: some View {
             VStack(alignment: .leading, spacing: 0) {
                 if !session.heads.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -691,8 +709,6 @@ struct NativeWriteView: View {
                         if on { dropTarget = endDropID } else if dropTarget == endDropID { dropTarget = nil }
                     }
             }
-        }
-        .scrollDismissesKeyboard(.interactively)
     }
 
     private var captchaRow: some View {
