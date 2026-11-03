@@ -55,6 +55,7 @@ struct CommentComposerHost: View {
                     .ignoresSafeArea()
                     .onTapGesture { model.closeCommentCompose(sync: true) }
                 CommentComposer(session: s, model: model)
+                    .ignoresSafeArea(.container, edges: .trailing)   // 듀오 옆 세로 줄 자리까지 입력창을 채움 (줄은 맨 위 시계 자리라 아래쪽은 비어 있음)
                     .transition(.move(edge: .bottom))
             }
             .id(s.id)
