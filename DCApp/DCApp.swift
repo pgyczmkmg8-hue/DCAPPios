@@ -56,6 +56,12 @@ final class AppRouter: ObservableObject {
         // 갤러리 목록에서 스와이프 → 하단 바 "갤러리" 버튼과 같은 효과
         mainBrowser.onGallerySwipe = { [weak self] in self?.sheet = .library }
         detailBrowser.onGallerySwipe = { [weak self] in self?.sheet = .library }
+        // 분할을 접어 오른쪽 글 화면을 한 화면으로 보는 중에 글에서 뒤로 가면, 그 화면에서 본 이전 글이 아니라 목록(왼쪽 화면)으로
+        detailBrowser.backToListHandler = { [weak self] in
+            guard let self, self.singleUsesDetail else { return false }
+            self.closeSingleDetail()
+            return true
+        }
         // 분할 화면이면 글 목록에서 누른 글은 오른쪽에서 엶
         mainBrowser.postInterceptor = { [weak self] url in
             guard let self, self.splitActive else { return false }
@@ -86,6 +92,12 @@ final class AppRouter: ObservableObject {
         } else if let g = Gallery.parse(url) {
             mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
         }
+    }
+
+    /// 한 화면으로 접힌 상태에서 오른쪽 글 화면을 닫고 목록 화면으로 돌아감 (글은 닫힌 것으로 보고 오른쪽은 빈 화면으로)
+    private func closeSingleDetail() {
+        singleUsesDetail = false
+        detailBrowser.load(URL(string: "about:blank")!)
     }
 
     /// 분할 화면 켜기/끄기 (화면이 가로로 넓어지거나 좁아질 때)

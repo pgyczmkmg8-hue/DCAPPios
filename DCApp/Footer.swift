@@ -77,6 +77,16 @@ enum FooterFormat {
 
     static func plain(_ text: String) -> String { "-" + text }
 
+    /// 이모지·기호 그림 문자를 뺀 글자 (디시가 이모지를 지우고 저장했을 때 꼬릿말을 알아보기 위함)
+    static func withoutEmoji(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.unicodeScalars.filter { u in
+            let v = u.value
+            if v >= 0x1F000 || (0x2600...0x27BF).contains(v) || (0xFE00...0xFE0F).contains(v) || v == 0x200D || v == 0x20E3 { return false }
+            if (0x2190...0x21FF).contains(v) || (0x2B00...0x2BFF).contains(v) || (0x2300...0x23FF).contains(v) { return false }
+            return true
+        })).trimmingCharacters(in: .whitespaces)
+    }
+
     /// 디시 편집기 HTML: 빈 줄 하나 + 꼬릿말 줄
     static func html(_ text: String) -> String {
         let e = plain(text).replacingOccurrences(of: "&", with: "&amp;")

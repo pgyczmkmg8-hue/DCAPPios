@@ -116,11 +116,18 @@ enum ContentScript {
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
+      // 디시가 글·댓글 등록을 막을 때(차단된 IP 등) 띄우는 안내 창은 안 보이게 — 앱이 같은 문구를 따로 띄우고 이전 화면으로 돌아감
+      '#ip_not_popup{display:none!important}',
       // 앱 댓글 입력창을 쓰면: 글 아래 댓글창은 한 줄 입력칸 모양으로 (닉네임·비밀번호·코드·디시콘·등록은 앱 입력창에 있음). 글자콘 창은 화면 밖에 두고 앱이 조작
       'html.dcapp-nc .comment-write{border:0!important;background:transparent!important}',
       // 컨트롤바가 세로 막대일 때: 댓글 입력칸을 화면(분할이면 글 화면) 아래에 고정 — 입력칸만 (댓글 수·새로고침·본문·댓글 위로 머리글은 없음)
-      'html.dcapp-pin .comment-write-btm{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
-      'html.darkmode.dcapp-pin .comment-write-btm{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
+      // 입력칸은 화면 아래에 고정하되, 원래 자리에는 '글 목록' 띠를 남겨 댓글과 아래 글 목록이 섞여 보이지 않게
+      'html.dcapp-nc.dcapp-pin .comment-write-btm{position:relative!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;height:44px!important;min-height:0!important;padding:0 14px!important;background:#e9ebf2!important;border-top:1px solid #d3d6e0!important;border-bottom:1px solid #d3d6e0!important}',
+      'html.dcapp-pin .comment-write-btm::after{content:"▼ 글 목록";font-size:13px;line-height:1;font-weight:700;color:#6b6f80}',
+      'html.dcapp-pin .comment-write-btm .comment-write{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
+      'html.darkmode.dcapp-nc.dcapp-pin .comment-write-btm{background:#2a2a2d!important;border-color:#3d3d40!important}',
+      'html.darkmode.dcapp-pin .comment-write-btm::after{color:#9a9ca6}',
+      'html.darkmode.dcapp-pin .comment-write-btm .comment-write{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
       'html.dcapp-pin body{padding-bottom:84px!important}',
       'html.dcapp-nc .comment-write-btm{padding:10px 12px!important}',
       'html.dcapp-nc #comment_write .who,html.dcapp-nc #comment_write .btm-wrt-btns,html.dcapp-nc [id^="comment_addDiv"]:not([data-dcapp-show]){height:0!important;overflow:hidden!important;visibility:hidden!important;margin:0!important;padding:0!important;border:0!important;min-height:0!important}',
@@ -2461,6 +2468,19 @@ enum ContentScript {
     cmtRetry.watchdog = setTimeout(scheduleCmtRetry, 25000);
   }
 
+  // ---------- 등록을 막는 안내 창(#ip_not_popup: 차단된 IP·매니저 차단 등) → 앱으로 문구를 넘김 ----------
+  function checkIpPopup() {
+    var pop = document.getElementById('ip_not_popup');
+    if (!pop) return;
+    var d = pop.style.display;
+    if (!d || d === 'none') return;           // 디시가 .show()로 띄운 순간만
+    var msg = Array.prototype.map.call(pop.querySelectorAll('.txt'), function (e) { return (e.innerText || '').trim(); })
+      .filter(Boolean).join(' ').replace(/IP 오류 신고/g, '').replace(/\s+/g, ' ').trim();
+    pop.style.display = 'none';
+    post('banned', { msg: msg });
+  }
+  setInterval(function () { try { checkIpPopup(); } catch (e) {} }, 150);
+
   // ---------- 앱 댓글 입력창: 댓글 칸을 누르면 웹 키보드 대신 앱 입력창을 띄움 ----------
   // 등록은 앱이 디시 댓글 양식에 채워서 디시 페이지가 처리 (Cloudflare 체크·429 재시도도 그대로)
   var composeTarget = null;
@@ -3000,6 +3020,13 @@ enum ContentScript {
   async function writeInfo() {
     if (!isWritePage()) return null;
     for (var t = 0; t < 20 && !document.getElementById('subject'); t++) await sleep(250);
+    // 글쓰기 양식이 없고 갤러리에서 차단됐다는 안내만 있으면 → 앱이 차단 안내를 띄우고 글쓰기를 막음
+    if (!document.getElementById('subject')) {
+      var bodyTxt = (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').trim();
+      if (bodyTxt.length < 700 && /차단|이용\s?제한/.test(bodyTxt) && !/cloudflare|보안|verify|확인하는 중/i.test(bodyTxt)) {
+        return { ok: false, banned: true, msg: bodyTxt.slice(0, 200) };
+      }
+    }
     var name = document.getElementById('name'), pw = document.getElementById('password');
     var heads = [];
     document.querySelectorAll('#swiper-headtxt li[data-no], .malwrt-lst li[data-no]').forEach(function (li) {
@@ -3241,6 +3268,16 @@ enum ContentScript {
         if (box && box.querySelectorAll('img').length >= before + imgs.length) { okImgs = true; break; }
       }
       if (!okImgs) return 'imgtimeout';
+      // 디시의 업로드 로딩 표시가 사라지고 사진 수가 더 변하지 않을 때까지 잠깐 더 기다림 (올라가는 도중에 본문을 덮어쓰지 않게)
+      var lastCnt = -1, stable = 0;
+      for (var w2 = 0; w2 < 40 && stable < 3; w2++) {
+        await sleep(250);
+        var lb = document.querySelector('.loading-box');
+        var busy = !!(lb && lb.getBoundingClientRect().height > 0 && getComputedStyle(lb).display !== 'none');
+        var cnt = box ? box.querySelectorAll('img').length : 0;
+        if (!busy && cnt === lastCnt) stable++; else stable = 0;
+        lastCnt = cnt;
+      }
     }
     // 디시가 만든 사진 칸(업로드 순서대로)
     var imgHTML = [];
@@ -3263,6 +3300,12 @@ enum ContentScript {
     if (useSN) ed.summernote('code', html);
     else if (box) box.innerHTML = html;
     if (box) box.dispatchEvent(new Event('input', { bubbles: true }));
+    // 사진이 빠진 채 등록되지 않게: 올린 사진 수만큼 본문에 들어갔는지 확인
+    if (imgs.length) {
+      var inBody = box ? Array.prototype.filter.call(box.querySelectorAll('img'), function (im) { return /viewimage/.test(im.getAttribute('src') || ''); }).length : 0;
+      var rawImgs = blocks.filter(function (b) { return b.t === 'raw' && /viewimage/.test(b.html || ''); }).length;
+      if (inBody < imgs.length + rawImgs) return 'imgmissing:' + inBody + '/' + (imgs.length + rawImgs);
+    }
     // Cloudflare 체크박스가 떠 있으면 → 앱이 디시 화면을 보여주고, 체크되면 여기서 이어서 등록
     if (tsNeedsCheck()) {
       clearInterval(nativeWait);
@@ -3281,7 +3324,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v194-pincmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v199-ippop', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

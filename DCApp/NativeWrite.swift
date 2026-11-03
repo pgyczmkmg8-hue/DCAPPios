@@ -93,6 +93,8 @@ final class NativeWriteSession: ObservableObject {
     var infoRequested = false
     /// 임시저장·이어쓰기로 채워서 시작했는지 (자짤 자동 첨부를 건너뜀)
     var restoredFromDraft = false
+    /// 글 수정 화면이면 수정하는 글의 주소 (분할 화면에서 수정이 끝나면 그 글을 다시 보여 주기 위해)
+    var modifyPostURL: URL?
     @Published var submitting = false
     /// 디시 화면을 보여주는 중 (Cloudflare 체크, 또는 동영상·디시콘 등 디시 기능 쓰는 중)
     @Published var showingWeb = false
@@ -174,6 +176,45 @@ final class NativeWriteSession: ObservableObject {
     var hasNewImages: Bool { images.contains { $0.rawHTML == nil } }
     /// 직접 넣은 사진이 있는지 (자짤 빼고) — 이것만 있어도 임시저장할 거리로 봄
     var hasUserImages: Bool { images.contains { $0.rawHTML == nil && !$0.isAuto } }
+
+    /// 본문 끝에 남아 있는 꼬릿말 줄('-내용', 설정에 있는 꼬릿말 중 하나)을 지움.
+    /// 꼬릿말은 등록할 때 이 계정·갤러리 규칙에 맞는 것만 새로 붙으므로, 다른 갤러리에서 쓴 글(수정·임시저장)의 옛 꼬릿말이 '-내용'으로 남지 않게.
+    /// 디시가 이모지를 지우고 저장하는 경우('-🍎' → '-')도 같은 꼬릿말로 봄
+    func stripKnownFooter() {
+        let footers = FooterStore.shared.rules
+            .map { FooterFormat.plain(FooterStore.clean($0.text)) }
+            .filter { $0.count > 1 }
+        guard !footers.isEmpty, let i = blocks.lastIndex(where: { $0.image == nil }) else { return }
+        let m = NSMutableAttributedString(attributedString: blocks[i].rich)
+        let ns = m.string as NSString
+        // 끝에서부터 공백을 건너뛰고, 마지막 줄의 범위를 찾음
+        var end = ns.length
+        while end > 0, let u = UnicodeScalar(ns.character(at: end - 1)), CharacterSet.whitespacesAndNewlines.contains(u) { end -= 1 }
+        guard end > 0 else { return }
+        var start = end
+        while start > 0, ns.character(at: start - 1) != 10 { start -= 1 }
+        let line = ns.substring(with: NSRange(location: start, length: end - start)).trimmingCharacters(in: .whitespaces)
+        let lineBare = FooterFormat.withoutEmoji(line)
+        let isFooter = footers.contains { f in
+            line == f || (FooterFormat.withoutEmoji(f) != f && lineBare == FooterFormat.withoutEmoji(f))
+        }
+        guard isFooter else { return }
+        m.deleteCharacters(in: NSRange(location: start, length: ns.length - start))
+        // 꼬릿말 앞에 띄워 둔 빈 줄·공백도 정리
+        while let last = m.string.last, last.isWhitespace || last.isNewline {
+            m.deleteCharacters(in: NSRange(location: m.length - 1, length: 1))
+        }
+        blocks[i].rich = m
+    }
+
+    /// 다른 갤러리 글을 불러올 때 사진을 새로 받아 오는 중인 개수 (다 받기 전에는 등록하지 않음)
+    var convertingPhotos = 0
+
+    /// 이미 올라가 있던 사진 칸을 앱이 가진 사진(등록할 때 이 갤러리에 새로 올림)으로 바꿈
+    func replaceImage(id: UUID, with new: WriteImage) {
+        guard let i = blocks.firstIndex(where: { $0.image?.id == id }) else { return }
+        blocks[i].image = new
+    }
 
     func setPreview(_ img: UIImage, for imageID: UUID) {
         guard let i = blocks.firstIndex(where: { $0.image?.id == imageID }) else { return }
@@ -275,6 +316,7 @@ final class NativeWriteSession: ObservableObject {
         } else {
             body = d.isHTML ? Self.plainText(fromHTML: d.body) : d.body
         }
+        stripKnownFooter()
     }
 
     static func plainText(fromHTML html: String) -> String {
@@ -351,6 +393,9 @@ struct NativeWriteView: View {
     @State private var dropTarget: UUID?
     @State private var showDcconPicker = false
     @State private var endDropID = UUID()
+    /// 등록이 10초 넘게 걸리면 나오는 '글쓰기 취소' 버튼
+    @State private var showSubmitCancel = false
+    @State private var confirmSubmitCancel = false
     /// 화면 크기(접기·펴기) 바뀔 때 올려서 상단바 배치를 다시 읽게 함
     @State private var sizeTick = 0
 
@@ -367,6 +412,12 @@ struct NativeWriteView: View {
         .background(Color(uiColor: Self.pageBackground).ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { toolbar }
         .overlay { if session.submitting { submittingCover } }
+        .confirmationDialog("글쓰기를 취소하고 나갈까요?", isPresented: $confirmSubmitCancel, titleVisibility: .visible) {
+            Button("취소하고 나가기", role: .destructive) { model.forceCloseNativeWrite() }
+            Button("계속 기다리기", role: .cancel) {}
+        } message: {
+            Text("이미 등록됐을 수도 있어요. 나가도 쓰던 내용은 임시저장에 남아 있어요.")
+        }
         // 안내 문구 (브라우저 화면의 안내는 이 화면에 가려서 여기서도 띄움)
         .overlay(alignment: .bottom) { NativeWriteToast(model: model).padding(.bottom, 70) }
         // .current: 사진 앱에 있는 원본 파일 그대로 받음 (HEIC 등은 올리기 전에 JPEG로 바꿈)
@@ -389,6 +440,7 @@ struct NativeWriteView: View {
             DraftPickerSheet(galleryID: session.galleryID) { d in
                 session.apply(d)
                 model.loadRemotePreviews(session)   // 디시 서버 사진은 미리보기를 따로 받아야 보임 (불러온 임시저장)
+                if d.galleryID != session.galleryID { model.convertRemotePhotos(session) }   // 다른 갤러리 글의 사진은 이 갤러리에 새로 올리도록
             }
         }
         .onAppear {
@@ -881,9 +933,29 @@ struct NativeWriteView: View {
             VStack(spacing: 12) {
                 ProgressView()
                 Text(session.hasNewImages ? "사진을 올리고 등록하는 중…" : "등록하는 중…").font(.subheadline)
+                if showSubmitCancel {
+                    // 등록이 오래 걸릴 때 강제로 나가기
+                    Text("오래 걸리고 있어요").font(.footnote).foregroundStyle(.secondary)
+                    Button { confirmSubmitCancel = true } label: {
+                        Text("글쓰기 취소")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18).padding(.vertical, 8)
+                            .background(Color.red, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity)
+                }
             }
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .animation(.easeOut(duration: 0.2), value: showSubmitCancel)
+            .task {
+                showSubmitCancel = false
+                try? await Task.sleep(for: .seconds(10))
+                if !Task.isCancelled { showSubmitCancel = true }
+            }
+            .onDisappear { showSubmitCancel = false }
         }
     }
 

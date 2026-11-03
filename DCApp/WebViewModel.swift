@@ -433,6 +433,10 @@ final class WebViewModel: NSObject, ObservableObject {
     var postInterceptor: ((URL) -> Bool)?
     /// 분할 화면의 왼쪽에 글이 열렸을 때 (오른쪽으로 옮기기 위해)
     var postLanded: ((URL) -> Void)?
+    /// 분할 화면의 글 수정을 등록한 뒤, 디시가 글 목록으로 보내면 수정한 글로 다시 가기 위한 기억
+    private var pendingModifyReturn: (url: URL, at: Date)?
+    /// 분할 화면에서 접어 오른쪽 글 화면을 한 화면으로 쓰는 중, 글에서 뒤로 가면 (글끼리 거슬러 가지 않고) 목록 화면으로 — true면 처리함
+    var backToListHandler: (() -> Bool)?
     static let postReadNotification = Notification.Name("DCPostRead")
     /// 분할 화면의 오른쪽(글) 화면인지 — 뒤로 갈 곳이 없어도 글 목록으로 가지 않음
     var isDetailPane = false
@@ -534,6 +538,7 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     func swipeBack() {
+        if let handler = backToListHandler, webView.url.flatMap({ PostKey.from($0) }) != nil, handler() { return }
         if isDetailPane {
             if webView.canGoBack { webView.goBack() }
             return
@@ -872,6 +877,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if let d = pendingDraft {
             pendingDraft = nil; keptWrite = nil
             s.apply(d); restored = true
+            if d.galleryID != gid { convertRemotePhotos(s) }
         } else if let k = keptWrite {
             keptWrite = nil
             if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft); restored = true }
@@ -897,6 +903,7 @@ final class WebViewModel: NSObject, ObservableObject {
             }
             // 글 수정: 원래 제목·내용(글자·사진 순서 그대로) 불러오기
             if info["mode"] as? String == "modify" {
+                s.modifyPostURL = webView.url.flatMap(Self.postURL(fromModifyURL:))
                 s.title = info["title"] as? String ?? ""
                 let parts = info["blocks"] as? [[String: Any]] ?? []
                 if !parts.isEmpty {
@@ -910,6 +917,7 @@ final class WebViewModel: NSObject, ObservableObject {
                         return WriteBlock(text: p["text"] as? String ?? "")
                     }
                     s.normalize()
+                    s.stripKnownFooter()      // 옛 꼬릿말은 떼고, 등록할 때 규칙에 맞는 꼬릿말만 다시 붙임
                     loadRemotePreviews(s)
                 }
             }
@@ -923,6 +931,13 @@ final class WebViewModel: NSObject, ObservableObject {
         let info = await call("return window.__dcapp ? await window.__dcapp.writeInfo() : null;") as? [String: Any]
         guard nativeWrite === s else { return nil }
         guard let info, (info["ok"] as? Bool) == true else {
+            if let info, info["banned"] as? Bool == true {
+                // 갤러리에서 차단됨: 글쓰기 화면을 닫고 안내
+                nativeWrite = nil
+                swipeBack()
+                showBanAlert(message: info["msg"] as? String ?? "")
+                return nil
+            }
             nativeWrite = nil
             showToast("글쓰기 양식을 못 읽어서 디시 화면으로 쓸게요")
             return nil
@@ -961,6 +976,34 @@ final class WebViewModel: NSObject, ObservableObject {
                 guard let img = await Task.detached(operation: { ImageViewer.decode(data) }).value else { return }
                 s.setPreview(img, for: id)
             }
+        }
+    }
+
+    /// 다른 갤러리에서 쓴 글(글 수정으로 불러온 글 포함)을 불러왔을 때, 이미 디시에 올라가 있던 사진은 그 갤러리 기준 주소라
+    /// 이 갤러리에 올리면 글에서 안 보임 → 사진을 내려받아 앱이 가진 사진으로 바꿔 등록할 때 이 갤러리에 새로 올림
+    func convertRemotePhotos(_ s: NativeWriteSession) {
+        let targets = s.blocks.compactMap { b -> (UUID, URL)? in
+            guard let img = b.image, img.rawHTML != nil, img.label == "사진", let u = img.remoteURL else { return nil }
+            return (img.id, u)
+        }
+        guard !targets.isEmpty else { return }
+        s.convertingPhotos += targets.count
+        let maxWidth = WriteImageSize.current.maxWidth
+        Task {
+            var failed = 0
+            for (id, url) in targets {
+                var req = URLRequest(url: url)
+                req.setValue("https://m.dcinside.com/", forHTTPHeaderField: "Referer")
+                if let (data, _) = try? await URLSession.shared.data(for: req),
+                   let p = await Task.detached(operation: { AutoImageStore.prepareForUpload(data, maxWidth: maxWidth) }).value {
+                    s.replaceImage(id: id, with: WriteImage(data: p.data, mime: p.mime, ext: p.ext,
+                                                            preview: UIImage(data: p.data) ?? UIImage()))
+                } else {
+                    failed += 1
+                }
+                s.convertingPhotos -= 1
+            }
+            if failed > 0 { showToast("사진 \(failed)장을 가져오지 못했어요. 다시 불러와 주세요") }
         }
     }
 
@@ -1024,6 +1067,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func submitNative() {
         guard let s = nativeWrite, !s.submitting else { return }
         if !s.loaded { showToast("디시 글쓰기 양식을 불러오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
+        if s.convertingPhotos > 0 { showToast("사진을 가져오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
         let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.count < 2 { showToast("제목을 2자 이상 입력해 주세요"); return }
         if title.count > 40 { showToast("제목은 40자까지 쓸 수 있어요"); return }
@@ -1043,6 +1087,8 @@ final class WebViewModel: NSObject, ObservableObject {
                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
                                    parts: s.draftParts())
         s.submitting = true
+        // 분할 화면의 글 수정: 등록 뒤 디시가 글 목록을 열면 수정한 글을 오른쪽에 다시 띄움
+        if isDetailPane, let u = s.modifyPostURL { pendingModifyReturn = (u, Date()) }
         var bodyBlocks: [[String: Any]] = s.blocks.compactMap { b -> [String: Any]? in
             if let img = b.image {
                 if let raw = img.rawHTML { return ["t": "raw", "html": raw] }      // 수정: 원래 있던 칸 그대로
@@ -1083,6 +1129,11 @@ final class WebViewModel: NSObject, ObservableObject {
             case "imgtimeout":
                 s.submitting = false
                 showToast("사진을 올리는 데 실패했어요. 다시 등록해 주세요")
+            case _ where r.hasPrefix("imgmissing"):
+                // 사진이 본문에 다 들어가지 않은 채로는 등록하지 않음 (사진이 빠진 글이 올라가는 것 방지)
+                s.submitting = false
+                let n = r.dropFirst("imgmissing:".count)
+                showToast("사진이 다 올라가지 않아 등록하지 않았어요 (\(n)). 다시 등록해 주세요")
             default:
                 s.submitting = false
                 showToast("등록하지 못했어요 (\(r))")
@@ -1197,6 +1248,45 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     /// 앱 글쓰기 ← : 쓰던 게 있으면 자동 저장하고 뒤로
+    // MARK: - 갤러리 차단 (매니저에게 차단당한 경우): 디시가 준 문구를 보여 주고 이전 화면으로
+
+    /// 디시가 글·댓글을 막으며 띄우는 안내 문구인지 (사용자가 직접 한 차단·해제 안내는 제외)
+    nonisolated static func looksLikeBan(_ message: String) -> Bool {
+        guard message.contains("차단") || message.contains("이용 제한") || message.contains("이용제한") else { return false }
+        let own = ["차단 등록", "차단 해제", "차단이 해제", "숨김 적용", "차단 및 삭제", "일일 차단", "차단 기간", "차단 사유", "차단할", "고정닉", "이미지 차단", "차단하시"]
+        return !own.contains { message.contains($0) }
+    }
+
+    /// 차단 안내: 디시가 준 문구만 그대로 보여 줌 (문구를 못 받았으면 짧게 알림)
+    private func showBanAlert(message: String) {
+        guard let vc = presenter(), !(vc is UIAlertController) else { return }
+        let text = message.isEmpty ? "차단된 갤러리예요" : message
+        let alert = UIAlertController(title: nil, message: text, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "확인", style: .default))
+        vc.present(alert, animated: true)
+    }
+
+    /// 글 수정 주소(/write/갤ID/modify/글번호) → 그 글 주소
+    nonisolated static func postURL(fromModifyURL url: URL) -> URL? {
+        let p = url.pathComponents.filter { $0 != "/" }
+        guard p.count >= 4, p[2] == "modify", let no = Int(p[3]) else { return nil }
+        let prefix = p[0] == "writemini" ? "mi$" : (p[0] == "writepr" ? "pr$" : "")
+        return DCGalleryID.postURL(prefix + p[1], no: no, comments: false)
+    }
+
+    /// 등록이 오래 걸릴 때 강제로 나가기: 진행 중인 로딩을 멈추고 글쓰기 화면을 닫고 이전 화면으로 (내용은 등록 직전에 자동 저장돼 있음)
+    func forceCloseNativeWrite(quiet: Bool = false) {
+        guard let s = nativeWrite else { return }
+        webView.stopLoading()
+        DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
+                                   parts: s.draftParts())
+        s.submitting = false
+        nativeWrite = nil
+        if !quiet { showToast("글쓰기를 취소했어요. 쓰던 내용은 임시저장에 있어요") }
+        swipeBack()
+    }
+
     func closeNativeWrite() {
         guard let s = nativeWrite else { return }
         if s.hasText || s.hasUserImages {
@@ -1501,6 +1591,15 @@ extension WebViewModel: WKScriptMessageHandler {
         case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
             if let s = commentCompose, s.sameTarget(body) { break }
             withAnimation(.easeOut(duration: 0.2)) { commentCompose = CommentComposeSession(info: body) }
+        case "banned":   // 디시가 등록을 막는 안내 창(차단된 IP·매니저 차단)을 띄움 → 웹 안내는 숨기고, 같은 문구를 앱이 띄우고 이전 화면으로
+            let msg = body["msg"] as? String ?? ""
+            commentCompose = nil
+            if nativeWrite != nil {
+                forceCloseNativeWrite(quiet: true)
+            } else if webView.url.flatMap(AutoImageStore.writeGalleryID) != nil {
+                swipeBack()
+            }
+            showBanAlert(message: msg)
         case "cmtok":   // 댓글 등록 성공 → 입력창 닫기
             if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
         case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
@@ -1606,6 +1705,11 @@ extension WebViewModel: WKNavigationDelegate {
         endRefreshing()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
         if let u = webView.url, PostKey.from(u) != nil { postLanded?(u) }
+        // 분할 화면에서 글을 수정하고 등록하면 디시가 목록으로 보내기도 함 → 수정한 글로
+        if let ret = pendingModifyReturn, let u = webView.url, AutoImageStore.writeGalleryID(from: u) == nil {
+            pendingModifyReturn = nil
+            if Date().timeIntervalSince(ret.at) < 120, PostKey.from(u) == nil { load(ret.url) }
+        }
 
         // 읽은 글 기록 + 방금 쓴 글이면 작성한 글 기록 + 목록이면 읽은 글 보라색
         recordHistory()
@@ -1778,6 +1882,12 @@ extension WebViewModel: WKUIDelegate {
             return
         }
         nativeWrite?.submitting = false      // 디시가 안내창을 띄우면(입력 누락 등) 앱 글쓰기 '등록 중' 풀기
+        commentCompose?.sending = false
+        // 글·댓글을 쓰는 중에 차단 안내가 오면 → 디시 문구를 그대로 보여 주고, 쓰던 화면은 닫고 이전 화면으로 (막지는 않음)
+        if (nativeWrite != nil || commentCompose != nil) && Self.looksLikeBan(message) {
+            commentCompose = nil
+            if nativeWrite != nil { forceCloseNativeWrite(quiet: true) }
+        }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in cont.resume() })
