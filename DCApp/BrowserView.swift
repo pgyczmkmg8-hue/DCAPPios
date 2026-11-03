@@ -340,6 +340,8 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
     /// 스크롤 중이라 컨트롤바를 화면 밖으로 넣었는지
     private var barTucked: Bool { autoHideBar && model.isScrolling }
+    /// 상단바(파란 영역)도 스크롤 중 숨김 — 글 목록·글 화면에서만 (홈·설정 같은 화면은 그대로)
+    private var topBarTucked: Bool { barTucked && showsMenuButton && splitListWidth == nil }
     @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
     /// 화면(이 브라우저 영역) 크기 — 가로로 쓰는지 판단
     @State private var viewSize: CGSize = .zero
@@ -531,6 +533,7 @@ struct BrowserView: View {
                     DCTheme.navy
                         .frame(width: g.size.width + g.safeAreaInsets.leading + g.safeAreaInsets.trailing, height: top + 1)   // 듀오 옆 세로 줄 위쪽까지
                         .offset(x: -g.safeAreaInsets.leading, y: -top)
+                        .opacity(topBarTucked ? 0 : 1)
                 }
             }
             .background {
@@ -538,6 +541,7 @@ struct BrowserView: View {
                 // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
                 if splitListWidth == nil {
                     DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .trailing])
+                        .opacity(topBarTucked ? 0 : 1)
                 }
             }
             .overlay(alignment: .top) { topOverlay }
@@ -624,6 +628,9 @@ struct BrowserView: View {
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            // 스크롤하는 동안 상단바도 컨트롤바처럼 통째로 올라갔다가 멈추면 다시 나옴
+            .toolbar(topBarTucked ? .hidden : .visible, for: .navigationBar)
+            .animation(.easeOut(duration: 0.2), value: topBarTucked)
             .toolbarColorScheme(.dark, for: .navigationBar)
             // 하단 바: 페이지를 잘라내지 않고 그 위에 띄움 (리퀴드 글래스 너머로 페이지가 비침)
             .overlay(alignment: .bottom) {
