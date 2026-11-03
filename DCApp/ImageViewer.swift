@@ -40,6 +40,12 @@ struct ImageViewer: View {
         _index = State(initialValue: min(max(0, item.index), max(0, item.urls.count - 1)))
     }
 
+    /// 창의 좌우 안전 영역 (뷰에서 안전 영역을 무시하면 GeometryReader가 0으로 읽으므로 창에서 직접 읽음)
+    private static func windowInset(_ side: KeyPath<UIEdgeInsets, CGFloat>) -> CGFloat {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        return ws.map { $0.safeAreaInsets[keyPath: side] }.max() ?? 0
+    }
     private var count: Int { item.urls.count }
     private var zoomed: Bool { scale > 1.01 }
     /// 아래로 끌수록 배경이 투명해져서 뒤의 글이 보임
@@ -59,6 +65,8 @@ struct ImageViewer: View {
                 }
 
                 chrome
+                    .padding(.leading, Self.windowInset(\.left))    // 닫기·저장 버튼은 안전 영역 안(듀오 시계 줄을 피함)
+                    .padding(.trailing, Self.windowInset(\.right))
                     .opacity(showChrome && dismissDrag == 0 ? 1 : 0)
                     .animation(.easeOut(duration: 0.15), value: showChrome)
             }
@@ -68,6 +76,8 @@ struct ImageViewer: View {
             .onTapGesture(count: 2) { toggleZoom() }
             .onTapGesture { showChrome.toggle() }
         }
+        // 사진은 안전 영역(듀오 옆 세로 줄) 밖까지 한 장씩 꽉 채움 — 안 그러면 줄 자리에 다음 사진 일부가 보임
+        .ignoresSafeArea(.container, edges: [.leading, .trailing])
         .statusBarHidden(!showChrome)
         .sheet(isPresented: $askAlbum) {
             NavigationStack {
