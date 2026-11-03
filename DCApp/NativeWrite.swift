@@ -163,6 +163,8 @@ final class NativeWriteSession: ObservableObject {
     }
     /// 글자 칸의 키보드를 내림 (제목으로 옮길 때)
     func resignActiveText() { activeTextView?.resignFirstResponder() }
+    /// 지금 편집 중인 글자 칸에 커서를 다시 확실히 넣음 (제목 포커스를 풀다가 키보드가 같이 내려간 경우 대비)
+    func refocusActiveText() { activeTextView?.becomeFirstResponder() }
 
     init(galleryID: String) { self.galleryID = galleryID }
 
@@ -455,7 +457,14 @@ struct NativeWriteView: View {
         }
         // 제목 칸에 커서가 있을 때 본문 칸을 눌러 편집이 시작되면 제목 포커스를 풀어 커서를 본문으로 옮김
         .onChange(of: session.editingRich) { _, on in
-            if on, focus == .title { focus = nil }
+            if on, focus == .title {
+                focus = nil
+                // 제목 포커스를 풀 때 SwiftUI가 방금 커서가 들어간 본문까지 내려 버릴 수 있어서, 잠깐 뒤 본문에 커서를 다시 확실히 넣음
+                Task {
+                    try? await Task.sleep(for: .milliseconds(80))
+                    session.refocusActiveText()
+                }
+            }
         }
     }
 
@@ -484,11 +493,24 @@ struct NativeWriteView: View {
             }
             accountMenu
             Spacer(minLength: compact ? 0 : 4)   // 버튼은 오른쪽(시계·카메라 바로 왼쪽)에 붙임
-            Button { model.saveNativeDraft() } label: {
-                Text("임시저장").font(.callout).lineLimit(1).fixedSize()
-            }
-            Button { showDraftPicker = true } label: {
-                Text("불러오기").font(.callout).lineLimit(1).fixedSize()
+            if compact {
+                // 듀오 상태 줄: 다이나믹 아일랜드가 켜져 시계가 밀려도 등록이 가려지지 않게 임시저장·불러오기는 ⋯ 하나로
+                Menu {
+                    Button { model.saveNativeDraft() } label: { Label("임시저장", systemImage: "square.and.arrow.down") }
+                    Button { showDraftPicker = true } label: { Label("불러오기", systemImage: "tray.full") }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 34, height: 36)
+                        .contentShape(Rectangle())
+                }
+            } else {
+                Button { model.saveNativeDraft() } label: {
+                    Text("임시저장").font(.callout).lineLimit(1).fixedSize()
+                }
+                Button { showDraftPicker = true } label: {
+                    Text("불러오기").font(.callout).lineLimit(1).fixedSize()
+                }
             }
             // 로딩 중 상단바(BrowserView)의 등록 버튼과 같은 모양: 둥근 네모 테두리만
             Button { dismissKeyboard(); model.submitNative() } label: {
@@ -515,7 +537,8 @@ struct NativeWriteView: View {
             if let d = duo {
                 // 시스템 시계·카메라 왼쪽 빈 자리(상태 줄)에 버튼을 올려 파란 영역을 줄임
                 headerButtons(compact: true)
-                    .frame(width: max(d.width - 24, 0), height: d.height, alignment: .leading)
+                    // 접은 화면: 다이나믹 아일랜드가 둘 켜지면 시계가 앞쪽(약 210pt)까지 밀리므로 버튼 줄은 그 안(약 196pt)에 둠
+                    .frame(width: max(min(d.width - 24, d.width > 600 ? .infinity : 196), 0), height: d.height, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 0)
                     .offset(y: -(d.height / 2) + 6)   // 시계·카메라 글자 높이에 맞춤
@@ -640,7 +663,19 @@ struct NativeWriteView: View {
                 Color.clear.frame(height: 80)
                     .overlay(alignment: .top) { dropLine(active: dropTarget == endDropID) }
                     .contentShape(Rectangle())
-                    .onTapGesture { if let last = session.blocks.last { focus = nil; session.focusRequest = last.id } }
+                    .onTapGesture {
+                        // 제목 등에 커서가 있었으면 본문 맨 끝으로 커서를 옮김 (키보드는 내려가지 않고 이어짐)
+                        guard let last = session.blocks.last else { return }
+                        let fromField = focus != nil
+                        focus = nil
+                        session.focusRequest = last.id
+                        if fromField {
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(80))
+                                session.refocusActiveText()
+                            }
+                        }
+                    }
                     .dropDestination(for: WriteBlockDrag.self) { items, _ in
                         drop(items, before: nil)
                     } isTargeted: { on in

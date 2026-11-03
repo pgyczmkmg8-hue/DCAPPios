@@ -435,6 +435,8 @@ final class WebViewModel: NSObject, ObservableObject {
     var postLanded: ((URL) -> Void)?
     /// 분할 화면의 글 수정을 등록한 뒤, 디시가 글 목록으로 보내면 수정한 글로 다시 가기 위한 기억
     private var pendingModifyReturn: (url: URL, at: Date)?
+    /// 분할 화면: 새 글을 등록하고 목록으로 돌아오면 그 글을 오른쪽에서 열기 위한 연결 (true면 처리함)
+    var openWrittenPost: ((URL) -> Bool)?
     /// 분할 화면에서 접어 오른쪽 글 화면을 한 화면으로 쓰는 중, 글에서 뒤로 가면 (글끼리 거슬러 가지 않고) 목록 화면으로 — true면 처리함
     var backToListHandler: (() -> Bool)?
     static let postReadNotification = Notification.Name("DCPostRead")
@@ -1266,6 +1268,22 @@ final class WebViewModel: NSObject, ObservableObject {
         vc.present(alert, animated: true)
     }
 
+    /// 새 글을 등록하고 글 목록으로 돌아왔을 때, 목록에서 방금 쓴 글(제목이 같은 글)을 찾아 오른쪽 화면에서 엶 (목록에 늦게 뜨면 몇 번 다시 찾음)
+    private func openWrittenPostFromList(title: String) {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        Task {
+            for attempt in 0..<4 {
+                try? await Task.sleep(for: .milliseconds(attempt == 0 ? 700 : 1300))
+                // 그 사이 다른 곳으로 옮겼거나 글이 이미 열렸으면 그만둠
+                guard let u = webView.url, Gallery.parse(u) != nil, PostKey.from(u) == nil else { return }
+                if let href = await call("return window.__dcapp ? window.__dcapp.findPostByTitle(t) : null;", ["t": t]) as? String,
+                   let url = URL(string: href), openWrittenPost?(url) == true { return }
+                if attempt == 2 { reload() }      // 목록에 아직 없으면 새로고침해서 다시 찾음
+            }
+        }
+    }
+
     /// 글 수정 주소(/write/갤ID/modify/글번호) → 그 글 주소
     nonisolated static func postURL(fromModifyURL url: URL) -> URL? {
         let p = url.pathComponents.filter { $0 != "/" }
@@ -1776,7 +1794,10 @@ extension WebViewModel: WKNavigationDelegate {
         }
         if writeGID == nil { nativeSkipURL = nil }
         if writeGID == nil, let s = nativeWrite {
-            if s.submitting { DraftStore.shared.removeAuto(galleryID: s.galleryID) }   // 등록됨 → 자동 저장본 지움
+            if s.submitting {
+                DraftStore.shared.removeAuto(galleryID: s.galleryID)   // 등록됨 → 자동 저장본 지움
+                if s.modifyPostURL == nil, openWrittenPost != nil { openWrittenPostFromList(title: s.title) }   // 분할 화면: 방금 쓴 글을 오른쪽에
+            }
             nativeWrite = nil
         }
         if let gid = writeGID, !nativeHandled {

@@ -2760,6 +2760,20 @@ enum ContentScript {
       })
       .catch(function () { return null; });
   }
+  // 글 목록에서 제목이 같은 글의 주소 (분할 화면: 방금 쓴 글을 오른쪽에 열기 위함)
+  function findPostByTitle(t) {
+    var want = String(t || '').replace(/\s+/g, ' ').trim();
+    if (!want) return null;
+    var rows = document.querySelectorAll('.gall-detail-lst li a.lt');
+    for (var i = 0; i < rows.length; i++) {
+      var a = rows[i];
+      if (!/\/(board|mini|person)\/[^\/]+\/\d+/.test(a.href || '')) continue;
+      var s = a.querySelector('.subjectin') || a;
+      var txt = (s.textContent || '').replace(/\s+/g, ' ').trim();
+      if (txt === want || txt.indexOf(want) === 0 || txt.replace(/^\[[^\]]*\]\s*/, '') === want) return a.href;
+    }
+    return null;
+  }
   function refreshComments() {
     // 댓글만 다시 받음 (디시 댓글 새로고침 버튼, 없으면 댓글 목록 다시 받기) — 화면 위치는 그대로 둠
     var box = document.getElementById('comment_box');
@@ -3324,7 +3338,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v199-ippop', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v200-writtenopen', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3603,6 +3617,7 @@ enum ContentScript {
     focusReply: focusReply,
     replyPending: replyPending,
     cmtSubmit: cmtSubmit,
+    findPostByTitle: findPostByTitle,
     composeSync: composeSync,
     composeDcconSend: composeDcconSend,
     txtconOpen: txtconOpen,

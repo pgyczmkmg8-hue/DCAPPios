@@ -68,6 +68,12 @@ final class AppRouter: ObservableObject {
             self.detailBrowser.load(url)
             return true
         }
+        // 분할 화면에서 새 글을 쓰고 목록으로 돌아오면 쓴 글을 오른쪽에서 엶
+        mainBrowser.openWrittenPost = { [weak self] url in
+            guard let self, self.splitActive else { return false }
+            self.detailBrowser.load(url)
+            return true
+        }
         // 어떤 경로로든 왼쪽 화면에 글이 열려 버리면 바로 오른쪽으로 옮김
         mainBrowser.postLanded = { [weak self] url in
             guard let self, self.splitActive else { return }
