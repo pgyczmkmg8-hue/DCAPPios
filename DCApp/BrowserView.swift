@@ -533,7 +533,7 @@ struct BrowserView: View {
                     DCTheme.navy
                         .frame(width: g.size.width + g.safeAreaInsets.leading + g.safeAreaInsets.trailing, height: top + 1)   // 듀오 옆 세로 줄 위쪽까지
                         .offset(x: -g.safeAreaInsets.leading, y: -top)
-                        .opacity(topBarTucked ? 0 : 1)
+                        .opacity(topBarTucked && Self.hasSideColumnOnly ? 0 : 1)   // 일반 아이폰은 시계·배터리 자리(상태 줄)의 파란색은 남김
                 }
             }
             .background {
@@ -541,7 +541,7 @@ struct BrowserView: View {
                 // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
                 if splitListWidth == nil {
                     DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .trailing])
-                        .opacity(topBarTucked ? 0 : 1)
+                        .opacity(topBarTucked && Self.hasSideColumnOnly ? 0 : 1)   // 일반 아이폰은 시계·배터리 자리(상태 줄)의 파란색은 남김
                 }
             }
             .overlay(alignment: .top) { topOverlay }

@@ -525,8 +525,8 @@ struct NativeWriteView: View {
         .buttonStyle(.plain)
         .padding(.trailing, compact ? 2 : -3)
         .overlay {
-            // 로딩 중 상단바 가운데에 있는 제목 (듀오 상태 줄에서는 자리가 없어 뺌)
-            if !compact, !BrowserView.hasSideColumnOnly { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
+            // 상단바 가운데 제목 (아이패드만 — 폰은 버튼이 가운데까지 와서 겹침)
+            if !compact, UIDevice.current.userInterfaceIdiom == .pad { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
         }
     }
 
