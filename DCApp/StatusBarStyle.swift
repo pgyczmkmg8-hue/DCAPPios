@@ -9,6 +9,12 @@ import ObjectiveC
 enum StatusBarStyler {
     /// 지금 테마의 상단바 색 기준 상태바 글씨 색
     static func style(for trait: UITraitCollection) -> UIStatusBarStyle {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        let sideR = ws.map(\.safeAreaInsets.right).max() ?? 0, sideL = ws.map(\.safeAreaInsets.left).max() ?? 0
+        if (sideR >= 56 && sideL < 20) || (sideL >= 56 && sideR < 20) {
+            return trait.userInterfaceStyle == .dark ? .lightContent : .darkContent
+        }
         let c = DCTheme.current.bar.resolvedColor(with: trait)
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         guard c.getRed(&r, green: &g, blue: &b, alpha: &a) else { return .lightContent }

@@ -472,7 +472,7 @@ struct NativeWriteView: View {
 
     /// 듀오처럼 시계·카메라가 상단바에 겹쳐 그려지는 화면이면 (상태 줄 높이, 그 왼쪽에서 쓸 수 있는 폭)
     private static var duoStatusBand: (height: CGFloat, width: CGFloat)? {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return nil }
+        return nil
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
@@ -526,8 +526,15 @@ struct NativeWriteView: View {
         .padding(.trailing, compact ? 2 : -3)
         .overlay {
             // 로딩 중 상단바 가운데에 있는 제목 (듀오 상태 줄에서는 자리가 없어 뺌)
-            if !compact { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
+            if !compact, !BrowserView.hasSideColumnOnly { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
         }
+    }
+
+    private static var listBarContentHeight: CGFloat {
+        let bottom = ListBarMetrics.bottom
+        let safeTop = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow)?.safeAreaInsets.top ?? 0
+        return (bottom > 20 && BrowserView.hasSideColumnOnly) ? max(bottom - safeTop, 0) : 0
     }
 
     private var header: some View {
@@ -564,9 +571,11 @@ struct NativeWriteView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.top, duo == nil ? 6 : 0)
-        .padding(.bottom, duo == nil ? 12 : (session.isAnon ? 10 : 2))
-        .background(DCTheme.navy.ignoresSafeArea(edges: .top))
+        .padding(.top, duo == nil ? (BrowserView.hasSideColumnOnly ? 9 : 6) : 0)
+        .padding(.bottom, duo == nil ? (BrowserView.hasSideColumnOnly ? 9 : 12) : (session.isAnon ? 10 : 2))   // 듀오 세로 줄: 위아래 같게 해서 버튼이 바 가운데에
+        // 글 목록 상단바(시스템 내비게이션 바)와 같은 높이로 (듀오 세로 줄 상태에서만)
+        .frame(minHeight: Self.listBarContentHeight, alignment: .center)
+        .background(DCTheme.navy.ignoresSafeArea(edges: [.top, .trailing]))
     }
 
     /// 로그인 / 계정 (상단바 왼쪽 — 원래 글쓰기 화면과 같은 메뉴)

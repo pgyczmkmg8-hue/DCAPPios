@@ -706,11 +706,32 @@ enum ContentScript {
     if (!isHomePage()) return;
     [window.swiper, window.swiper_hot].forEach(function (sw) {
       if (!sw || !sw.params || !sw.el) return;
-      if (sw.params.slidesPerView === 2) return;
+      // 화면이 넓으면(듀오 펼침) 사이트가 3칸으로 바꾸는 반응형 설정을 없애 항상 2칸(1~10위)만
+      var bp = !!sw.params.breakpoints || !!(sw.originalParams && sw.originalParams.breakpoints);
+      if (bp) {
+        sw.params.breakpoints = undefined;
+        if (sw.originalParams) sw.originalParams.breakpoints = undefined;
+        sw.currentBreakpoint = undefined;
+      }
+      if (sw.params.slidesPerView === 2 && sw.params.slidesPerGroup === 2 && !bp) return;
       sw.params.slidesPerView = 2;
       sw.params.slidesPerGroup = 2;
       try { sw.update(); } catch (e) {}
     });
+  }
+  // 화면 폭이 늦게 바뀌면(듀오 옆 줄 안전 영역 등) 순위 칸 폭을 다시 잼 — 안 그러면 처음 폭 기준으로 3칸이 보임
+  var rankResizeBound = false;
+  function homeRankRemeasure() {
+    if (rankResizeBound || !isHomePage()) return;
+    rankResizeBound = true;
+    var redo = function () {
+      [window.swiper, window.swiper_hot].forEach(function (sw) {
+        if (!sw || !sw.el) return;
+        try { sw.updateSize(); sw.updateSlides(); sw.update(); } catch (e) {}
+      });
+    };
+    window.addEventListener('resize', redo);
+    [300, 1000, 2500].forEach(function (ms) { setTimeout(redo, ms); });
   }
   
   // ---------- 홈 화면 → 실북갤 순위만 (펼친 상태) ----------
@@ -1563,6 +1584,7 @@ enum ContentScript {
     ensureStyle();
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { homeRankTwoUp(); } catch (e) {}
+    try { homeRankRemeasure(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
     try { cacheListIds(); buildNextPrev(); } catch (e) {}
@@ -3338,7 +3360,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v200-writtenopen', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v202-rank2b', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

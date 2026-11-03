@@ -317,6 +317,22 @@ struct BrowserView: View {
     private var hasSideColumn: Bool { false }
     /// 듀오처럼 오른쪽 안전 영역이 넓으면 웹페이지가 그 줄까지 씀
     private var fillsTrailing: Bool { trailingInset >= 56 }
+    /// 듀오를 돌려서 시계·배터리 세로 줄이 왼쪽에 있는 상태
+    private var leftColumn: Bool {
+        _ = viewSize   // 화면 크기(회전)가 바뀌면 다시 계산
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        return (ws.map(\.safeAreaInsets.left).max() ?? 0) >= 56 && (ws.map(\.safeAreaInsets.right).max() ?? 0) < 20
+    }
+    /// 컨트롤바와 화면 가장자리 사이 간격: 듀오는 막대를 옆 세로 줄 안(가운데)에 놓음
+    private var barEdge: CGFloat { (fillsTrailing && Self.hasSideColumnOnly && !barMirrored) ? max((trailingInset - 64) / 2, 4) : 12 }
+    /// 듀오처럼 오른쪽에만 세로 줄(안전 영역)이 있는 상태 — 가로로 눕힌 일반 아이폰은 양쪽에 생김
+    static var hasSideColumnOnly: Bool {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        let r = ws.map(\.safeAreaInsets.right).max() ?? 0, l = ws.map(\.safeAreaInsets.left).max() ?? 0
+        return (r >= 56 && l < 20) || (l >= 56 && r < 20)   // 화면을 돌리면 세로 줄이 왼쪽에 생김
+    }
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var showFooterEditor = false
     @Environment(\.verticalSizeClass) private var vSizeClass
@@ -344,6 +360,7 @@ struct BrowserView: View {
         syncCommentPin()
         if model.isDetailPane, top > 20, abs(router.splitTopHeight - top) > 0.5 { router.splitTopHeight = top }
         lastTopBarBottom = top
+        if !model.isDetailPane, top > 20 { ListBarMetrics.bottom = top }
         applySideColumn()
         // 접기·펴기·앱 전환 직후엔 안전 영역 값이 잠깐 0으로 읽힐 때가 있어서 조금 뒤에 한 번 더 읽음
         Task { @MainActor in
@@ -502,7 +519,8 @@ struct BrowserView: View {
             .safeAreaInset(edge: .top, spacing: 0) { if splitListWidth != nil { splitTopBar } }   // 분할 화면의 목록: 시스템 내비게이션 바 대신
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
-            .ignoresSafeArea(.container, edges: fillsTrailing ? [.bottom, .trailing] : .bottom)
+            // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
+            .ignoresSafeArea(.container, edges: fillsTrailing ? [.bottom, .trailing] : (leftColumn ? [.bottom, .leading] : .bottom))
             // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
             // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
             // 웹페이지 위쪽(상단바 뒤 ~ 화면 맨 위)만 남색으로, 오른쪽 빈 줄(듀오)의 위쪽까지 포함.
@@ -511,7 +529,7 @@ struct BrowserView: View {
                 GeometryReader { g in
                     let top = g.safeAreaInsets.top
                     DCTheme.navy
-                        .frame(width: g.size.width + g.safeAreaInsets.leading, height: top + 1)   // 오른쪽 빈 줄은 칠하지 않음
+                        .frame(width: g.size.width + g.safeAreaInsets.leading + g.safeAreaInsets.trailing, height: top + 1)   // 듀오 옆 세로 줄 위쪽까지
                         .offset(x: -g.safeAreaInsets.leading, y: -top)
                 }
             }
@@ -519,7 +537,7 @@ struct BrowserView: View {
                 // 예비: 웹페이지 폭만큼은 화면 맨 위까지 (위 방법이 안 먹히는 경우 대비)
                 // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
                 if splitListWidth == nil {
-                    DCTheme.navy.ignoresSafeArea(.container, edges: .top)
+                    DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .trailing])
                 }
             }
             .overlay(alignment: .top) { topOverlay }
@@ -597,6 +615,7 @@ struct BrowserView: View {
                 // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴
                 .offset(x: barTucked ? (barMirrored ? -220 : 220) : 0)
                 .animation(.easeOut(duration: 0.2), value: barTucked)
+                .ignoresSafeArea(.container, edges: fillsTrailing && Self.hasSideColumnOnly && !barMirrored ? .trailing : [])   // 듀오: 컨트롤바를 옆 세로 줄 자리로
             }
             // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
@@ -1267,7 +1286,7 @@ struct BrowserView: View {
         }
         .padding(4)
         .glassBar()
-        .padding(barMirrored ? .leading : .trailing, 12)
+        .padding(barMirrored ? .leading : .trailing, barEdge)
             .padding(.bottom, 16 + bottomBarHeight)      // 페이지 위에 떠 있는 하단 바 위로
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .bottomLeading : .bottomTrailing)
     }
@@ -1348,7 +1367,7 @@ struct BrowserView: View {
     /// 듀오처럼 상단바 오른쪽에 시계·카메라가 겹쳐 그려지는 화면인지
     /// (세로 화면은 오른쪽 안전 영역이 0이라 폭으로 구분 — 일반 아이폰은 가장 넓은 Pro Max도 440pt)
     private var duoTopBar: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone && (fillsTrailing || Self.windowWidth >= 460)
+        false
     }
     /// 듀오 상단바 제목 폭: 시계·카메라 자리를 뺀 폭의 가운데에 놓았을 때 오른쪽 버튼과 겹치지 않는 만큼
     private var duoTitleWidth: CGFloat {
@@ -1519,7 +1538,7 @@ struct BrowserView: View {
             collapsedBarCore
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { collapsedHeight = $0 }
                 .offset(y: clampedSideOffset(CGFloat(sideBarOffsetY)) + (sideBarHeight - collapsedHeight) / 2 - lift)
-                .padding(barMirrored ? .leading : .trailing, 18)          // 세로 막대(폭 64, 가장자리 12)와 가운데 맞춤
+                .padding(barMirrored ? .leading : .trailing, barEdge + 6)          // 세로 막대(폭 64, 가장자리 12)와 가운데 맞춤
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .leading : .trailing)
         } else {
             collapsedBarButton
@@ -1668,7 +1687,7 @@ struct BrowserView: View {
                 .scaleEffect(sideMoving ? 1.06 : 1)
                 .animation(.spring(duration: 0.2), value: sideMoving)
                 .offset(y: clampedSideOffset(CGFloat(sideBarOffsetY) + sideDragY))
-                .padding(barMirrored ? .leading : .trailing, 12)
+                .padding(barMirrored ? .leading : .trailing, barEdge)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: barMirrored ? .leading : .trailing)
         }
     }
@@ -2270,11 +2289,7 @@ extension View {
     /// 이걸 끄면 서드파티 브라우저처럼 시계는 위쪽(카메라 왼쪽)에, 화면은 옆 여백 없이 꽉 차게.
     @ViewBuilder
     func keepsTopStatusBar() -> some View {
-        if #available(iOS 27.1, *) {
-            self.toolbarVerticalBehavior(.disabled)
-        } else {
-            self
-        }
+        self
     }
 }
 
@@ -2369,4 +2384,9 @@ private struct SplitBottom: ViewModifier {
             content
         }
     }
+}
+
+/// 글 목록 상단바(내비게이션 바) 아래 끝 위치 — 글쓰기 상단바 높이를 맞추는 데 씀
+enum ListBarMetrics {
+    nonisolated(unsafe) static var bottom: CGFloat = 0
 }
