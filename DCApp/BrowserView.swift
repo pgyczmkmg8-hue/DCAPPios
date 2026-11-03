@@ -1606,7 +1606,7 @@ struct BrowserView: View {
                             sideMoving = true
                             barGestureChanged(true)
                         }
-                        .sequenced(before: DragGesture(minimumDistance: 0))
+                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))   // 막대가 같이 움직이므로 화면 기준 좌표여야 떨리지 않음
                         .onChanged { value in
                             if case .second(true, let d?) = value { sideDragY = d.translation.height }
                         }
