@@ -883,6 +883,7 @@ struct BrowserView: View {
     private var layer7: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer6)
+            .overlay(alignment: .bottom) { CommentComposerHost(model: model) }   // 앱 댓글 입력창
             .fullScreenCover(item: $model.imageViewer) { item in
                 ImageViewer(item: item)
                     .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록

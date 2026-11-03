@@ -839,6 +839,7 @@ struct ControlBarOrderView: View {
 struct ToolsSettingsView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
     @AppStorage("dockComment") private var dockComment = true
+    @AppStorage("nativeComment") private var nativeComment = true
     @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
     @AppStorage(WriteImageSize.key) private var imageSize = WriteImageSize.original.rawValue
 
@@ -865,6 +866,10 @@ struct ToolsSettingsView: View {
 
             // 댓글
             Section {
+                Toggle("앱 댓글 입력창", isOn: $nativeComment)
+                    .onChange(of: nativeComment) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
                 Toggle("댓글창을 키보드 위에 붙이기", isOn: $dockComment)
                     .onChange(of: dockComment) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
@@ -872,7 +877,7 @@ struct ToolsSettingsView: View {
             } header: {
                 Text("댓글")
             } footer: {
-                Text("댓글 입력칸을 누르면 닉네임·비밀번호·코드·디시콘 버튼이 있는 댓글창 전체가 키보드 바로 위로 올라와요. 댓글창 바깥을 누르면 원래 자리로 돌아가요.")
+                Text("앱 댓글 입력창을 켜면 댓글 칸이나 대댓글을 눌렀을 때 앱이 만든 입력창이 키보드 위에 떠요(유동 닉네임·비밀번호·코드, 디시콘 포함). 등록은 디시 댓글 양식으로 그대로 보내져요. 끄면 디시 원래 댓글 칸을 써요. 아래 '키보드 위에 붙이기'는 앱 댓글 입력창을 끈 경우에만 쓰여요.\n댓글 입력칸을 누르면 닉네임·비밀번호·코드·디시콘 버튼이 있는 댓글창 전체가 키보드 바로 위로 올라와요. 댓글창 바깥을 누르면 원래 자리로 돌아가요.")
             }
 
             // 자짤

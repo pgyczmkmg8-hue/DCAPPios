@@ -177,6 +177,7 @@ final class FilterStore: ObservableObject {
             "hideHeader": UserDefaults.standard.object(forKey: "hideSiteHeader") as? Bool ?? true,
             "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
+            "nativeComment": UserDefaults.standard.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
             "floatBar": UserDefaults.standard.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게

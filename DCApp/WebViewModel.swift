@@ -54,6 +54,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 댓글 링크를 눌렀을 때 물어볼 주소 (대댓글 달기 / 링크로 이동)
     @Published var commentLink: URL?
+    /// 앱 댓글 입력창 (댓글·대댓글 칸을 누르면 뜸)
+    @Published var commentCompose: CommentComposeSession?
     @Published var blockRequest: BlockRequest? {
         didSet {   // 차단 메뉴가 닫히면 길게 누르며 생긴 글자 선택도 풀기
             if blockRequest == nil, oldValue != nil {
@@ -255,6 +257,133 @@ final class WebViewModel: NSObject, ObservableObject {
 
     func load(_ url: URL) { webView.load(URLRequest(url: url)) }
     /// 댓글 링크 선택 창에서 '대댓글 달기'
+    // MARK: - 앱 댓글 입력창
+
+    private func composeArgs(_ s: CommentComposeSession) -> [String: Any] {
+        ["p": ["text": s.text, "nick": s.nick, "pw": s.pw, "code": s.code]]
+    }
+
+    /// 입력창의 내용을 디시 댓글 양식에 채우고 등록 버튼을 누름
+    func submitComment() {
+        guard let s = commentCompose, !s.sending else { return }
+        let text = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { showToast("내용을 입력해 주세요"); return }
+        if s.anon {
+            if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return }
+            if s.pw.isEmpty { showToast("비밀번호를 입력해 주세요"); return }
+            if !s.nickLocked { AnonStore.nick = s.nick }
+            AnonStore.password = s.pw
+        }
+        if s.hasCode && s.code.trimmingCharacters(in: .whitespaces).isEmpty { showToast("코드를 입력해 주세요"); return }
+        s.sending = true
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.cmtSubmit(p) : 'none';", composeArgs(s)) as? String
+            switch r {
+            case "sent":
+                // 성공하면 'cmtok'으로 닫힘. 응답이 없으면(디시가 입력 오류 안내만 띄운 경우 등) 입력창을 다시 쓸 수 있게
+                try? await Task.sleep(for: .seconds(10))
+                if commentCompose === s { s.sending = false }
+            case "check":
+                showToast("Cloudflare 체크박스를 누른 뒤 아래 '등록'을 눌러 주세요")
+                commentCompose = nil
+            default:
+                s.sending = false
+                showToast("댓글 칸을 못 찾았어요. 댓글을 다시 눌러 주세요")
+            }
+        }
+    }
+
+    /// 입력창 닫기 (내용은 디시 댓글 칸에 채워 둠)
+    func closeCommentCompose(sync: Bool) {
+        guard let s = commentCompose else { return }
+        if sync && !s.sending {
+            Task { _ = await call("return window.__dcapp ? window.__dcapp.composeSync(p) : false;", composeArgs(s)) }
+        }
+        withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil }
+    }
+
+    /// 유동이면 닉네임·비밀번호, 코드칸이 있으면 코드를 확인하고 기억 (안 맞으면 안내하고 false)
+    private func commentIdentityOK(_ s: CommentComposeSession) -> Bool {
+        if s.anon {
+            if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return false }
+            if s.pw.isEmpty { showToast("비밀번호를 입력해 주세요"); return false }
+            if !s.nickLocked { AnonStore.nick = s.nick }
+            AnonStore.password = s.pw
+        }
+        if s.hasCode && s.code.trimmingCharacters(in: .whitespaces).isEmpty { showToast("코드를 입력해 주세요"); return false }
+        return true
+    }
+
+    // MARK: 글자콘 댓글 (디시의 글자콘 창을 화면 밖에서 열어 두고 앱이 조작)
+
+    func txtconOpen() async -> TxtconInfo? {
+        guard let r = await call("return window.__dcapp ? await window.__dcapp.txtconOpen() : null;") as? [String: Any] else { return nil }
+        func colors(_ key: String) -> [TxtconColor] {
+            (r[key] as? [[String: Any]] ?? []).map { TxtconColor(hex: $0["hex"] as? String ?? "ffffff", on: $0["on"] as? Bool ?? false) }
+        }
+        return TxtconInfo(bg: colors("bg"), font: colors("font"), recent: r["recent"] as? [String] ?? [],
+                          max: (r["max"] as? NSNumber)?.intValue ?? 20)
+    }
+
+    /// 입력한 글자를 글자콘 창에 넣고, 디시가 걸러 낸 결과(글자수·글자 제한)를 돌려받음
+    func txtconSetText(_ t: String) async -> String {
+        await call("return window.__dcapp ? window.__dcapp.txtconSetText(t) : t;", ["t": t]) as? String ?? t
+    }
+
+    func txtconSetColor(_ kind: String, _ hex: String) {
+        Task { _ = await call("return window.__dcapp ? window.__dcapp.txtconSetColor(k, h) : false;", ["k": kind, "h": hex]) }
+    }
+
+    func txtconClose() {
+        Task { _ = await call("return window.__dcapp ? window.__dcapp.txtconClose() : false;") }
+    }
+
+    func sendCommentTxtcon() async -> Bool {
+        guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
+        s.sending = true
+        let r = await call("return window.__dcapp ? window.__dcapp.txtconSend(p) : 'none';",
+                           ["p": ["nick": s.nick, "pw": s.pw, "code": s.code]]) as? String ?? "none"
+        switch r {
+        case "sent":
+            Task {
+                try? await Task.sleep(for: .seconds(10))
+                if commentCompose === s { s.sending = false }
+            }
+            return true
+        case "check":
+            showToast("Cloudflare 체크박스를 누른 뒤 글자콘을 다시 등록해 주세요")
+            commentCompose = nil
+        default:
+            s.sending = false
+            showToast("글자콘을 올리지 못했어요")
+        }
+        return false
+    }
+
+    /// 앱 입력창에서 고른 디시콘을 바로 댓글로 등록 (디시콘 댓글은 글자 없이 디시콘만 올라감)
+    func sendCommentDccon(_ item: DcconItem) async -> Bool {
+        guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
+        s.sending = true
+        let args: [String: Any] = ["p": ["nick": s.nick, "pw": s.pw, "code": s.code], "k": item.pkg, "d": item.detail]
+        let r = await call("return window.__dcapp ? window.__dcapp.composeDcconSend(p, k, d) : 'none';", args) as? String ?? "none"
+        switch r {
+        case "sent":
+            Task {
+                // 성공하면 'cmtok'으로 닫힘. 응답이 없으면 입력창을 다시 쓸 수 있게
+                try? await Task.sleep(for: .seconds(10))
+                if commentCompose === s { s.sending = false }
+            }
+            return true
+        case "check":
+            showToast("Cloudflare 체크박스를 누른 뒤 디시콘을 다시 골라 주세요")
+            commentCompose = nil
+        default:
+            s.sending = false
+            showToast("디시콘을 올리지 못했어요")
+        }
+        return false
+    }
+
     func replyToPendingComment() {
         commentLink = nil
         Task { _ = await call("return window.__dcapp ? window.__dcapp.replyPending() : false;") }
@@ -1331,7 +1460,10 @@ extension WebViewModel: WKScriptMessageHandler {
             let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
             if writeToolbarHeight != h { writeToolbarHeight = h }
         case "cmtdone":   // 댓글 등록 요청 끝 → 광고 차단 다시 켜기 (429면 자동으로 다시 누르는 중이라 그대로)
-            if (body["status"] as? NSNumber)?.intValue != 429 { resumeAdBlock(after: 1) }
+            if (body["status"] as? NSNumber)?.intValue != 429 {
+                resumeAdBlock(after: 1)
+                commentCompose?.sending = false      // 성공이면 이미 닫혔고, 실패면 입력창을 다시 쓸 수 있게
+            }
         case "cmtretry":   // 429 뒤 자동 재등록 상태
             switch body["state"] as? String {
             case "start": showToast("댓글이 막혀서 등록될 때까지 다시 누를게요")
@@ -1339,6 +1471,11 @@ extension WebViewModel: WKScriptMessageHandler {
             case "done": showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
             default: break
             }
+        case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
+            if let s = commentCompose, s.sameTarget(body) { break }
+            withAnimation(.easeOut(duration: 0.2)) { commentCompose = CommentComposeSession(info: body) }
+        case "cmtok":   // 댓글 등록 성공 → 입력창 닫기
+            if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
         case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
             if let s = body["href"] as? String, let u = URL(string: s) { commentLink = u }
         case "wantfocus":   // 댓글을 눌러 답글 칸이 열림 → 키보드 띄우기 (스크립트 focus 허용)

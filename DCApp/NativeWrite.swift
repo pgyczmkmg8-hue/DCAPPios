@@ -985,7 +985,7 @@ final class DcconImageCache {
     }
 }
 
-private struct DcconThumb: View {
+struct DcconThumb: View {
     let url: URL?
     @State private var img: UIImage?
 

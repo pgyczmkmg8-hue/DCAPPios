@@ -116,6 +116,13 @@ enum ContentScript {
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
+      // 앱 댓글 입력창을 쓰면: 글 아래 댓글창은 한 줄 입력칸 모양으로 (닉네임·비밀번호·코드·디시콘·등록은 앱 입력창에 있음). 글자콘 창은 화면 밖에 두고 앱이 조작
+      'html.dcapp-nc .comment-write{border:0!important;background:transparent!important}',
+      'html.dcapp-nc .comment-write-btm{padding:10px 12px!important}',
+      'html.dcapp-nc #comment_write .who,html.dcapp-nc #comment_write .btm-wrt-btns,html.dcapp-nc [id^="comment_addDiv"]:not([data-dcapp-show]){height:0!important;overflow:hidden!important;visibility:hidden!important;margin:0!important;padding:0!important;border:0!important;min-height:0!important}',
+      'html.dcapp-nc #comment_write #comment_memo.comment-caption{height:44px!important;min-height:44px!important;border:1px solid #d6d8e2!important;border-radius:22px!important;background:#f2f3f8!important;padding:11px 18px!important;font-size:15px!important;line-height:20px!important;overflow:hidden!important;box-shadow:none!important}',
+      'html.darkmode.dcapp-nc #comment_write #comment_memo.comment-caption{background:#2c2c2e!important;border-color:#3d3d40!important}',
+      'html.dcapp-nc #txtconBoxComment,html.dcapp-nc #txtconBoxReple,html.dcapp-nc #dcconBoxComment,html.dcapp-nc #dcconBoxReple{position:fixed!important;left:-3000px!important;top:0!important;width:360px!important}',
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
       '.all-comment-tit .sp-reload{display:none!important}',
       '.dcapp-cmtin{margin-left:8px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:none;color:#3b4890;font-size:12px;font-weight:600;flex:none}',
@@ -1259,6 +1266,7 @@ enum ContentScript {
   function focusCommentInput() {
     var ta = document.getElementById('comment_memo');
     if (!ta) return;
+    if (nativeCmtOn()) { composeFor(ta); return; }
     // 댓글창이 아래 고정(dock)돼 있으면 위치 이동 없이 포커스만
     if (!ta.closest('.dcapp-docked')) ta.scrollIntoView({ block: 'center' });
     ta.focus();
@@ -1561,6 +1569,7 @@ enum ContentScript {
     try { fillAnon(); } catch (e) {}
     if (cfg.tint || tintKey) scheduleTint();
     try { sizeReplyBoxes(); } catch (e) {}
+    try { markCommentFieldsReadonly(); } catch (e) {}
     try { hideDory(); } catch (e) {}
     try { skipPwChange(); } catch (e) {}
     var enabled = cfg.enabled !== false;
@@ -2129,7 +2138,7 @@ enum ContentScript {
     dock.el = null; dock.ph = null; dock.head = null;
   }
   document.addEventListener('focusin', function (e) {
-    if (cfg.dockComment === false) return;
+    if (cfg.dockComment === false || nativeCmtOn()) return;
     var f = commentFieldNear(e.target), tapped = e.target;
     // 포커스가 잡히는 순간 레이아웃을 바꾸면 iOS가 키보드를 안 띄워서, 키보드가 올라온 뒤에 붙임
     if (f) setTimeout(function () { if (document.activeElement === tapped) dockOn(f); }, 150);
@@ -2365,6 +2374,7 @@ enum ContentScript {
     var ok = false;
     try { var j = JSON.parse(d.text || '{}'); ok = j.result !== false && j.result !== 0 && j.result !== '0'; } catch (e) { return; }
     if (!ok) return;
+    post('cmtok', {});     // 앱 댓글 입력창 닫기
     var memo = '', nickIn = '';
     try {
       var q = new URLSearchParams(d.body || '');
@@ -2447,6 +2457,161 @@ enum ContentScript {
     cmtRetry.watchdog = setTimeout(scheduleCmtRetry, 25000);
   }
 
+  // ---------- 앱 댓글 입력창: 댓글 칸을 누르면 웹 키보드 대신 앱 입력창을 띄움 ----------
+  // 등록은 앱이 디시 댓글 양식에 채워서 디시 페이지가 처리 (Cloudflare 체크·429 재시도도 그대로)
+  var composeTarget = null;
+  function nativeCmtOn() { return cfg.nativeComment !== false && !/\/write/.test(location.pathname); }
+  function replyNickOf(ta) {
+    var box = ta.closest ? ta.closest('[id^="comment_addDiv"]') : null;
+    if (!box) return '';
+    var ch = String(box.id).replace('comment_addDiv', '');
+    var li = document.querySelector('li[ch="' + ch + '"]');
+    var n = li ? li.querySelector('.nick') : null;
+    return n ? (n.textContent || '').replace(/\s+/g, ' ').trim() : '';
+  }
+  async function composeInfo(ta) {
+    var form = ta.closest('form');
+    function f(n) { return form ? form.querySelector('input[name="' + n + '"]') : null; }
+    var nick = f('comment_nick'), pw = f('comment_pw'), code = f('captcha_codeC');
+    var codeOn = !!(code && code.getBoundingClientRect().height > 0), img = null;
+    if (codeOn) {
+      var im = form.querySelector('.code img');
+      if (im && im.src) {
+        try {
+          var blob = await (await fetch(im.src, { credentials: 'include' })).blob();
+          img = await new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.readAsDataURL(blob); });
+        } catch (e) {}
+      }
+    }
+    return {
+      reply: ta.id !== 'comment_memo', replyNick: replyNickOf(ta), text: ta.value || '',
+      anon: !!(nick || pw), nick: nick ? nick.value : '', pw: pw ? pw.value : '',
+      nickLocked: !!(nick && (nick.disabled || nick.readOnly)), code: codeOn, codeImg: img
+    };
+  }
+  function composeFor(ta) {
+    composeTarget = ta;
+    composeInfo(ta).then(function (info) { if (composeTarget === ta) post('cmtcompose', info); });
+  }
+  // 댓글 칸은 읽기 전용으로 두어 눌러도 웹 키보드가 안 뜨게 (앱 입력창이 대신 뜸)
+  function markCommentFieldsReadonly() {
+    var on = nativeCmtOn();
+    var root = document.documentElement;
+    if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
+    Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
+      if (on && isCommentField(t)) {
+        if (!t.hasAttribute('readonly')) { t.setAttribute('readonly', ''); t.setAttribute('data-dcapp-ro', '1'); }
+      } else if (t.getAttribute('data-dcapp-ro') === '1') {
+        t.removeAttribute('readonly'); t.removeAttribute('data-dcapp-ro');
+      }
+    });
+  }
+  document.addEventListener('focusin', function (e) {
+    var t = e.target;
+    if (!nativeCmtOn() || !t || t.tagName !== 'TEXTAREA' || !isCommentField(t)) return;
+    try { t.blur(); } catch (x) {}
+    composeFor(t);
+  }, true);
+  // 앱 입력창의 내용을 디시 댓글 양식에 채움
+  function composeFill(p) {
+    var ta = composeTarget;
+    if (!ta || !document.body.contains(ta)) return null;
+    var form = ta.closest('form');
+    function setv(el, v) {
+      if (!el || v == null) return;
+      el.value = v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (form) {
+      setv(form.querySelector('input[name="comment_nick"]'), p.nick);
+      setv(form.querySelector('input[name="comment_pw"]'), p.pw);
+      setv(form.querySelector('input[name="captcha_codeC"]'), p.code);
+    }
+    try { ta.removeAttribute('maxlength'); } catch (e) {}      // 글자 수 제한은 앱이 걸지 않음
+    setv(ta, p.text);
+    return form;
+  }
+  function composeSync(p) { return !!composeFill(p); }
+  // Cloudflare 체크박스가 필요하면 숨겨 둔 댓글창(대댓글 칸 포함)을 보이게 하고 그 위치로
+  function revealCheck(form) {
+    var box = form.closest ? form.closest('[id^="comment_addDiv"]') : null;
+    if (box) box.setAttribute('data-dcapp-show', '1');
+    try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
+    return 'check';
+  }
+  function cmtSubmit(p) {
+    var form = composeFill(p);
+    if (!form) return 'gone';
+    cmtRetry.form = form;
+    if (tsNeedsCheck()) return revealCheck(form);          // Cloudflare 체크박스가 떠 있으면 사용자가 체크한 뒤 디시 등록을 누르게
+    var btn = form.querySelector('button.btn-comment-write, button[type="submit"]');
+    if (btn) btn.click();
+    else if (form.requestSubmit) form.requestSubmit();
+    else return 'nobtn';
+    return 'sent';
+  }
+  // 글자콘 댓글: 디시의 글자콘 창을 화면 밖에서 열어 두고, 앱 화면이 입력·색을 그 창에 넣어 줌
+  function txtconInfo() {
+    function colors(id) {
+      return Array.prototype.map.call(document.querySelectorAll('#' + id + ' button[data-txtcon-color]'), function (b) {
+        return { hex: b.getAttribute('data-txtcon-color'), on: b.classList.contains('on') };
+      });
+    }
+    var recent = Array.prototype.map.call(document.querySelectorAll('#txtcon_recent li'), function (li) {
+      return (li.textContent || '').trim();
+    }).filter(Boolean);
+    var ta = document.getElementById('txtcon_memo');
+    return { bg: colors('txtcon_bg_list'), font: colors('txtcon_font_list'), recent: recent,
+             max: ta ? (parseInt(ta.getAttribute('maxlength'), 10) || 20) : 20, text: ta ? ta.value : '' };
+  }
+  async function txtconOpen() {
+    var ta = composeTarget;
+    if (!ta || typeof window.show_txtcon !== 'function') return null;
+    try { window.show_txtcon(ta.id === 'comment_memo' ? 'txtconWrite' : 'txtconReple'); } catch (e) { return null; }
+    for (var i = 0; i < 20 && !document.getElementById('txtcon_memo'); i++) await sleep(100);
+    return document.getElementById('txtcon_memo') ? txtconInfo() : null;
+  }
+  function txtconSetText(t) {
+    var ta = document.getElementById('txtcon_memo');
+    if (!ta) return '';
+    ta.value = t;
+    ['input', 'keyup'].forEach(function (n) { ta.dispatchEvent(new Event(n, { bubbles: true })); });
+    return ta.value;
+  }
+  function txtconSetColor(kind, hex) {
+    var b = document.querySelector('#txtcon_' + (kind === 'font' ? 'font' : 'bg') + '_list button[data-txtcon-color="' + hex + '"]');
+    if (b) b.click();
+    return !!b;
+  }
+  function txtconSend(p) {
+    var form = composeFill(p);
+    if (!form) return 'gone';
+    cmtRetry.form = form;
+    if (tsNeedsCheck()) return revealCheck(form);
+    if (typeof window.insertTxtcon !== 'function') return 'nofeature';
+    try { window.insertTxtcon(); } catch (e) { return 'err:' + e.message; }
+    return 'sent';
+  }
+  function txtconClose() {
+    try { if (typeof window.showTxtcon === 'function') window.showTxtcon(false); } catch (e) {}
+    return true;
+  }
+  // 디시콘 댓글: 닉네임·비밀번호·코드를 양식에 채운 뒤, 디시 페이지의 디시콘 등록 함수로 바로 등록 (글자는 건드리지 않음)
+  function composeDcconSend(p, pkg, detail) {
+    var ta = composeTarget;
+    var form = composeFill(p);
+    if (!form) return 'gone';
+    cmtRetry.form = form;
+    if (tsNeedsCheck()) return revealCheck(form);
+    if (typeof window.insertDccon !== 'function') return 'nofeature';
+    try {
+      window.dcconMode = ta.id === 'comment_memo' ? 'commentWrite' : 'commentReple';
+      window.insertDccon({ dcconPackage: String(pkg), dcconDetail: String(detail) });
+    } catch (e) { return 'err:' + e.message; }
+    return 'sent';
+  }
+
   // ---------- 남의 댓글을 눌러 답글 칸이 열리면 바로 키보드 ----------
   var replyFocusTarget = null;
   // 디시는 댓글·답글을 누르면 #comment_addDiv{ch} 안에 답글 칸을 새로 만듦 (댓글 = li.comment, 답글 = li.comment-add)
@@ -2462,6 +2627,7 @@ enum ContentScript {
   function focusReply() {
     var ta = replyFocusTarget;
     if (!ta || !document.body.contains(ta)) return false;
+    if (nativeCmtOn() && ta.tagName === 'TEXTAREA' && isCommentField(ta)) { composeFor(ta); return true; }
     ta.focus();
     // 내용 칸(편집기)이면 체크 전 커서 자리로
     if (ta === tsRefocus.el && tsRefocus.range && ta.isContentEditable) {
@@ -2494,7 +2660,7 @@ enum ContentScript {
       if (el && document.body.contains(el) && document.activeElement !== el) {
         replyFocusTarget = el;
         focusReply();
-        post('wantfocus', {});
+        if (!nativeCmtOn()) post('wantfocus', {});
       }
     }
     tsRefocus.prev = st;
@@ -2510,7 +2676,7 @@ enum ContentScript {
       if (!ta) { if (++replyTries < 20) setTimeout(waitForReply, 60); return; }
       replyFocusTarget = ta;
       var focused = focusReply();
-      post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
+      if (!(focused && nativeCmtOn())) post('wantfocus', {});     // 앱에서 한 번 더 (iOS가 스크립트 focus로는 키보드를 안 띄우는 경우 대비)
     })();
   }
   // 디시의 답글 열기(body에 걸린 click)가 끝난 뒤에 실행되도록 document의 버블 단계에서
@@ -3109,7 +3275,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v192-wide', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v193-nativecmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3387,6 +3553,14 @@ enum ContentScript {
     moveWriteFocus: moveWriteFocus,
     focusReply: focusReply,
     replyPending: replyPending,
+    cmtSubmit: cmtSubmit,
+    composeSync: composeSync,
+    composeDcconSend: composeDcconSend,
+    txtconOpen: txtconOpen,
+    txtconSetText: txtconSetText,
+    txtconSetColor: txtconSetColor,
+    txtconSend: txtconSend,
+    txtconClose: txtconClose,
     headTabs: headTabs,
     openNotice: openNotice,
     focusTitle: focusTitle,
