@@ -107,6 +107,8 @@ enum ContentScript {
       // 개념/비추 버튼: 네모 칸(아이콘 칸 | 숫자) + 실베추·펌·신고는 아이콘만
       // 글 본문 가독성: 제목·본문 글씨를 키우고 줄 간격을 넓히고, 사진은 가로 폭에 맞춤 (공식앱처럼)
       '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:400!important}',
+      // 듀오 옆 세로 줄(시계·배터리) 아래로 웹이 깔려도 글 제목칸(제목·글쓴이·댓글 버튼)은 줄 밖에 두어 가려지거나 안 눌리는 일이 없게
+      '.gallview-tit-box{padding-right:max(12px,env(safe-area-inset-right))!important;padding-left:max(12px,env(safe-area-inset-left))!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
@@ -3360,7 +3362,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v202-rank2b', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v203-titbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
