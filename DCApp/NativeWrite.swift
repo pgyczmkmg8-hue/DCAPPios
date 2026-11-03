@@ -420,6 +420,8 @@ struct NativeWriteView: View {
                 }
             }
         }
+        // 일반 아이폰은 가로여도 안전 영역 없이 화면 끝까지 (듀오 옆 세로 줄은 피함)
+        .ignoresSafeArea(.container, edges: (UIDevice.current.userInterfaceIdiom == .phone && !BrowserView.hasSideColumnOnly) ? [.leading, .trailing] : [])
         .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
             sizeTick &+= 1
             // 안전 영역 값은 조금 늦게 바뀌므로 한 번 더
@@ -950,7 +952,7 @@ struct NativeWriteView: View {
             }
         }
         .frame(height: 50)
-        .background(Color(uiColor: Self.toolbarBackground).ignoresSafeArea(edges: .bottom))
+        .background(Color(uiColor: Self.toolbarBackground).ignoresSafeArea(edges: (UIDevice.current.userInterfaceIdiom == .phone && !BrowserView.hasSideColumnOnly) ? [.bottom, .leading, .trailing] : .bottom))
     }
 
     /// 다크모드 배경: 디시 화면(다크모드)과 같은 회색 (기본 검정이 너무 어두워서)

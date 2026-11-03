@@ -520,7 +520,8 @@ struct BrowserView: View {
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
-            .ignoresSafeArea(.container, edges: fillsTrailing ? [.bottom, .trailing] : (leftColumn ? [.bottom, .leading] : .bottom))
+            .ignoresSafeArea(.container, edges: UIDevice.current.userInterfaceIdiom == .phone ? [.bottom, .leading, .trailing]   // 폰(가로 포함): 안전 영역 없이 화면 끝까지
+                                                : (fillsTrailing ? [.bottom, .trailing] : (leftColumn ? [.bottom, .leading] : .bottom)))
             // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
             // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
             // 웹페이지 위쪽(상단바 뒤 ~ 화면 맨 위)만 남색으로, 오른쪽 빈 줄(듀오)의 위쪽까지 포함.
@@ -615,7 +616,8 @@ struct BrowserView: View {
                 // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴
                 .offset(x: barTucked ? (barMirrored ? -220 : 220) : 0)
                 .animation(.easeOut(duration: 0.2), value: barTucked)
-                .ignoresSafeArea(.container, edges: fillsTrailing && Self.hasSideColumnOnly && !barMirrored ? .trailing : [])   // 듀오: 컨트롤바를 옆 세로 줄 자리로
+                .ignoresSafeArea(.container, edges: (UIDevice.current.userInterfaceIdiom == .phone && !Self.hasSideColumnOnly) ? [.leading, .trailing]   // 일반 폰은 가로여도 컨트롤바를 화면 가장자리 기준으로
+                                                : (fillsTrailing && Self.hasSideColumnOnly && !barMirrored ? .trailing : []))   // 듀오: 컨트롤바를 옆 세로 줄 자리로
             }
             // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
