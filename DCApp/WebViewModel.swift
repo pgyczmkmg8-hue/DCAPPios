@@ -713,10 +713,12 @@ final class WebViewModel: NSObject, ObservableObject {
     static var nativeWriteEnabled: Bool { UserDefaults.standard.object(forKey: nativeWriteKey) as? Bool ?? true }
 
     /// 글쓰기 페이지가 열리면 앱 글쓰기 화면을 만들고, 디시 양식에서 유동 여부·말머리 등을 읽어 옴
-    private func startNativeWrite(_ gid: String) {
+    /// 앱 글쓰기 화면을 먼저 띄움 (디시 글쓰기 주소로 이동을 시작하는 순간) — 페이지 로딩 중에도 브라우저 상단바 대신 앱 상단바가 보이게
+    /// 이어쓰기 / 로그인 후 돌아옴 복원도 여기서
+    @discardableResult
+    private func beginNativeWrite(_ gid: String) -> (session: NativeWriteSession, restored: Bool) {
         let s = NativeWriteSession(galleryID: gid)
         nativeWrite = s
-        // 이어쓰기 / 로그인 후 돌아옴
         var restored = false
         if let d = pendingDraft {
             pendingDraft = nil; keptWrite = nil
@@ -725,6 +727,18 @@ final class WebViewModel: NSObject, ObservableObject {
             keptWrite = nil
             if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft); restored = true }
         }
+        s.restoredFromDraft = restored
+        return (s, restored)
+    }
+
+    private func startNativeWrite(_ gid: String) {
+        let (s, restored) = beginNativeWrite(gid)
+        finishNativeWriteStart(s, gid, restored: restored)
+    }
+
+    /// 페이지 로딩이 끝난 뒤: 디시 양식 읽기 → 자짤·글 수정 불러오기
+    private func finishNativeWriteStart(_ s: NativeWriteSession, _ gid: String, restored: Bool) {
+        s.infoRequested = true
         Task {
             guard let info = await readWriteInfo(s) else { return }
             // 자짤 (자동 첨부로 설정된 계정·갤러리): 유동/로그인은 글쓰기 양식을 읽은 뒤에야 알 수 있음
@@ -860,6 +874,7 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 앱 글쓰기 '등록' → 디시 양식에 채우고 등록
     func submitNative() {
         guard let s = nativeWrite, !s.submitting else { return }
+        if !s.loaded { showToast("디시 글쓰기 양식을 불러오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
         let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.count < 2 { showToast("제목을 2자 이상 입력해 주세요"); return }
         if title.count > 40 { showToast("제목은 40자까지 쓸 수 있어요"); return }
@@ -1380,6 +1395,12 @@ extension WebViewModel: WKNavigationDelegate {
             askOpenExternal(url)
             return .cancel
         }
+        // 글쓰기 주소로 이동을 시작하면 앱 글쓰기 화면부터 띄움 (양식은 로딩이 끝난 뒤 읽음)
+        if navigationAction.targetFrame?.isMainFrame ?? true, Self.nativeWriteEnabled, nativeSkipURL != url,
+           let gid = AutoImageStore.writeGalleryID(from: url),
+           nativeWrite?.galleryID != gid, nativeWrite?.submitting != true {
+            beginNativeWrite(gid)
+        }
         return .allow
     }
 
@@ -1469,6 +1490,8 @@ extension WebViewModel: WKNavigationDelegate {
         if let gid = writeGID, Self.nativeWriteEnabled, nativeSkipURL != webView.url {
             if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true {
                 startNativeWrite(gid)
+            } else if let s = nativeWrite, !s.infoRequested {
+                finishNativeWriteStart(s, gid, restored: s.restoredFromDraft)   // 이동을 시작할 때 먼저 띄운 화면 → 로딩이 끝났으니 양식 읽기
             } else if nativeWriteNeedsReread, let s = nativeWrite {
                 Task { _ = await readWriteInfo(s) }
             }
@@ -1531,10 +1554,18 @@ extension WebViewModel: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         endRefreshing()
+        dropUnreadNativeWrite(error)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         endRefreshing()
+        dropUnreadNativeWrite(error)
+    }
+
+    /// 먼저 띄운 앱 글쓰기 화면인데 페이지가 안 열렸으면(연결 실패 등) 닫아서 디시 화면의 오류를 보이게 (다른 이동으로 바뀐 '취소'는 무시)
+    private func dropUnreadNativeWrite(_ error: Error) {
+        guard let s = nativeWrite, !s.infoRequested, (error as NSError).code != NSURLErrorCancelled else { return }
+        nativeWrite = nil
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

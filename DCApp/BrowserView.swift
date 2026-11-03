@@ -1118,8 +1118,8 @@ struct BrowserView: View {
                                 .fontWeight(.bold)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 5)
-                                .overlay(Capsule().stroke(Color.white.opacity(0.85), lineWidth: 1.2))
-                                .contentShape(Capsule())
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                                .contentShape(RoundedRectangle(cornerRadius: 6))
                         }
                     }
                     .buttonStyle(.plain)

@@ -89,6 +89,10 @@ final class NativeWriteSession: ObservableObject {
     @Published var captchaImage: UIImage?
     @Published var captcha = ""
     @Published var loaded = false
+    /// 디시 글쓰기 양식(유동 여부·닉네임·말머리·코드칸)을 읽기 시작했는지 — 화면은 페이지 로딩 전에 먼저 뜨고, 양식은 로딩이 끝난 뒤 읽음
+    var infoRequested = false
+    /// 임시저장·이어쓰기로 채워서 시작했는지 (자짤 자동 첨부를 건너뜀)
+    var restoredFromDraft = false
     @Published var submitting = false
     /// 디시 화면을 보여주는 중 (Cloudflare 체크, 또는 동영상·디시콘 등 디시 기능 쓰는 중)
     @Published var showingWeb = false
@@ -347,11 +351,18 @@ struct NativeWriteView: View {
     @State private var dropTarget: UUID?
     @State private var showDcconPicker = false
     @State private var endDropID = UUID()
+    /// 화면 크기(접기·펴기) 바뀔 때 올려서 상단바 배치를 다시 읽게 함
+    @State private var sizeTick = 0
 
     var body: some View {
         VStack(spacing: 0) {
             header
             content
+        }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+            sizeTick &+= 1
+            // 안전 영역 값은 조금 늦게 바뀌므로 한 번 더
+            Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); sizeTick &+= 1 }
         }
         .background(Color(uiColor: Self.pageBackground).ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { toolbar }
@@ -398,32 +409,68 @@ struct NativeWriteView: View {
 
     // MARK: 상단 (테마색): ← … 임시 등록 / 유동 닉네임·비밀번호
 
-    private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Button { model.closeNativeWrite() } label: {
-                    Image(systemName: "arrow.left").font(.system(size: 22, weight: .medium))
-                        .frame(width: 40, height: 36, alignment: .leading)
-                }
-                accountMenu
-                Spacer(minLength: 4)
-                Button { model.saveNativeDraft() } label: {
-                    Text("임시저장").font(.callout)
-                }
-                Button { showDraftPicker = true } label: {
-                    Text("불러오기").font(.callout)
-                }
-                Button { dismissKeyboard(); model.submitNative() } label: {
-                    Text("등록").font(.callout.weight(.semibold))
-                        .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 1))
-                }
-                .disabled(session.submitting)
+    /// 듀오처럼 시계·카메라가 상단바에 겹쳐 그려지는 화면이면 (상태 줄 높이, 그 왼쪽에서 쓸 수 있는 폭)
+    private static var duoStatusBand: (height: CGFloat, width: CGFloat)? {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return nil }
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { $0.windowLevel == .normal && !$0.isHidden }
+        let width = windows.map(\.bounds.width).max() ?? 0
+        let trailing = windows.map(\.safeAreaInsets.right).max() ?? 0
+        let top = windows.map(\.safeAreaInsets.top).max() ?? 0
+        guard trailing >= 56 || width > 440, top > 20 else { return nil }
+        // 시계·카메라가 차지하는 폭: 접은 화면은 오른쪽 끝에서 약 173pt, 펼친 화면은 약 119pt (사진으로 잼)
+        return (top, width - (trailing > 0 ? trailing : (width > 600 ? 125 : 180)))
+    }
+
+    private func headerButtons(compact: Bool) -> some View {
+        HStack(spacing: compact ? 7 : 12) {
+            Button { model.closeNativeWrite() } label: {
+                Image(systemName: "chevron.backward").font(.system(size: compact ? 20 : 25, weight: .medium))
+                    .frame(width: compact ? 24 : 40, height: 36, alignment: .leading)
             }
-            .foregroundStyle(.white)
-            .buttonStyle(.plain)
-            .padding(.trailing, 2)
+            accountMenu
+            Spacer(minLength: compact ? 0 : 4)   // 버튼은 오른쪽(시계·카메라 바로 왼쪽)에 붙임
+            Button { model.saveNativeDraft() } label: {
+                Text("임시저장").font(.callout).lineLimit(1).fixedSize()
+            }
+            Button { showDraftPicker = true } label: {
+                Text("불러오기").font(.callout).lineLimit(1).fixedSize()
+            }
+            // 로딩 중 상단바(BrowserView)의 등록 버튼과 같은 모양: 둥근 네모 테두리만
+            Button { dismissKeyboard(); model.submitNative() } label: {
+                Text("등록").font(.callout.weight(.bold)).lineLimit(1).fixedSize()
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.85), lineWidth: 1.2))
+                    .contentShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .disabled(session.submitting)
+        }
+        .foregroundStyle(.white)
+        .buttonStyle(.plain)
+        .padding(.trailing, compact ? 2 : -3)
+        .overlay {
+            // 로딩 중 상단바 가운데에 있는 제목 (듀오 상태 줄에서는 자리가 없어 뺌)
+            if !compact { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
+        }
+    }
+
+    private var header: some View {
+        _ = sizeTick   // 접기·펴기로 화면 크기가 바뀌면 다시 계산
+        let duo = Self.duoStatusBand
+        return VStack(spacing: 10) {
+            if let d = duo {
+                // 시스템 시계·카메라 왼쪽 빈 자리(상태 줄)에 버튼을 올려 파란 영역을 줄임
+                headerButtons(compact: true)
+                    .frame(width: max(d.width - 24, 0), height: d.height, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 0)
+                    .offset(y: -(d.height / 2) + 6)   // 시계·카메라 글자 높이에 맞춤
+                    .zIndex(1)
+            } else {
+                headerButtons(compact: false)
+            }
 
             if session.isAnon {
                 HStack(spacing: 10) {
@@ -442,8 +489,8 @@ struct NativeWriteView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.top, duo == nil ? 6 : 0)
+        .padding(.bottom, duo == nil ? 12 : (session.isAnon ? 10 : 2))
         .background(DCTheme.navy.ignoresSafeArea(edges: .top))
     }
 
@@ -469,7 +516,7 @@ struct NativeWriteView: View {
             Button { model.loginHere(nil) } label: { Label("로그인 페이지 열기", systemImage: "person.badge.key") }
         } label: {
             Image(systemName: current == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.fill")
-                .font(.system(size: 21))
+                .font(.system(size: Self.duoStatusBand == nil ? 24 : 21))
                 .frame(width: 36, height: 36)
         }
     }
