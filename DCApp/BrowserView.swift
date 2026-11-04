@@ -1244,6 +1244,7 @@ struct BrowserView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.white)
                         .fixedSize()
+                        .offset(x: Self.duoTopButtonShift)
                     }
                     .noGlassBackground()
                 }
@@ -1378,6 +1379,12 @@ struct BrowserView: View {
         let buttons = CGFloat(max(topTrailingCount, 1))
         let trailing = buttons * Self.topSlotWidth + (buttons - 1) * Self.topSlotSpacing
         return min(240, max(60, usable - 48 - 2 * trailing))
+    }
+    /// 듀오(펼친 화면, 세로): 상단바 오른쪽 버튼이 시계·배터리에서 떨어져 좁은 상단바를 더 쓰므로 조금만 오른쪽으로 (시계에 가려지지 않을 만큼만)
+    private static var duoTopButtonShift: CGFloat {
+        let b = UIScreen.main.bounds
+        guard UIDevice.current.userInterfaceIdiom == .phone, min(b.width, b.height) > 450, b.height > b.width else { return 0 }
+        return 16
     }
     private static var windowWidth: CGFloat {
         UIApplication.shared.connectedScenes

@@ -269,6 +269,7 @@ struct RootView: View {
                                 BrowserView(model: router.detailBrowser, fallbackTitle: "글", showsMenuButton: false)
                                     .overlay { DetailPlaceholder(model: router.detailBrowser) }
                             }
+                            .keepsTopStatusBar()
                             .id(themeRaw)
                         }
                         .frame(width: total, height: geo.size.height, alignment: .leading)
@@ -282,6 +283,7 @@ struct RootView: View {
                         NavigationStack {
                             BrowserView(model: router.primaryBrowser, fallbackTitle: "홈", showsMenuButton: true)
                         }
+                        .keepsTopStatusBar()   // 듀오: 시계가 옆 세로 줄로 가며 뒤로가기가 컨트롤바 위로 겹치지 않게 NavigationStack 바깥에서도 가로 고정
                         .id("\(themeRaw)-\(router.singleUsesDetail)")
                     }
                 }
@@ -342,6 +344,7 @@ struct RootView: View {
                 PerfHUDView(webView: router.primaryBrowser.webView).padding(.top, 4)   // 상단바 위 상태바 줄 바로 아래
             }
         }
+        .keepsTopStatusBar()
         .animation(.spring(duration: 0.35), value: compactMode)
         .onChange(of: splitSetting) { _, _ in scheduleSplit() }
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
