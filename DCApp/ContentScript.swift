@@ -109,6 +109,10 @@ enum ContentScript {
       '.gallview-tit-box .tit{font-size:16px!important;line-height:1.4!important;font-weight:400!important}',
       // 듀오 옆 세로 줄(시계·배터리) 아래로 웹이 깔려도 글 제목칸(제목·글쓴이·댓글 버튼)은 줄 밖에 두어 가려지거나 안 눌리는 일이 없게
       '.gallview-tit-box{padding-right:max(12px,env(safe-area-inset-right))!important;padding-left:max(12px,env(safe-area-inset-left))!important}',
+      // 듀오 옆 세로 줄(시계·배터리)이 있을 때: 글자는 줄 안쪽으로 (사진·영상은 줄 아래까지 그대로 깔림)
+      // 박스(배경)는 화면 끝까지 채우고 글자만 줄 안쪽으로: 투명 테두리를 줄 폭만큼 둠 (배경은 테두리 밑까지 깔리고, 원래 안쪽 여백은 그대로)
+      'html.dcapp-duocol .gall-detail-lnktb,html.dcapp-duocol .thum-txtin,html.dcapp-duocol li.comment,html.dcapp-duocol li.comment-add,html.dcapp-duocol #dcapp-headbar{border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      'html.dcapp-duocol .thum-txtin img,html.dcapp-duocol .thum-txtin video,html.dcapp-duocol .thum-txtin iframe{max-width:calc(100% + env(safe-area-inset-left) + env(safe-area-inset-right))!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
@@ -2418,6 +2422,7 @@ enum ContentScript {
     var ok = false;
     try { var j = JSON.parse(d.text || '{}'); ok = j.result !== false && j.result !== 0 && j.result !== '0'; } catch (e) { return; }
     if (!ok) return;
+    try { setReplyHint(null); } catch (e) {}
     post('cmtok', {});     // 앱 댓글 입력창 닫기
     var memo = '', nickIn = '';
     try {
@@ -2526,9 +2531,14 @@ enum ContentScript {
     var n = li ? li.querySelector('.nick') : null;
     return n ? (n.textContent || '').replace(/\s+/g, ' ').trim() : '';
   }
+  function replyChOf(ta) {
+    var box = ta.closest ? ta.closest('[id^="comment_addDiv"]') : null;
+    return box ? String(box.id).replace('comment_addDiv', '') : '';
+  }
   async function composeInfo(ta) {
     var form = ta.closest('form');
-    function f(n) { return form ? form.querySelector('input[name="' + n + '"]') : null; }
+    // 대댓글 칸은 디시가 입력칸 이름 뒤에 _reple을 붙임 (comment_nick_reple 등)
+    function f(n) { return form ? (form.querySelector('input[name="' + n + '"]') || form.querySelector('input[name="' + n + '_reple"]')) : null; }
     var nick = f('comment_nick'), pw = f('comment_pw'), code = f('captcha_codeC');
     var codeOn = !!(code && code.getBoundingClientRect().height > 0), img = null;
     if (codeOn) {
@@ -2541,7 +2551,7 @@ enum ContentScript {
       }
     }
     return {
-      reply: ta.id !== 'comment_memo', replyNick: replyNickOf(ta), text: ta.value || '',
+      reply: ta.id !== 'comment_memo', replyNick: replyNickOf(ta), ch: replyChOf(ta), text: ta.value || '',
       anon: !!(nick || pw), nick: nick ? nick.value : '', pw: pw ? pw.value : '',
       nickLocked: !!(nick && (nick.disabled || nick.readOnly)), code: codeOn, codeImg: img
     };
@@ -2557,6 +2567,8 @@ enum ContentScript {
     if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
     var pin = on && cfg.pinComment === true;
     if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
+    var dc = cfg.duoCol === true;
+    if (root.classList.contains('dcapp-duocol') !== dc) root.classList.toggle('dcapp-duocol', dc);
     Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
       if (on && isCommentField(t)) {
         if (!t.hasAttribute('readonly')) { t.setAttribute('readonly', ''); t.setAttribute('data-dcapp-ro', '1'); }
@@ -2569,12 +2581,50 @@ enum ContentScript {
     var t = e.target;
     if (!nativeCmtOn() || !t || t.tagName !== 'TEXTAREA' || !isCommentField(t)) return;
     try { t.blur(); } catch (x) {}
+    // 아래 고정 댓글칸이 쓰던 대댓글 내용을 보여 주는 중이면: 대댓글이 아니라 일반 댓글로 이어 쓰게 함 (내용은 그대로 두고 숨겨진 답글 칸의 글은 비움)
+    if (replyMirror && t.id === 'comment_memo') {
+      var m = replyMirror;
+      replyMirror = null;
+      t.removeAttribute('data-dcapp-mirror');
+      try {
+        var li = m.ch ? document.querySelector('li[ch="' + m.ch + '"]') : null;
+        var ra = li ? openedReplyArea(li) : null;
+        if (ra) { ra.value = ''; ra.dispatchEvent(new Event('input', { bubbles: true })); }
+      } catch (e2) {}
+    }
     composeFor(t);
   }, true);
+  // 페이지가 다시 불려와(다른 앱 갔다 온 뒤 등) 댓글 칸이 새로 생겼으면, 앱 입력창이 쓰던 칸을 다시 찾아 이어 붙임 (그냥 댓글만. 대댓글 칸은 눌러야 생겨서 못 찾음)
+  function ensureTarget(p) {
+    var ta = composeTarget;
+    if (ta && document.body.contains(ta)) return ta;
+    if (p && p.reply === false) {
+      var n = document.getElementById('comment_memo');
+      if (n) { composeTarget = n; return n; }
+    }
+    return null;
+  }
+  // 대댓글은 페이지가 다시 불려오면 답글 칸이 없으므로, 그 댓글을 눌러 디시가 답글 칸을 다시 열게 한 뒤 연결
+  async function ensureReplyTarget(p) {
+    var cur = composeTarget;
+    if (cur && document.body.contains(cur)) return true;
+    if (!p || p.reply === false) return !!ensureTarget(p);
+    if (!p.ch) return false;
+    var li = document.querySelector('li[ch="' + p.ch + '"]');
+    if (!li) return false;
+    var area = openedReplyArea(li);
+    if (!area) {
+      try { (li.querySelector('.usertxt, .txt, p') || li).click(); } catch (e) {}
+      for (var i = 0; i < 20 && !(area = openedReplyArea(li)); i++) await sleep(100);
+    }
+    if (!area) return false;
+    composeTarget = area;
+    return true;
+  }
   // 앱 입력창의 내용을 디시 댓글 양식에 채움
   function composeFill(p) {
-    var ta = composeTarget;
-    if (!ta || !document.body.contains(ta)) return null;
+    var ta = ensureTarget(p);
+    if (!ta) return null;
     var form = ta.closest('form');
     function setv(el, v) {
       if (!el || v == null) return;
@@ -2583,15 +2633,32 @@ enum ContentScript {
       el.dispatchEvent(new Event('change', { bubbles: true }));
     }
     if (form) {
-      setv(form.querySelector('input[name="comment_nick"]'), p.nick);
-      setv(form.querySelector('input[name="comment_pw"]'), p.pw);
-      setv(form.querySelector('input[name="captcha_codeC"]'), p.code);
+      function fi(n) { return form.querySelector('input[name="' + n + '"]') || form.querySelector('input[name="' + n + '_reple"]'); }
+      setv(fi('comment_nick'), p.nick);
+      setv(fi('comment_pw'), p.pw);
+      setv(fi('captcha_codeC'), p.code);
     }
     try { ta.removeAttribute('maxlength'); } catch (e) {}      // 글자 수 제한은 앱이 걸지 않음
     setv(ta, p.text);
     return form;
   }
-  function composeSync(p) { return !!composeFill(p); }
+  // 대댓글을 쓰다 닫으면 글은 숨겨진 답글 칸에 들어가 아래 고정 댓글칸이 비어 보임 → 그 칸에 쓰던 내용을 그대로 보여 줌 (그 칸을 누르면 대댓글이 아니라 일반 댓글로 이어 씀)
+  var replyMirror = null;
+  function setReplyHint(p) {
+    var memo = document.getElementById('comment_memo');
+    if (!memo) return;
+    if (p && p.reply && String(p.text || '').trim()) {
+      if (!replyMirror && memo.value) return;              // 일반 댓글칸에 이미 글이 있으면 덮지 않음
+      replyMirror = { ch: p.ch, replyNick: p.replyNick || '' };
+      memo.value = p.text;
+      memo.setAttribute('data-dcapp-mirror', '1');
+    } else if (replyMirror || memo.getAttribute('data-dcapp-mirror')) {
+      replyMirror = null;
+      memo.removeAttribute('data-dcapp-mirror');
+      memo.value = '';
+    }
+  }
+  function composeSync(p) { var ok = !!composeFill(p); try { setReplyHint(p); } catch (e) {} return ok; }
   // Cloudflare 체크박스가 필요하면 숨겨 둔 댓글창(대댓글 칸 포함)을 보이게 하고 그 위치로
   function revealCheck(form) {
     var box = form.closest ? form.closest('[id^="comment_addDiv"]') : null;
@@ -2625,7 +2692,7 @@ enum ContentScript {
              max: ta ? (parseInt(ta.getAttribute('maxlength'), 10) || 20) : 20, text: ta ? ta.value : '' };
   }
   async function txtconOpen() {
-    var ta = composeTarget;
+    var ta = ensureTarget({ reply: composeTarget ? undefined : false });
     if (!ta || typeof window.show_txtcon !== 'function') return null;
     try { window.show_txtcon(ta.id === 'comment_memo' ? 'txtconWrite' : 'txtconReple'); } catch (e) { return null; }
     for (var i = 0; i < 20 && !document.getElementById('txtcon_memo'); i++) await sleep(100);
@@ -2658,8 +2725,8 @@ enum ContentScript {
   }
   // 디시콘 댓글: 닉네임·비밀번호·코드를 양식에 채운 뒤, 디시 페이지의 디시콘 등록 함수로 바로 등록 (글자는 건드리지 않음)
   function composeDcconSend(p, pkg, detail) {
-    var ta = composeTarget;
     var form = composeFill(p);
+    var ta = composeTarget;
     if (!form) return 'gone';
     cmtRetry.form = form;
     if (tsNeedsCheck()) return revealCheck(form);
@@ -3371,7 +3438,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v204-anong', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v213-txtborder', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3652,6 +3719,7 @@ enum ContentScript {
     cmtSubmit: cmtSubmit,
     findPostByTitle: findPostByTitle,
     composeSync: composeSync,
+    ensureReplyTarget: ensureReplyTarget,
     composeDcconSend: composeDcconSend,
     txtconOpen: txtconOpen,
     txtconSetText: txtconSetText,

@@ -335,7 +335,7 @@ struct FavoritesView: View {
                 }
             }
             .navigationDestination(isPresented: $showAlarms) { AlarmsScreen() }
-            .sheet(isPresented: $showingAdd) { AddGalleryView() }
+            .sheet(isPresented: $showingAdd) { AddGalleryView().sheetUnderBlueBar() }
             .alert("이름 변경",
                    isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("갤러리 이름", text: $renameText)

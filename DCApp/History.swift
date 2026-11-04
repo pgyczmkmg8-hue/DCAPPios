@@ -443,7 +443,7 @@ struct ListFilterSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .sheetUnderBlueBar(medium: true)
     }
 
     private func row(_ title: String, on: Binding<Bool>, value: Binding<Int>) -> some View {

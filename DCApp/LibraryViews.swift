@@ -356,7 +356,7 @@ struct DraftPickerSheet: View {
                 Button("취소", role: .cancel) {}
             }
         }
-        .presentationDetents([.large])
+        .sheetUnderBlueBar()
     }
 }
 

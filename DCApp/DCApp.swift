@@ -288,7 +288,9 @@ struct RootView: View {
                     }
                 }
                 .frame(width: total, height: geo.size.height, alignment: .topLeading)
-                .clipped()
+                // 키보드가 올라오면 이 영역이 키보드 윗변까지로 줄어드는데, 아래를 잘라 버리면 댓글 입력창의 어두운 막·배경이 키보드 아래까지 못 내려가 흰 바탕이 보임
+                // → 위·좌·우만 자르고 아래는 길게 열어 둠
+                .mask(Rectangle().padding(.bottom, -1200))
             }
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: compactMode ? 22 : 0,
                                               topTrailingRadius: compactMode ? 22 : 0,
@@ -297,6 +299,9 @@ struct RootView: View {
             // 앱 화면이 상태바·홈 바 영역까지 덮도록 (남색 상단바가 위 끝까지, 아래 검은 띠 없음)
             // 키보드 처리는 그대로 두기 위해 .container만 무시
             .ignoresSafeArea(.container, edges: .all)
+            // 키보드가 올라오거나 내려갈 때(특히 듀오 동영상 분할) 앱 화면 전체 높이가 줄었다가 늦게 돌아와 아래가 흰 바탕으로 비는 문제
+            // → 앱 화면은 키보드로 줄이지 않음 (웹뷰는 WebKit이, 댓글 입력창·글쓰기 버튼은 각자 키보드 높이를 따로 계산)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             // 앱 글쓰기 화면: 디시 글쓰기 페이지 위에 덮음 (등록은 뒤의 디시 양식으로)
             NativeWriteHost(model: router.mainBrowser)
@@ -346,6 +351,10 @@ struct RootView: View {
         }
         .keepsTopStatusBar()
         .animation(.spring(duration: 0.35), value: compactMode)
+        .onChange(of: router.sheet) { _, new in
+            // 웹 화면의 키보드가 열려 있는 채로 시트가 올라오면 키보드 내려가는 동작과 시트 전환이 겹쳐 느려지므로, 시트를 띄울 때 먼저 키보드를 내림
+            if new != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        }
         .onChange(of: splitSetting) { _, _ in scheduleSplit() }
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
         .onAppear {
@@ -410,6 +419,7 @@ struct RootView: View {
         }
         .sheet(isPresented: $showIconPicker) {
             NavigationStack { AppIconSettingsView() }
+                .sheetUnderBlueBar()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             // 백그라운드에서 다시 열었을 때도 확인
@@ -435,6 +445,7 @@ struct RootView: View {
             }
             .environmentObject(router)
             .environmentObject(favorites)
+            .sheetUnderBlueBar()   // 파란 영역을 덮지 않고 그 아래까지만
         }
     }
 

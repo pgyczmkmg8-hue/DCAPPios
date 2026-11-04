@@ -8,6 +8,8 @@ final class CommentComposeSession: ObservableObject, Identifiable {
     /// 대댓글인지, 누구에게 다는지
     let isReply: Bool
     let replyNick: String
+    /// 대댓글 대상 댓글 번호 (페이지가 다시 불려온 뒤 답글 칸을 다시 찾을 때 씀)
+    let replyCh: String
     let anon: Bool
     let nickLocked: Bool
     let hasCode: Bool
@@ -18,10 +20,15 @@ final class CommentComposeSession: ObservableObject, Identifiable {
     @Published var pw: String
     @Published var code = ""
     @Published var sending = false
+    /// 쓰던 글을 보관·복구할 때 쓰는 키 (글 주소 + 댓글/대댓글 대상)
+    var draftKey = ""
+    /// 이 입력창이 붙은 페이지 (글 주소, # 뒤 제외) — 다른 페이지로 가면 닫음
+    var pageKey = ""
 
     init(info: [String: Any], gallery: String? = nil) {
         isReply = info["reply"] as? Bool ?? false
         replyNick = info["replyNick"] as? String ?? ""
+        replyCh = info["ch"] as? String ?? ""
         anon = info["anon"] as? Bool ?? false
         nickLocked = info["nickLocked"] as? Bool ?? false
         hasCode = info["code"] as? Bool ?? false
@@ -205,12 +212,18 @@ private struct CommentComposer: View {
         // 글자를 칠 때 시스템이 바깥에서 주는 높이가 131↔150pt로 번갈아 바뀌어(아래 끝은 키보드에 붙은 채 위쪽만 움직임)
         // 입력창이 위로 뜨던 것 → 내용 높이를 직접 재서 입력창 높이를 못 박음
         .frame(height: contentH > 0 ? contentH + 22 : nil, alignment: .top)
-        // 배경은 아래로 60pt 더 늘려 키보드 뒤로 깔음 — 기기에서 키보드 윗변 값이 실제 보이는 키보드보다 10pt쯤 높게 나와
+        // 배경은 아래로 길게 늘려 키보드 뒤·화면 맨 아래까지 깔음 (키보드의 둥근 모서리 뒤나 키보드가 내려갈 때 흰 바탕이 보이지 않게, 화면 모서리에서 잘려 둥글게 보임) — 기기에서 키보드 윗변 값이 실제 보이는 키보드보다 10pt쯤 높게 나와
         // 입력창과 키보드 사이에 틈이 보이는 경우가 있어서, 틈이 생겨도 입력창 배경이 이어지게 함
         .background(alignment: .top) {
             UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous)
                 .fill(.regularMaterial)
-                .padding(.bottom, -60)
+                .padding(.bottom, -20)
+        }
+        // 입력창 아래(키보드 뒤)는 키보드와 같은 회색으로 채움 — 키보드의 둥근 모서리 뒤로 흰색이 비치지 않게
+        .background(alignment: .bottom) {
+            Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 0.17, alpha: 1) : UIColor(red: 0.82, green: 0.83, blue: 0.86, alpha: 1) })
+                .frame(height: 700)
+                .offset(y: 700 + 20)
         }
         .shadow(color: .black.opacity(0.12), radius: 10, y: -2)
         .onAppear {
@@ -459,5 +472,51 @@ private struct CommentTxtconPanel: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+
+/// 앱 댓글 입력창에 쓰던 글 보관 (다른 앱에 갔다 와서 페이지가 다시 불려와 입력창이 닫혀도 같은 글의 댓글칸을 다시 누르면 이어 쓰게)
+@MainActor
+enum CommentDraftStore {
+    private static let key = "commentDrafts"
+    private struct Item: Codable { var key: String; var text: String; var at: Date }
+
+    private static var items: [Item] {
+        get {
+            guard let d = UserDefaults.standard.data(forKey: key), let l = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
+            return l
+        }
+        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: key) }
+    }
+
+    static func pageKey(_ url: URL?) -> String {
+        var c = url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }
+        c?.fragment = nil
+        return c?.string ?? ""
+    }
+
+    static func draftKey(url: URL?, isReply: Bool, replyNick: String) -> String {
+        var c = url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }
+        c?.fragment = nil
+        return "\(c?.string ?? "")|\(isReply ? "r" : "c")|\(replyNick)"
+    }
+
+    static func save(_ s: CommentComposeSession) {
+        let t = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.draftKey.isEmpty, !t.isEmpty else { return }
+        var l = items.filter { $0.key != s.draftKey }
+        l.insert(Item(key: s.draftKey, text: s.text, at: Date()), at: 0)
+        items = Array(l.prefix(20))
+    }
+
+    /// 하루 안에 보관한 글만
+    static func text(for key: String) -> String? {
+        items.first { $0.key == key && Date().timeIntervalSince($0.at) < 86400 }?.text
+    }
+
+    static func remove(_ key: String) {
+        guard !key.isEmpty else { return }
+        items = items.filter { $0.key != key }
     }
 }

@@ -197,10 +197,10 @@ struct GallerySearchSheet: View {
                 }
             }
             .onAppear {
-                Task { try? await Task.sleep(for: .milliseconds(350)); focused = true }
+                Task { try? await Task.sleep(for: .milliseconds(80)); focused = true }
             }
         }
-        .presentationDetents([.medium, .large])
+        .sheetUnderBlueBar(medium: true)
     }
 
     private func search(_ text: String) {
@@ -308,6 +308,8 @@ struct BrowserView: View {
     // 키보드가 떠 있는 동안에는 앱 툴바를 숨겨서, 디시 댓글창(유동 닉/비번/코드, 디시콘 버튼)이
     // 사파리처럼 키보드 바로 위에 붙도록 함
     @State private var keyboardVisible = false
+    /// 키보드가 화면 아래를 가린 높이 (앱 화면 전체는 키보드로 줄어들지 않고 화면 끝까지 쓰므로, 아래에 붙는 글쓰기 버튼만 이만큼 올림)
+    @State private var keyboardCover: CGFloat = 0
     /// 웹페이지 위에 떠 있는 하단 바(+안내 배너) 높이 → 그만큼 페이지 아래에 스크롤 여백
     @State private var bottomBarHeight: CGFloat = 0
     /// 화면 오른쪽 안전 영역 폭 (듀오의 시계·카메라 줄 등) — 창(UIWindow)에서 직접 읽음
@@ -576,7 +578,7 @@ struct BrowserView: View {
                     .background(.regularMaterial, in: Capsule())
                     .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
                     .padding(.leading, 12)
-                    .padding(.bottom, 8 + model.writeToolbarHeight)     // 키보드 위 글쓰기 도구줄 위로
+                    .padding(.bottom, 8 + model.writeToolbarHeight + keyboardCover)     // 키보드 위 글쓰기 도구줄 위로
                     .animation(.easeOut(duration: 0.15), value: model.writeToolbarHeight)
                     .transition(.opacity)
                 }
@@ -597,7 +599,7 @@ struct BrowserView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.trailing, 12)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 8 + keyboardCover)
                     .transition(.opacity)
                 }
             }
@@ -661,9 +663,11 @@ struct BrowserView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 setKeyboardVisible(false)
+                withAnimation(.easeOut(duration: 0.2)) { keyboardCover = 0 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
                 setKeyboardVisible(false)
+                keyboardCover = 0
             }
             // 길게 누르기 → 차단 메뉴
     }
@@ -682,6 +686,7 @@ struct BrowserView: View {
             ?? .zero
         let overlap = end.intersection(screen)
         setKeyboardVisible(!overlap.isNull && overlap.height > 80)
+        withAnimation(.easeOut(duration: 0.2)) { keyboardCover = (!overlap.isNull && overlap.height > 80) ? overlap.height : 0 }
     }
 
     /// 차단 메뉴 / 요소 숨기기 확인
@@ -716,6 +721,7 @@ struct BrowserView: View {
                     }
                     .sheet(isPresented: $showFooterEditor) {
                         FooterQuickSheet(account: footerAccountKey, gallery: footerGalleryID ?? FooterRule.all)
+                            .sheetUnderBlueBar(medium: true)
                     }
                     .confirmationDialog("댓글 링크",
                                         isPresented: Binding(get: { model.commentLink != nil },
@@ -932,6 +938,7 @@ struct BrowserView: View {
             }
             .sheet(isPresented: $showListFilter) {
                 ListFilterSheet { model.applyListFilter() }
+                    .sheetUnderBlueBar(medium: true)
             }
             .sheet(isPresented: $showDraftPicker) {
                 DraftPickerSheet(galleryID: model.url.flatMap(AutoImageStore.writeGalleryID)) { d in
@@ -941,6 +948,7 @@ struct BrowserView: View {
             .sheet(isPresented: Binding(get: { diagnosticText != nil },
                                         set: { if !$0 { diagnosticText = nil } })) {
                 DiagnosticView(text: diagnosticText ?? "")
+                    .sheetUnderBlueBar()
             }
     }
 
@@ -948,7 +956,7 @@ struct BrowserView: View {
     private var layer7: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer6)
-            .overlay(alignment: .bottom) { CommentComposerHost(model: model) }   // 앱 댓글 입력창
+            .overlay(alignment: .bottom) { CommentComposerHost(model: model).ignoresSafeArea(.keyboard, edges: .bottom) }   // 앱 댓글 입력창 (키보드가 내려가는 동안 입력창·어두운 막이 키보드 높이만큼 줄어 아래 흰 바탕이 보이지 않게 화면 맨 아래까지 유지)
             .fullScreenCover(item: $model.imageViewer) { item in
                 ImageViewer(item: item)
                     .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
@@ -964,6 +972,7 @@ struct BrowserView: View {
                                 }
                             }
                     }
+                    .sheetUnderBlueBar()
                 }
             }
     }
@@ -1381,10 +1390,15 @@ struct BrowserView: View {
         return min(240, max(60, usable - 48 - 2 * trailing))
     }
     /// 듀오(펼친 화면, 세로): 상단바 오른쪽 버튼이 시계·배터리에서 떨어져 좁은 상단바를 더 쓰므로 조금만 오른쪽으로 (시계에 가려지지 않을 만큼만)
+    /// 듀오 같은 큰 폰 화면(짧은 변 450pt 초과, 세로)인지 — 시트 위쪽 버튼을 시계 아래로 내릴 때 씀
+    static var isDuoLikeScreen: Bool {
+        let b = UIScreen.main.bounds
+        return UIDevice.current.userInterfaceIdiom == .phone && min(b.width, b.height) > 450 && b.height > b.width
+    }
     private static var duoTopButtonShift: CGFloat {
         let b = UIScreen.main.bounds
         guard UIDevice.current.userInterfaceIdiom == .phone, min(b.width, b.height) > 450, b.height > b.width else { return 0 }
-        return 16
+        return 0   // 시계가 옆 세로 줄이라 필터 버튼을 옮길 필요 없음
     }
     private static var windowWidth: CGFloat {
         UIApplication.shared.connectedScenes
@@ -2292,17 +2306,30 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
     static func raw(from list: [ControlBarItem]) -> String { list.map(\.rawValue).joined(separator: ",") }
 }
 
+// MARK: - 시트를 파란 상단바 아래까지만
+/// 듀오 같은 큰 폰에서 시트가 파란 영역(상단바)을 덮지 않고 그 바로 아래까지만 올라오게 높이를 정함. 일반 아이폰은 기존 높이
+extension View {
+    @ViewBuilder
+    func sheetUnderBlueBar(medium: Bool = false) -> some View {
+        if BrowserView.isDuoLikeScreen {
+            let winH = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows).first(where: \.isKeyWindow)?.bounds.height ?? UIScreen.main.bounds.height
+            let blue = ListBarMetrics.bottom > 20 ? ListBarMetrics.bottom : 86   // 목록을 아직 안 열었으면 파란 상단바 기본 높이
+            let h = max(320, winH - blue)
+            if medium { self.presentationDetents([.medium, .height(h)]) } else { self.presentationDetents([.height(h)]) }
+        } else {
+            if medium { self.presentationDetents([.medium, .large]) } else { self.presentationDetents([.large]) }
+        }
+    }
+}
+
 // MARK: - 듀오 세로 줄 끄기
 extension View {
     /// iPhone Duo는 iOS 27.1 SDK로 빌드한 앱의 시계·상단바 버튼을 화면 옆 세로 줄에 세움.
     /// 이걸 끄면 서드파티 브라우저처럼 시계는 위쪽(카메라 왼쪽)에, 화면은 옆 여백 없이 꽉 차게.
     @ViewBuilder
     func keepsTopStatusBar() -> some View {
-        if #available(iOS 27.1, *) {
-            self.toolbarVerticalBehavior(.disabled)
-        } else {
-            self
-        }
+        self   // 0.9.5 (13) 방식: 가로 고정을 걸지 않고 시스템 기본(듀오 옆 세로 줄)에 맡김 (축이 바뀌는 전환·잔상이 없게)
     }
 }
 

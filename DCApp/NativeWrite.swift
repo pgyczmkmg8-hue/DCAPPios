@@ -465,7 +465,7 @@ struct NativeWriteView: View {
             guard !didFocus else { return }
             didFocus = true
             Task {
-                try? await Task.sleep(for: .milliseconds(350))
+                try? await Task.sleep(for: .milliseconds(80))
                 if focus == nil {
                     if session.title.isEmpty { focus = .title } else { session.focusFirstText() }
                 }
@@ -856,7 +856,10 @@ struct NativeWriteView: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    tool("photo", "사진") { showGridPicker = true }
+                    tool("photo", "사진") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)   // 키보드를 먼저 내려 시트 전환과 겹치지 않게
+                        showGridPicker = true
+                    }
                     tool("photo.badge.plus", "자짤") {
                         let before = session.images.count
                         model.addAutoImage()
@@ -1202,7 +1205,7 @@ struct DcconPickerSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
             }
         }
-        .presentationDetents([.medium, .large])
+        .sheetUnderBlueBar(medium: true)
         .task {
             guard tabs.isEmpty else { return }
             if let r = await model.dcconTabs() {

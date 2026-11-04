@@ -56,6 +56,8 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var commentLink: URL?
     /// 앱 댓글 입력창 (댓글·대댓글 칸을 누르면 뜸)
     @Published var commentCompose: CommentComposeSession?
+    /// 쓰다 닫은 댓글 내용 (다른 댓글을 눌러 새 입력창이 열리면 옮겨 줌)
+    private var commentCarry: (text: String, code: String, page: String, at: Date)?
     @Published var blockRequest: BlockRequest? {
         didSet {   // 차단 메뉴가 닫히면 길게 누르며 생긴 글자 선택도 풀기
             if blockRequest == nil, oldValue != nil {
@@ -269,13 +271,18 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 앱 댓글 입력창
 
     private func composeArgs(_ s: CommentComposeSession) -> [String: Any] {
-        ["p": ["text": s.text, "nick": s.nick, "pw": s.pw, "code": s.code]]
+        ["p": ["text": s.text, "nick": s.nick, "pw": s.pw, "code": s.code, "reply": s.isReply, "ch": s.replyCh, "replyNick": s.replyNick]]
     }
 
     /// 지금 보는 페이지의 갤러리 ID (글쓰기·글·목록 모두)
     var currentGalleryID: String? {
         guard let url = webView.url else { return nil }
         return AutoImageStore.writeGalleryID(from: url) ?? Gallery.parse(url)?.id
+    }
+
+    /// 페이지가 다시 불려와 댓글칸이 새로 생겼으면(대댓글은 답글 칸을 다시 열어) 입력창을 새 칸에 연결
+    func reattachCompose(_ s: CommentComposeSession) async {
+        _ = await call("return window.__dcapp ? await window.__dcapp.ensureReplyTarget(p) : false;", composeArgs(s))
     }
 
     /// 입력창의 내용을 디시 댓글 양식에 채우고 등록 버튼을 누름
@@ -291,6 +298,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if s.hasCode && s.code.trimmingCharacters(in: .whitespaces).isEmpty { showToast("코드를 입력해 주세요"); return }
         s.sending = true
         Task {
+            await reattachCompose(s)
             let r = await call("return window.__dcapp ? window.__dcapp.cmtSubmit(p) : 'none';", composeArgs(s)) as? String
             switch r {
             case "sent":
@@ -310,8 +318,16 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 입력창 닫기 (내용은 디시 댓글 칸에 채워 둠)
     func closeCommentCompose(sync: Bool) {
         guard let s = commentCompose else { return }
+        CommentDraftStore.remove(s.draftKey)   // 직접 닫은 글은 웹 댓글칸에 옮겨 두므로 따로 보관한 것은 지움
+        // 쓰다 바깥을 눌러 닫은 글: 같은 글 안에서 곧바로 다른 댓글을 눌러 새 입력창이 열리면 그 글을 옮겨 줌 (10분 안)
+        if !s.sending, !s.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            commentCarry = (s.text, s.code, s.pageKey, Date())
+        }
         if sync && !s.sending {
-            Task { _ = await call("return window.__dcapp ? window.__dcapp.composeSync(p) : false;", composeArgs(s)) }
+            Task {
+                await reattachCompose(s)
+                _ = await call("return window.__dcapp ? window.__dcapp.composeSync(p) : false;", composeArgs(s))
+            }
         }
         withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil }
     }
@@ -330,6 +346,7 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: 글자콘 댓글 (디시의 글자콘 창을 화면 밖에서 열어 두고 앱이 조작)
 
     func txtconOpen() async -> TxtconInfo? {
+        if let s = commentCompose { await reattachCompose(s) }
         guard let r = await call("return window.__dcapp ? await window.__dcapp.txtconOpen() : null;") as? [String: Any] else { return nil }
         func colors(_ key: String) -> [TxtconColor] {
             (r[key] as? [[String: Any]] ?? []).map { TxtconColor(hex: $0["hex"] as? String ?? "ffffff", on: $0["on"] as? Bool ?? false) }
@@ -354,6 +371,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func sendCommentTxtcon() async -> Bool {
         guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
         s.sending = true
+        await reattachCompose(s)
         let r = await call("return window.__dcapp ? window.__dcapp.txtconSend(p) : 'none';",
                            ["p": ["nick": s.nick, "pw": s.pw, "code": s.code]]) as? String ?? "none"
         switch r {
@@ -377,6 +395,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func sendCommentDccon(_ item: DcconItem) async -> Bool {
         guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
         s.sending = true
+        await reattachCompose(s)
         let args: [String: Any] = ["p": ["nick": s.nick, "pw": s.pw, "code": s.code], "k": item.pkg, "d": item.detail]
         let r = await call("return window.__dcapp ? window.__dcapp.composeDcconSend(p, k, d) : 'none';", args) as? String ?? "none"
         switch r {
@@ -762,6 +781,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 로그인·로그아웃으로 글쓰기 화면이 다시 열려도 쓰던 내용이 남도록: 지금 내용을 잡아 두었다가 다시 열리면 채움
     private var keptWrite: (draft: Draft, at: Date)?
+    /// 로그인·로그아웃으로 글쓰기 화면을 떠났다가 돌아오면 이 시각까지 그 갤러리의 자동 저장본을 다시 채움 (keptWrite가 어디선가 지워져도 복구되게 하는 안전망)
+    private var loginRestoreDeadline: Date?
     /// 로그아웃으로 글쓰기 페이지를 다시 열었을 때, 앱 글쓰기 화면은 두고 양식 정보만 다시 읽기
     private var nativeWriteNeedsReread = false
 
@@ -806,6 +827,7 @@ final class WebViewModel: NSObject, ObservableObject {
         let back = webView.url
         Task {
             await keepWriteBeforeReload()
+            if AutoImageStore.writeGalleryID(from: back ?? DC.login) != nil { loginRestoreDeadline = Date().addingTimeInterval(1800) }
             if CredentialStore.currentAccountID != nil || account != nil {
                 await DCSession.clear(notify: false)      // 다른 계정으로 바꿀 때는 기존 로그인 지우기
             }
@@ -826,6 +848,7 @@ final class WebViewModel: NSObject, ObservableObject {
             } else {
                 await keepWriteBeforeReload()
             }
+            if AutoImageStore.writeGalleryID(from: back ?? DC.login) != nil { loginRestoreDeadline = Date().addingTimeInterval(1800) }
             await DCSession.clear(notify: false)
             NotificationCenter.default.post(name: DC.sessionChanged, object: self)   // 다른 화면만 새로고침
             if let back { load(back) } else { reload() }
@@ -899,7 +922,13 @@ final class WebViewModel: NSObject, ObservableObject {
             if d.galleryID != gid { convertRemotePhotos(s) }
         } else if let k = keptWrite {
             keptWrite = nil
-            if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 600 { s.apply(k.draft); restored = true }
+            if k.draft.galleryID == gid, Date().timeIntervalSince(k.at) < 1800 { s.apply(k.draft); restored = true }
+        }
+        if !restored, let dl = loginRestoreDeadline {
+            loginRestoreDeadline = nil
+            if Date() < dl, let d = DraftStore.shared.drafts.first(where: { $0.isAuto && $0.galleryID == gid && Date().timeIntervalSince($0.updatedAt) < 1800 }) {
+                s.apply(d); restored = true
+            }
         }
         s.restoredFromDraft = restored
         return (s, restored)
@@ -1413,7 +1442,13 @@ final class WebViewModel: NSObject, ObservableObject {
         Task {
             let r = await call("return window.__dcapp ? window.__dcapp.openManageLog() : 'none';") as? String
             if r == "none" || r == nil {
-                showToast("관리 내역이 없는 갤러리예요 (갤러리 목록 화면에서 눌러 주세요)")
+                // 글 보기 등 '갤러리 정보' 창이 없는 화면: 관리 내역 주소로 바로 이동 (디시가 모든 갤러리에 같은 주소를 씀)
+                if let url = webView.url, let g = Gallery.parse(url), g.kind == .board,
+                   let target = URL(string: "https://m.dcinside.com/managehistory/minor/\(g.id)") {
+                    load(target)
+                } else {
+                    showToast("관리 내역을 열 수 없는 화면이에요 (갤러리 목록 화면에서 눌러 주세요)")
+                }
             }
         }
     }
@@ -1632,7 +1667,25 @@ extension WebViewModel: WKScriptMessageHandler {
             }
         case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
             if let s = commentCompose, s.sameTarget(body) { break }
-            withAnimation(.easeOut(duration: 0.2)) { commentCompose = CommentComposeSession(info: body, gallery: currentGalleryID) }
+            let ns = CommentComposeSession(info: body, gallery: currentGalleryID)
+            ns.draftKey = CommentDraftStore.draftKey(url: webView.url, isReply: ns.isReply, replyNick: ns.replyNick)
+            ns.pageKey = CommentDraftStore.pageKey(webView.url)
+            if let old = commentCompose, !old.sending {
+                // 쓰던 댓글(대댓글)에서 다른 댓글을 눌러 입력창이 바뀌면 쓰던 내용을 새 입력창으로 옮김
+                if ns.text.isEmpty { ns.text = old.text }
+                if ns.code.isEmpty { ns.code = old.code }
+                CommentDraftStore.remove(old.draftKey)
+            } else if ns.text.isEmpty, let c = commentCarry, c.page == ns.pageKey, Date().timeIntervalSince(c.at) < 600 {
+                // 쓰다 닫고 다른 댓글을 눌러 연 새 입력창 → 쓰던 내용을 옮김
+                ns.text = c.text
+                if ns.code.isEmpty { ns.code = c.code }
+                commentCarry = nil
+            } else if ns.text.isEmpty, let d = CommentDraftStore.text(for: ns.draftKey) {
+                // 입력창이 닫히기 전에 쓰던 글이 있으면 이어서
+                ns.text = d
+            }
+            commentCarry = nil
+            withAnimation(.easeOut(duration: 0.2)) { commentCompose = ns }
         case "banned":   // 디시가 등록을 막는 안내 창(차단된 IP·매니저 차단)을 띄움 → 웹 안내는 숨기고, 같은 문구를 앱이 띄우고 이전 화면으로
             let msg = body["msg"] as? String ?? ""
             commentCompose = nil
@@ -1643,6 +1696,8 @@ extension WebViewModel: WKScriptMessageHandler {
             }
             showBanAlert(message: msg)
         case "cmtok":   // 댓글 등록 성공 → 입력창 닫기
+            if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
+            commentCarry = nil
             if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
         case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
             if let s = body["href"] as? String, let u = URL(string: s) { commentLink = u }
@@ -1690,6 +1745,15 @@ extension WebViewModel: WKNavigationDelegate {
         }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {
             return .allow
+        }
+        // 다른 글·목록으로 가면 앱 댓글 입력창은 닫음 (같은 페이지를 다시 불러오는 건 그대로 둠 — 쓰던 글이 남아 있고 새 댓글칸에 이어서 등록)
+        // (대댓글 입력창도 등록할 때 그 댓글의 답글 칸을 다시 열어 연결함)
+        if let c = commentCompose, !c.sending, navigationAction.targetFrame?.isMainFrame ?? true {
+            let moved = CommentDraftStore.pageKey(url) != c.pageKey
+            if moved {
+                CommentDraftStore.save(c)
+                commentCompose = nil
+            }
         }
         if !["http", "https", "about", "data", "blob", "javascript"].contains(scheme) {
             _ = await UIApplication.shared.open(url)
@@ -1772,6 +1836,11 @@ extension WebViewModel: WKNavigationDelegate {
             // 로그인 완료
             NotificationCenter.default.post(name: DC.sessionChanged, object: self)
             offerToSaveCredential()
+            // 쓰던 글이 있는데 디시가 원래 글쓰기 화면으로 돌려보내지 않았으면(메인 등으로 감) 글쓰기 화면을 다시 열어 쓰던 내용을 채움
+            if let k = keptWrite, Date().timeIntervalSince(k.at) < 1800, let w = k.draft.writeURL,
+               webView.url.flatMap(AutoImageStore.writeGalleryID) == nil {
+                load(w)
+            }
         }
         if host != DC.loginHost { manualLogin = false }      // 로그인 화면을 벗어나면 원래대로
         if host == DC.loginHost {
@@ -1842,7 +1911,7 @@ extension WebViewModel: WKNavigationDelegate {
             } else if let k = keptWrite {
                 keptWrite = nil
                 // 로그인·로그아웃 뒤 같은 갤러리 글쓰기로 돌아왔으면 (10분 안) 쓰던 내용 다시 채우기
-                if k.draft.galleryID == writeGID, Date().timeIntervalSince(k.at) < 600 {
+                if k.draft.galleryID == writeGID, Date().timeIntervalSince(k.at) < 1800 {
                     Task {
                         try? await Task.sleep(for: .milliseconds(700))
                         restoreDraft(k.draft, message: "쓰던 내용을 다시 채웠어요")

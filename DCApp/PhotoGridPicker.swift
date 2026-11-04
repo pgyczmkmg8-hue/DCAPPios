@@ -30,8 +30,8 @@ final class PhotoGridModel: NSObject, ObservableObject, PHPhotoLibraryChangeObse
         }
         guard canRead else { return }
         PHPhotoLibrary.shared().register(self)
-        loadAlbums()
-        reload()
+        reload()            // 사진부터 바로 보여 주고
+        loadAlbums()        // 앨범 목록은 뒤에서 (사진이 많으면 오래 걸려 시트가 늦게 뜨던 부분)
     }
 
     func stop() {
@@ -39,28 +39,39 @@ final class PhotoGridModel: NSObject, ObservableObject, PHPhotoLibraryChangeObse
         cache.stopCachingImagesForAllAssets()
     }
 
-    private static var imageOptions: PHFetchOptions {
+    nonisolated private static var imageOptions: PHFetchOptions {
         let o = PHFetchOptions()
         o.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
         o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         return o
     }
 
+    /// 앨범 목록 만들기 (앨범마다 사진 수를 세서 오래 걸릴 수 있어 화면을 막지 않게 뒤에서)
     private func loadAlbums() {
+        Task.detached(priority: .userInitiated) {
+            let list = Self.buildAlbums()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.albums = list
+                if self.album == nil || !list.contains(where: { $0.id == self.album?.id }) { self.album = list.first }
+            }
+        }
+    }
+
+    nonisolated private static func buildAlbums() -> [PhotoAlbum] {
         var list = [PhotoAlbum(id: "all", title: "최근 항목", collection: nil)]
         for sub in [PHAssetCollectionSubtype.smartAlbumFavorites, .smartAlbumScreenshots, .smartAlbumSelfPortraits] {
             if let c = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: sub, options: nil).firstObject,
-               PHAsset.fetchAssets(in: c, options: Self.imageOptions).count > 0 {
+               PHAsset.fetchAssets(in: c, options: imageOptions).count > 0 {
                 list.append(PhotoAlbum(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", collection: c))
             }
         }
         PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil).enumerateObjects { c, _, _ in
-            if PHAsset.fetchAssets(in: c, options: Self.imageOptions).count > 0 {
+            if PHAsset.fetchAssets(in: c, options: imageOptions).count > 0 {
                 list.append(PhotoAlbum(id: c.localIdentifier, title: c.localizedTitle ?? "앨범", collection: c))
             }
         }
-        albums = list
-        if album == nil || !list.contains(where: { $0.id == album?.id }) { album = list.first }
+        return list
     }
 
     func reload() {
@@ -102,6 +113,7 @@ struct PhotoGridPicker: View {
             Divider()
             content
         }
+        .sheetUnderBlueBar()
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: model.album) { _, _ in model.reload() }
@@ -126,6 +138,7 @@ struct PhotoGridPicker: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+        .padding(.top, BrowserView.isDuoLikeScreen ? 36 : 0)   // 듀오: 시트 위쪽에 시계·배터리가 가로로 올라오므로 취소·추가를 그 아래로
         .background(Color(uiColor: .systemBackground))
     }
 

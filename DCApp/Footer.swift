@@ -136,9 +136,11 @@ struct FooterSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $adding) {
             FooterRuleEditor(rule: FooterRule(account: FooterRule.all, gallery: FooterRule.all, text: ""), isNew: true)
+                .sheetUnderBlueBar()
         }
         .sheet(item: $editing) { r in
             FooterRuleEditor(rule: r, isNew: false)
+                .sheetUnderBlueBar()
         }
     }
 }

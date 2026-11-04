@@ -111,7 +111,7 @@ struct SearchView: View {
     /// 탭 전환 애니메이션이 끝난 뒤 검색창에 포커스 → 키보드 표시
     private func focusSearch() {
         Task {
-            try? await Task.sleep(for: .milliseconds(350))
+            try? await Task.sleep(for: .milliseconds(80))   // 시트 애니메이션을 기다리지 않고 바로 키보드를 올림 (느리게 느껴지던 부분)
             searchFocused = true
         }
     }
