@@ -423,7 +423,20 @@ final class WebViewModel: NSObject, ObservableObject {
     func goForward() { webView.goForward() }
     func reload() { webView.reload() }
 
-    @objc private func handlePullToRefresh() { webView.reload() }
+    /// 당겨서 새로고침: 글 목록이 2페이지 이상이면 새로고침 대신 1페이지로 (말머리·개념글 등 다른 조건은 유지)
+    @objc private func handlePullToRefresh() {
+        if isGalleryListPage, listPageNumber > 1, let url = webView.url,
+           var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            let rest = (c.queryItems ?? []).filter { $0.name != "page" }
+            c.queryItems = rest.isEmpty ? nil : rest
+            c.fragment = nil
+            if let first = c.url {
+                webView.load(URLRequest(url: first))
+                return
+            }
+        }
+        webView.reload()
+    }
 
     private var swipeStartX: CGFloat = 0
 
