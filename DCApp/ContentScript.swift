@@ -1079,8 +1079,17 @@ enum ContentScript {
   // 디시는 페이지를 그린 뒤 잠깐 있다가 닉네임 칸에 갤러리 기본 닉네임을 넣고 잠금 → 앱이 먼저 채워도 덮어씀.
   // 그래서 한 번 채우고 끝내지 않고, 몇 번(페이지 열린 뒤 0.5/1.5/3초 등) 다시 확인해서 잠겨 있으면 다시 풂.
   // 사람이 직접 입력한 칸은 더 이상 건드리지 않음.
+  function anonGalleryId() {
+    var parts = location.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return '';
+    var id = parts[1];
+    if ((id === 'write' || id === 'modify' || id === 'delete') && parts.length >= 3) id = parts[2];
+    return id.replace(/^(mi|pr)\$/, '');
+  }
   function fillAnon() {
     var a = cfg.anon || {};
+    var ag = (cfg.anonG || {})[anonGalleryId()];
+    if (ag) a = { nick: ag.nick || a.nick, pw: ag.pw || a.pw };      // 갤러리별 설정이 우선
     anonFields().forEach(function (f) {
       if (f.el.getAttribute('data-dcapp-user') === '1') return;     // 직접 입력한 칸
       if (f.el.getAttribute('data-dcapp-unlocking') === '1') return; // 지금 푸는 중
@@ -3362,7 +3371,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v203-titbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v204-anong', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

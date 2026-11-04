@@ -96,28 +96,37 @@ struct PhotoGridPicker: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 4)
 
     var body: some View {
-        NavigationStack {
+        // 시스템 내비게이션 바는 스크롤하면 사라져서(듀오에서 추가 버튼을 못 누름) 위쪽에 고정된 머리글을 직접 둠
+        VStack(spacing: 0) {
+            header
+            Divider()
             content
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("취소") { dismiss() }
-                    }
-                    ToolbarItem(placement: .principal) { albumMenu }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(selected.isEmpty ? "추가" : "추가 (\(selected.count))") {
-                            let list = selected.compactMap { picked[$0] }
-                            dismiss()
-                            onPick(list)
-                        }
-                        .fontWeight(.semibold)
-                        .disabled(selected.isEmpty)
-                    }
-                }
         }
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: model.album) { _, _ in model.reload() }
+    }
+
+    private var header: some View {
+        HStack {
+            Button("취소") { dismiss() }
+                .font(.title3)
+                .frame(minWidth: 70, minHeight: 44, alignment: .leading)
+            Spacer(minLength: 8)
+            albumMenu
+            Spacer(minLength: 8)
+            Button(selected.isEmpty ? "추가" : "추가 (\(selected.count))") {
+                let list = selected.compactMap { picked[$0] }
+                dismiss()
+                onPick(list)
+            }
+            .font(.title3.weight(.semibold))
+            .disabled(selected.isEmpty)
+            .frame(minWidth: 70, minHeight: 44, alignment: .trailing)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(Color(uiColor: .systemBackground))
     }
 
     @ViewBuilder private var content: some View {
@@ -161,8 +170,8 @@ struct PhotoGridPicker: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.album?.title ?? "사진").font(.headline)
-                Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                Text(model.album?.title ?? "사진").font(.title3.weight(.semibold))
+                Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(.primary)
         }

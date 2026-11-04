@@ -110,14 +110,36 @@ enum DCSession {
 /// 닉네임은 UserDefaults, 비밀번호는 키체인.
 enum AnonStore {
     private static let nickKey = "anonNick"
+    private static let galleryNickKey = "anonNickByGallery"
     private static let service = "DCApp.dcinside.anon"
     private static let account = "password"
 
-    private static var query: [String: Any] {
+    private static func query(_ acc: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
+         kSecAttrAccount as String: acc]
     }
+
+    private static func readKeychain(_ acc: String) -> String {
+        var q = query(acc)
+        q[kSecReturnData as String] = true
+        q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
+              let d = item as? Data else { return "" }
+        return String(decoding: d, as: UTF8.self)
+    }
+
+    private static func writeKeychain(_ acc: String, _ value: String) {
+        SecItemDelete(query(acc) as CFDictionary)
+        guard !value.isEmpty else { return }
+        var add = query(acc)
+        add[kSecValueData as String] = Data(value.utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    // MARK: 모든 갤러리 공통
 
     static var nick: String {
         get { UserDefaults.standard.string(forKey: nickKey) ?? "" }
@@ -125,22 +147,70 @@ enum AnonStore {
     }
 
     static var password: String {
-        get {
-            var q = query
-            q[kSecReturnData as String] = true
-            q[kSecMatchLimit as String] = kSecMatchLimitOne
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(q as CFDictionary, &item) == errSecSuccess,
-                  let d = item as? Data else { return "" }
-            return String(decoding: d, as: UTF8.self)
+        get { readKeychain(account) }
+        set { writeKeychain(account, newValue) }
+    }
+
+    // MARK: 갤러리별 (있으면 공통보다 우선)
+
+    private static var galleryNicks: [String: String] {
+        get { UserDefaults.standard.dictionary(forKey: galleryNickKey) as? [String: String] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: galleryNickKey) }
+    }
+
+    private static func gid(_ g: String) -> String { DCGalleryID.bare(g) }
+
+    /// 갤러리별 설정이 있는 갤러리 ID들
+    static var galleryIDs: [String] { galleryNicks.keys.sorted() }
+
+    static func hasGallery(_ g: String) -> Bool { galleryNicks[gid(g)] != nil }
+
+    static func galleryNick(_ g: String) -> String { galleryNicks[gid(g)] ?? "" }
+    static func galleryPassword(_ g: String) -> String { readKeychain("\(account)#\(gid(g))") }
+
+    /// 그 갤러리의 설정을 저장(없으면 새로 만듦)
+    static func setGallery(_ g: String, nick n: String, password p: String) {
+        var d = galleryNicks
+        d[gid(g)] = n
+        galleryNicks = d
+        writeKeychain("\(account)#\(gid(g))", p)
+    }
+
+    static func removeGallery(_ g: String) {
+        var d = galleryNicks
+        d[gid(g)] = nil
+        galleryNicks = d
+        writeKeychain("\(account)#\(gid(g))", "")
+    }
+
+    /// 갤러리별 설정이 있으면 그것, 없으면 공통 설정
+    static func nick(for g: String?) -> String {
+        if let g, let n = galleryNicks[gid(g)], !n.isEmpty { return n }
+        return nick
+    }
+
+    static func password(for g: String?) -> String {
+        if let g {
+            let p = galleryPassword(g)
+            if !p.isEmpty { return p }
         }
-        set {
-            SecItemDelete(query as CFDictionary)
-            guard !newValue.isEmpty else { return }
-            var add = query
-            add[kSecValueData as String] = Data(newValue.utf8)
-            add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-            SecItemAdd(add as CFDictionary, nil)
+        return password
+    }
+
+    /// 글쓰기·댓글 도구에서 바꾼 값 → 그 갤러리 설정 갱신 (닉네임이 잠겨 있으면 닉네임은 건드리지 않음)
+    static func update(gallery g: String?, nick n: String?, password p: String) {
+        guard let g, !g.isEmpty else {
+            if let n { nick = n }
+            password = p
+            return
         }
+        setGallery(g, nick: n ?? galleryNick(g), password: p)
+    }
+
+    /// 페이지 스크립트에 넘길 갤러리별 값
+    static var galleryScriptValue: [String: [String: String]] {
+        var out: [String: [String: String]] = [:]
+        for g in galleryIDs { out[g] = ["nick": galleryNick(g), "pw": galleryPassword(g)] }
+        return out
     }
 }

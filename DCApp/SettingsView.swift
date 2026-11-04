@@ -726,10 +726,17 @@ struct HiddenElementsView: View {
 }
 
 
-/// 유동(비로그인)으로 쓸 때 자동으로 채울 닉네임·비밀번호
+/// 유동(비로그인)으로 쓸 때 자동으로 채울 닉네임·비밀번호 (모든 갤러리 공통 + 갤러리별)
 struct AnonInfoView: View {
     @State private var nick = AnonStore.nick
     @State private var password = AnonStore.password
+    @State private var galleries = AnonStore.galleryIDs
+    @State private var newID = ""
+    @ObservedObject private var visited = VisitedStore.shared
+
+    private func name(_ id: String) -> String {
+        visited.items.first { $0.gallery.galleryID == id }?.gallery.name ?? id
+    }
 
     var body: some View {
         Form {
@@ -738,16 +745,85 @@ struct AnonInfoView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 SecureField("비밀번호", text: $password)
+            } header: {
+                Text("모든 갤러리")
             } footer: {
-                Text("로그아웃 상태에서 댓글·글쓰기 칸에 자동으로 채워요. 댓글칸에 직접 입력해도 여기에 저장돼요. 비밀번호는 이 기기 키체인에 암호화해서 보관해요.")
+                Text("갤러리별 설정이 없는 갤러리에서 쓰는 값이에요. 로그아웃 상태에서 댓글·글쓰기 칸에 자동으로 채워요. 비밀번호는 이 기기 키체인에 암호화해서 보관해요.")
+            }
+            Section {
+                ForEach(galleries, id: \.self) { g in
+                    NavigationLink {
+                        AnonGalleryEditView(galleryID: g, title: name(g))
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(name(g))
+                            Text(AnonStore.galleryNick(g).isEmpty ? "닉네임: 공통 설정 따름" : "닉네임: \(AnonStore.galleryNick(g))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .onDelete { idx in
+                    for i in idx { AnonStore.removeGallery(galleries[i]) }
+                    galleries = AnonStore.galleryIDs
+                    NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                }
+                HStack {
+                    TextField("갤러리 ID 추가 (예: stock_new)", text: $newID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button("추가") {
+                        let id = DCGalleryID.bare(newID.trimmingCharacters(in: .whitespaces))
+                        guard !id.isEmpty else { return }
+                        if !AnonStore.hasGallery(id) { AnonStore.setGallery(id, nick: "", password: "") }
+                        galleries = AnonStore.galleryIDs
+                        newID = ""
+                    }
+                    .disabled(newID.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } header: {
+                Text("갤러리별")
+            } footer: {
+                Text("갤러리별 설정이 있으면 그 갤러리에서는 공통 설정보다 먼저 써요. 글쓰기·댓글 칸에서 닉네임이나 비밀번호를 바꾸면 그 갤러리 설정이 자동으로 만들어지고 갱신돼요.")
             }
         }
         .navigationTitle("유동 닉네임·비밀번호")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { galleries = AnonStore.galleryIDs }
         .onDisappear {
             AnonStore.nick = nick.trimmingCharacters(in: .whitespaces)
             AnonStore.password = password
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 페이지 스크립트에 새 값 반영
+        }
+    }
+}
+
+/// 갤러리 하나의 유동 닉네임·비밀번호
+struct AnonGalleryEditView: View {
+    let galleryID: String
+    let title: String
+    @State private var nick = ""
+    @State private var password = ""
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("닉네임 (비우면 공통 설정)", text: $nick)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("비밀번호 (비우면 공통 설정)", text: $password)
+            } footer: {
+                Text("\(title) (\(galleryID)) 갤러리에서만 쓰는 값이에요. 비워 둔 칸은 모든 갤러리 설정을 따라요.")
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            nick = AnonStore.galleryNick(galleryID)
+            password = AnonStore.galleryPassword(galleryID)
+        }
+        .onDisappear {
+            AnonStore.setGallery(galleryID, nick: nick.trimmingCharacters(in: .whitespaces), password: password)
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
     }
 }

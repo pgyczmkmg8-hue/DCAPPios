@@ -2291,7 +2291,11 @@ extension View {
     /// 이걸 끄면 서드파티 브라우저처럼 시계는 위쪽(카메라 왼쪽)에, 화면은 옆 여백 없이 꽉 차게.
     @ViewBuilder
     func keepsTopStatusBar() -> some View {
-        self
+        if #available(iOS 27.1, *) {
+            self.toolbarVerticalBehavior(.disabled)
+        } else {
+            self
+        }
     }
 }
 

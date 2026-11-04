@@ -272,6 +272,12 @@ final class WebViewModel: NSObject, ObservableObject {
         ["p": ["text": s.text, "nick": s.nick, "pw": s.pw, "code": s.code]]
     }
 
+    /// 지금 보는 페이지의 갤러리 ID (글쓰기·글·목록 모두)
+    var currentGalleryID: String? {
+        guard let url = webView.url else { return nil }
+        return AutoImageStore.writeGalleryID(from: url) ?? Gallery.parse(url)?.id
+    }
+
     /// 입력창의 내용을 디시 댓글 양식에 채우고 등록 버튼을 누름
     func submitComment() {
         guard let s = commentCompose, !s.sending else { return }
@@ -280,8 +286,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if s.anon {
             if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return }
             if s.pw.isEmpty { showToast("비밀번호를 입력해 주세요"); return }
-            if !s.nickLocked { AnonStore.nick = s.nick }
-            AnonStore.password = s.pw
+            AnonStore.update(gallery: currentGalleryID, nick: s.nickLocked ? nil : s.nick, password: s.pw)
         }
         if s.hasCode && s.code.trimmingCharacters(in: .whitespaces).isEmpty { showToast("코드를 입력해 주세요"); return }
         s.sending = true
@@ -316,8 +321,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if s.anon {
             if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return false }
             if s.pw.isEmpty { showToast("비밀번호를 입력해 주세요"); return false }
-            if !s.nickLocked { AnonStore.nick = s.nick }
-            AnonStore.password = s.pw
+            AnonStore.update(gallery: currentGalleryID, nick: s.nickLocked ? nil : s.nick, password: s.pw)
         }
         if s.hasCode && s.code.trimmingCharacters(in: .whitespaces).isEmpty { showToast("코드를 입력해 주세요"); return false }
         return true
@@ -962,9 +966,10 @@ final class WebViewModel: NSObject, ObservableObject {
         s.nickLocked = info["nickLocked"] as? Bool ?? false
         if s.isAnon {
             let pageNick = info["nick"] as? String ?? ""
-            s.nick = !pageNick.isEmpty ? pageNick : (AnonStore.nick.isEmpty ? "ㅇㅇ" : AnonStore.nick)
+            let saved = AnonStore.nick(for: s.galleryID)
+            s.nick = !pageNick.isEmpty ? pageNick : (saved.isEmpty ? "ㅇㅇ" : saved)
             let pagePw = info["pw"] as? String ?? ""
-            s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password
+            s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password(for: s.galleryID)
         } else {
             s.nick = ""; s.pw = ""
         }
@@ -1092,8 +1097,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if s.isAnon {
             if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return }
             if s.pw.count < 4 { showToast("비밀번호를 4자리 이상 입력해 주세요"); return }
-            if !s.nickLocked { AnonStore.nick = s.nick }
-            AnonStore.password = s.pw
+            AnonStore.update(gallery: s.galleryID, nick: s.nickLocked ? nil : s.nick, password: s.pw)
         }
         if s.hasCaptcha && s.captcha.isEmpty { showToast("코드를 입력해 주세요"); return }
         if !s.heads.isEmpty && s.head.isEmpty { showToast("말머리를 골라 주세요"); return }
@@ -1577,7 +1581,14 @@ extension WebViewModel: WKScriptMessageHandler {
             MemoStore.shared.addAuto(body["items"] as? [[String: Any]] ?? [])
         case "anon":   // 유동 닉네임/비밀번호를 입력하면 기억 (다음에 빈 칸이면 채움)
             let v = body["value"] as? String ?? ""
-            if body["kind"] as? String == "pw" { AnonStore.password = v } else { AnonStore.nick = v }
+            // 직접 입력한 값은 지금 갤러리의 설정에 저장 (공통 설정은 설정 화면에서만 바뀜)
+            if let g = currentGalleryID {
+                if body["kind"] as? String == "pw" {
+                    AnonStore.setGallery(g, nick: AnonStore.galleryNick(g), password: v)
+                } else {
+                    AnonStore.setGallery(g, nick: v, password: AnonStore.galleryPassword(g))
+                }
+            } else if body["kind"] as? String == "pw" { AnonStore.password = v } else { AnonStore.nick = v }
             // 페이지 스크립트에 넣어 둔 설정은 설치할 때 값이라, 다시 설치해야 다음 페이지(로그아웃 후 등)에서 새 값으로 채움
             installUserScript()
         case "adpause":   // 댓글 칸을 누름 → 등록할 때까지 광고 차단 끄기
@@ -1621,7 +1632,7 @@ extension WebViewModel: WKScriptMessageHandler {
             }
         case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
             if let s = commentCompose, s.sameTarget(body) { break }
-            withAnimation(.easeOut(duration: 0.2)) { commentCompose = CommentComposeSession(info: body) }
+            withAnimation(.easeOut(duration: 0.2)) { commentCompose = CommentComposeSession(info: body, gallery: currentGalleryID) }
         case "banned":   // 디시가 등록을 막는 안내 창(차단된 IP·매니저 차단)을 띄움 → 웹 안내는 숨기고, 같은 문구를 앱이 띄우고 이전 화면으로
             let msg = body["msg"] as? String ?? ""
             commentCompose = nil

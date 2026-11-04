@@ -19,7 +19,7 @@ final class CommentComposeSession: ObservableObject, Identifiable {
     @Published var code = ""
     @Published var sending = false
 
-    init(info: [String: Any]) {
+    init(info: [String: Any], gallery: String? = nil) {
         isReply = info["reply"] as? Bool ?? false
         replyNick = info["replyNick"] as? String ?? ""
         anon = info["anon"] as? Bool ?? false
@@ -34,8 +34,9 @@ final class CommentComposeSession: ObservableObject, Identifiable {
         text = info["text"] as? String ?? ""
         let pageNick = info["nick"] as? String ?? ""
         let pagePw = info["pw"] as? String ?? ""
-        nick = !pageNick.isEmpty ? pageNick : (AnonStore.nick.isEmpty ? "ㅇㅇ" : AnonStore.nick)
-        pw = !pagePw.isEmpty ? pagePw : AnonStore.password
+        let saved = AnonStore.nick(for: gallery)
+        nick = !pageNick.isEmpty ? pageNick : (saved.isEmpty ? "ㅇㅇ" : saved)
+        pw = !pagePw.isEmpty ? pagePw : AnonStore.password(for: gallery)
     }
 
     /// 같은 칸을 다시 눌렀는지 (입력창을 새로 만들지 않고 그대로 둠)
@@ -76,11 +77,11 @@ struct CommentComposerHost: View {
             .id(s.id)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
                 guard let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
-                let screenH = UIScreen.main.bounds.height
+                let kbTop = end.minY, winH = UIScreen.main.bounds.height
                 let d = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
                 withAnimation(.easeOut(duration: d)) {
-                    keyboardTop = end.minY < screenH - 1 ? end.minY : nil
-                    keyboardCover = max(0, screenH - end.minY)
+                    keyboardTop = kbTop < winH - 1 ? kbTop : nil
+                    keyboardCover = max(0, winH - kbTop)
                     correction = 0
                 }
             }
@@ -91,11 +92,11 @@ struct CommentComposerHost: View {
         }
     }
 
-    /// 입력창 아래 끝이 키보드 윗변과 어긋나면(틈) 그만큼 아래로 보정
+    /// 입력창 아래 끝이 키보드 윗변과 어긋나면 그만큼 보정 (듀오 동영상 분할처럼 앱 창이 화면 일부일 때 큰 어긋남도 여기서 맞춤)
     private func realign(composerBottom: CGFloat) {
         guard let top = keyboardTop else { return }
         let gap = top - composerBottom
-        guard abs(gap) > 0.5, abs(gap) < 60 else { return }
+        guard abs(gap) > 0.5, abs(gap) < 600 else { return }
         correction -= gap
     }
 
