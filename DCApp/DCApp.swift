@@ -311,7 +311,7 @@ struct RootView: View {
 
             // 듀오: 상단바가 오른쪽 빈 줄(안전 영역)까지 늘어난 부분을 바탕색으로 덮어 사파리처럼
             if sideColumn.width > 0 && !compactMode {
-                Color(uiColor: .systemBackground)
+                Color(uiColor: .dcPage)
                     .frame(width: sideColumn.width, height: sideColumn.topBarBottom + 2)   // +2: 상단바 아래 회색 구분선까지 덮기
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .ignoresSafeArea()
@@ -521,7 +521,7 @@ private struct DetailPlaceholder: View {
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(uiColor: .systemBackground))
+            .background(Color(uiColor: .dcPage))   // 다크모드에서 페이지(#272729)와 같은 색 (순검정이 튀지 않게)
         }
     }
 }

@@ -128,6 +128,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        // 페이지가 그려지기 전·끝까지 스크롤했을 때 비치는 바탕을 다크모드 페이지색에 맞춤 (순검정 방지)
+        webView.underPageBackgroundColor = .dcPage
         // 왼쪽 1/4 스와이프를 쓰면 웹뷰 기본(가장자리) 제스처는 끔 → 한 번 쓸었는데 두 번 뒤로 가는 문제 방지
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
         webView.allowsLinkPreview = false   // 길게 누르기를 차단 메뉴에 사용

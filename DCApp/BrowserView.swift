@@ -2306,6 +2306,12 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
     static func raw(from list: [ControlBarItem]) -> String { list.map(\.rawValue).joined(separator: ",") }
 }
 
+// MARK: - 다크모드 바탕색
+extension UIColor {
+    /// 디시 페이지 다크모드 바탕(#272729)과 같은 앱 쪽 바탕색. 라이트 모드는 기본 배경
+    static let dcPage = UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0x27/255, green: 0x27/255, blue: 0x29/255, alpha: 1) : .systemBackground }
+}
+
 // MARK: - 시트를 파란 상단바 아래까지만
 /// 듀오 같은 큰 폰에서 시트가 파란 영역(상단바)을 덮지 않고 그 바로 아래까지만 올라오게 높이를 정함. 일반 아이폰은 기존 높이
 extension View {

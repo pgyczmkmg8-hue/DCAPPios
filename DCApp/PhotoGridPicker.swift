@@ -139,7 +139,7 @@ struct PhotoGridPicker: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
         .padding(.top, BrowserView.isDuoLikeScreen ? 36 : 0)   // 듀오: 시트 위쪽에 시계·배터리가 가로로 올라오므로 취소·추가를 그 아래로
-        .background(Color(uiColor: .systemBackground))
+        .background(Color(uiColor: .dcPage))
     }
 
     @ViewBuilder private var content: some View {
