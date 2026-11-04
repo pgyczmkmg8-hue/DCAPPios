@@ -47,6 +47,12 @@ final class CommentComposeSession: ObservableObject, Identifiable {
 /// 브라우저 화면 맨 아래에 뜨는 앱 댓글 입력창 (키보드 위)
 struct CommentComposerHost: View {
     @ObservedObject var model: WebViewModel
+    /// 키보드 윗변의 화면 y (키보드가 없으면 nil) / 키보드가 화면 아래를 가린 높이
+    /// SwiftUI의 키보드 안전 영역 값은 글자를 칠 때(추천 줄이 바뀔 때) 실제 키보드와 10pt쯤 어긋나
+    /// 입력창과 키보드 사이에 틈이 남음 → 입력창의 실제 아래 끝 위치를 재서 키보드 윗변에 맞게 보정
+    @State private var keyboardTop: CGFloat?
+    @State private var keyboardCover: CGFloat = 0
+    @State private var correction: CGFloat = 0
 
     var body: some View {
         if let s = model.commentCompose {
@@ -56,10 +62,47 @@ struct CommentComposerHost: View {
                     .onTapGesture { model.closeCommentCompose(sync: true) }
                 CommentComposer(session: s, model: model)
                     .ignoresSafeArea(.container, edges: .trailing)   // 듀오 옆 세로 줄 자리까지 입력창을 채움 (줄은 맨 위 시계 자리라 아래쪽은 비어 있음)
+                    .background {
+                        GeometryReader { g in
+                            Color.clear
+                                .onChange(of: g.frame(in: .global).maxY) { _, y in realign(composerBottom: y) }
+                                .onAppear { realign(composerBottom: g.frame(in: .global).maxY) }
+                        }
+                    }
+                    .padding(.bottom, max(0, keyboardCover - Self.windowBottomInset + correction))
                     .transition(.move(edge: .bottom))
             }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .id(s.id)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
+                guard let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+                let screenH = UIScreen.main.bounds.height
+                let d = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+                withAnimation(.easeOut(duration: d)) {
+                    keyboardTop = end.minY < screenH - 1 ? end.minY : nil
+                    keyboardCover = max(0, screenH - end.minY)
+                    correction = 0
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { n in
+                let d = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+                withAnimation(.easeOut(duration: d)) { keyboardTop = nil; keyboardCover = 0; correction = 0 }
+            }
         }
+    }
+
+    /// 입력창 아래 끝이 키보드 윗변과 어긋나면(틈) 그만큼 아래로 보정
+    private func realign(composerBottom: CGFloat) {
+        guard let top = keyboardTop else { return }
+        let gap = top - composerBottom
+        guard abs(gap) > 0.5, abs(gap) < 60 else { return }
+        correction -= gap
+    }
+
+    private static var windowBottomInset: CGFloat {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+            .map(\.safeAreaInsets.bottom).max() ?? 0
     }
 }
 
@@ -70,6 +113,7 @@ private struct CommentComposer: View {
     @FocusState private var focus: Field?
     private enum Panel { case dccon, txtcon }
     @State private var panel: Panel?
+    @State private var contentH: CGFloat = 0
 
     private func togglePanel(_ p: Panel) {
         panel = panel == p ? nil : p
@@ -154,9 +198,19 @@ private struct CommentComposer: View {
                 CommentTxtconPanel(model: model)
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in contentH = h }
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous))
+        // 글자를 칠 때 시스템이 바깥에서 주는 높이가 131↔150pt로 번갈아 바뀌어(아래 끝은 키보드에 붙은 채 위쪽만 움직임)
+        // 입력창이 위로 뜨던 것 → 내용 높이를 직접 재서 입력창 높이를 못 박음
+        .frame(height: contentH > 0 ? contentH + 22 : nil, alignment: .top)
+        // 배경은 아래로 60pt 더 늘려 키보드 뒤로 깔음 — 기기에서 키보드 윗변 값이 실제 보이는 키보드보다 10pt쯤 높게 나와
+        // 입력창과 키보드 사이에 틈이 보이는 경우가 있어서, 틈이 생겨도 입력창 배경이 이어지게 함
+        .background(alignment: .top) {
+            UnevenRoundedRectangle(topLeadingRadius: 18, topTrailingRadius: 18, style: .continuous)
+                .fill(.regularMaterial)
+                .padding(.bottom, -60)
+        }
         .shadow(color: .black.opacity(0.12), radius: 10, y: -2)
         .onAppear {
             Task {
