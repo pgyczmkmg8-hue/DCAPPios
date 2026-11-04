@@ -1374,7 +1374,9 @@ struct BrowserView: View {
     }
     /// 양쪽 모두 이 칸 수만큼 차지 (모자란 쪽은 빈 칸)
     /// 상단바 왼쪽 뒤로가기 화살표: 글 볼 때(디시 아래 목록보기 버튼을 대신함) + 하드웨어 키보드(아이패드)
-    private var showsTopBack: Bool { isPostPage || showsKeyboardBack }
+    /// 듀오가 접혀 있을 때(바깥 디스플레이) 글 보기에서는 뒤로가기 버튼을 두지 않음 — 시스템이 상단바 버튼을 세로 줄 쪽으로 옮겨 사진 위에 뜨는 일이 간헐적으로 생겨서 (쓸어서 뒤로가기는 그대로)
+    @ObservedObject private var display = DisplayState.shared
+    private var showsTopBack: Bool { (isPostPage || showsKeyboardBack) && !display.outerDisplay }
     private var topSlots: Int { max(topTrailingCount, showsTopBack ? 1 : 0) }
     /// 듀오처럼 상단바 오른쪽에 시계·카메라가 겹쳐 그려지는 화면인지
     /// (세로 화면은 오른쪽 안전 영역이 0이라 폭으로 구분 — 일반 아이폰은 가장 넓은 Pro Max도 440pt)

@@ -137,6 +137,9 @@ struct SettingsView: View {
                             }
                         }
                     Toggle("앱 전환 화면에서 가리기", isOn: $privacyBlur)
+                    NavigationLink { CoverSettingsView() } label: {
+                        Label("가림막 꾸미기", systemImage: "paintbrush")
+                    }
                     if let lockMessage {
                         Text(lockMessage).font(.caption).foregroundStyle(.secondary)
                     }

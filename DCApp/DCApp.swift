@@ -351,6 +351,7 @@ struct RootView: View {
         }
         .keepsTopStatusBar()
         .animation(.spring(duration: 0.35), value: compactMode)
+        .background { HingeProbe().allowsHitTesting(false) }   // 듀오가 접혔는지(바깥 디스플레이) 감지
         .onChange(of: router.sheet) { _, new in
             // 웹 화면의 키보드가 열려 있는 채로 시트가 올라오면 키보드 내려가는 동작과 시트 전환이 겹쳐 느려지므로, 시트를 띄울 때 먼저 키보드를 내림
             if new != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }

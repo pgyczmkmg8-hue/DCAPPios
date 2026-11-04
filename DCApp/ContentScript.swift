@@ -1596,6 +1596,7 @@ enum ContentScript {
   }
 
   function apply() {
+    try { if (typeof watchIpPopup === 'function') watchIpPopup(); } catch (e) {}
     ensureStyle();
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { homeRankTwoUp(); } catch (e) {}
@@ -2517,7 +2518,16 @@ enum ContentScript {
     pop.style.display = 'none';
     post('banned', { msg: msg });
   }
-  setInterval(function () { try { checkIpPopup(); } catch (e) {} }, 150);
+  // 0.15초마다 확인하던 것을 없애고, 안내 창이 있는 페이지에서 그 칸의 style이 바뀔 때만 반응 (배터리: 평소엔 아무것도 돌지 않음)
+  var ipPopWatched = null;
+  function watchIpPopup() {
+    var pop = document.getElementById('ip_not_popup');
+    if (!pop || pop === ipPopWatched) return;
+    ipPopWatched = pop;
+    new MutationObserver(function () { try { checkIpPopup(); } catch (e) {} }).observe(pop, { attributes: true, attributeFilter: ['style', 'class'] });
+    try { checkIpPopup(); } catch (e) {}
+  }
+  watchIpPopup();
 
   // ---------- 앱 댓글 입력창: 댓글 칸을 누르면 웹 키보드 대신 앱 입력창을 띄움 ----------
   // 등록은 앱이 디시 댓글 양식에 채워서 디시 페이지가 처리 (Cloudflare 체크·429 재시도도 그대로)
@@ -3438,7 +3448,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v213-txtborder', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v214-ipwatch', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
