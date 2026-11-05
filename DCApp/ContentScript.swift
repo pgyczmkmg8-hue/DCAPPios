@@ -111,7 +111,15 @@ enum ContentScript {
       '.gallview-tit-box{padding-right:max(12px,env(safe-area-inset-right))!important;padding-left:max(12px,env(safe-area-inset-left))!important}',
       // 듀오 옆 세로 줄(시계·배터리)이 있을 때: 글자는 줄 안쪽으로 (사진·영상은 줄 아래까지 그대로 깔림)
       // 박스(배경)는 화면 끝까지 채우고 글자만 줄 안쪽으로: 투명 테두리를 줄 폭만큼 둠 (배경은 테두리 밑까지 깔리고, 원래 안쪽 여백은 그대로)
-      'html.dcapp-duocol .gall-detail-lnktb,html.dcapp-duocol .thum-txtin,html.dcapp-duocol li.comment,html.dcapp-duocol li.comment-add,html.dcapp-duocol #dcapp-headbar{border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      'html.dcapp-duocol .gall-detail-lnktb,html.dcapp-duocol .thum-txtin,html.dcapp-duocol li.comment,html.dcapp-duocol li.comment-add,html.dcapp-duocol #dcapp-headbar{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      // 글 목록: 제목이 줄어들어도(…) [댓글수]는 항상 보이게, 시간은 줄 안쪽 끝에 (위의 테두리로 줄 폭만큼 안쪽에서 끝남)
+      // 글 목록 줄은 display:table;width:100% 라서 테두리를 더하면 폭이 그만큼 커져 오른쪽으로 밀림 → 테두리를 폭 안에 포함
+      'html.dcapp-duocol ul.gall-detail-lst > li .gall-detail-lnktb{box-sizing:border-box!important;width:100%!important}',
+      'html.dcapp-duocol ul.gall-detail-lst > li .subject-add .subjectin{min-width:0!important;flex:0 1 auto!important}',
+      'html.dcapp-duocol .dcapp-cmt{flex:none!important}',
+      // 세로 줄 영역은 웹 화면에서 터치되지 않게 (투명 막이 터치를 받아 아래 페이지로 안 넘김). 네이티브 컨트롤바는 이 위에 따로 떠 있어 그대로 조작됨
+      'html.dcapp-duocol::before{content:"";position:fixed;top:0;bottom:0;right:0;width:env(safe-area-inset-right);z-index:2147483646;touch-action:none;pointer-events:auto}',
+      'html.dcapp-duocol::after{content:"";position:fixed;top:0;bottom:0;left:0;width:env(safe-area-inset-left);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol .thum-txtin img,html.dcapp-duocol .thum-txtin video,html.dcapp-duocol .thum-txtin iframe{max-width:calc(100% + env(safe-area-inset-left) + env(safe-area-inset-right))!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
@@ -2571,13 +2579,29 @@ enum ContentScript {
     composeInfo(ta).then(function (info) { if (composeTarget === ta) post('cmtcompose', info); });
   }
   // 댓글 칸은 읽기 전용으로 두어 눌러도 웹 키보드가 안 뜨게 (앱 입력창이 대신 뜸)
+  // 듀오 옆 세로 줄(시계·배터리) 폭을 설정값이 아니라 화면에서 직접 잼 — 접기/펴기·회전으로 바뀌어도 맞게 (안전 영역 값 env로 읽음)
+  function sideColumnNow() {
+    try {
+      var probe = document.getElementById('dcapp-sideprobe');
+      if (!probe) {
+        probe = document.createElement('div');
+        probe.id = 'dcapp-sideprobe';
+        probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)';
+        (document.body || document.documentElement).appendChild(probe);
+      }
+      var cs = getComputedStyle(probe);
+      return Math.max(parseFloat(cs.paddingLeft) || 0, parseFloat(cs.paddingRight) || 0) >= 40;
+    } catch (e) { return false; }
+  }
+  window.addEventListener('resize', function () { try { markCommentFieldsReadonly(); } catch (e) {} });
+  window.addEventListener('orientationchange', function () { setTimeout(function () { try { markCommentFieldsReadonly(); } catch (e) {} }, 300); });
   function markCommentFieldsReadonly() {
     var on = nativeCmtOn();
     var root = document.documentElement;
     if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
     var pin = on && cfg.pinComment === true;
     if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
-    var dc = cfg.duoCol === true;
+    var dc = sideColumnNow() || cfg.duoCol === true;
     if (root.classList.contains('dcapp-duocol') !== dc) root.classList.toggle('dcapp-duocol', dc);
     Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
       if (on && isCommentField(t)) {
@@ -3448,7 +3472,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v214-ipwatch', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v216-sidecolbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
