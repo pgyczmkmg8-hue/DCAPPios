@@ -484,10 +484,10 @@ enum CommentDraftStore {
 
     private static var items: [Item] {
         get {
-            guard let d = UserDefaults.standard.data(forKey: key), let l = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
+            guard let d = Profile.defaults.data(forKey: key), let l = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
             return l
         }
-        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: key) }
+        set { Profile.defaults.set(try? JSONEncoder().encode(newValue), forKey: key) }
     }
 
     static func pageKey(_ url: URL?) -> String {

@@ -59,18 +59,18 @@ final class CoverStore: ObservableObject {
 
     @Published private(set) var styles: [String: CoverStyle]
     @Published var sameForBoth: Bool {
-        didSet { UserDefaults.standard.set(sameForBoth, forKey: sameKey) }
+        didSet { Profile.defaults.set(sameForBoth, forKey: sameKey) }
     }
     private var images: [String: UIImage] = [:]
 
     private init() {
-        if let d = UserDefaults.standard.data(forKey: stylesKey),
+        if let d = Profile.defaults.data(forKey: stylesKey),
            let s = try? JSONDecoder().decode([String: CoverStyle].self, from: d) {
             styles = s
         } else {
             styles = [:]
         }
-        sameForBoth = UserDefaults.standard.object(forKey: sameKey) as? Bool ?? true
+        sameForBoth = Profile.defaults.object(forKey: sameKey) as? Bool ?? true
     }
 
     /// 같은 모양을 쓰면 잠금 화면 설정이 두 곳에 다 쓰임
@@ -82,13 +82,13 @@ final class CoverStore: ObservableObject {
         var s = style(k)
         change(&s)
         styles[key(k)] = s
-        if let d = try? JSONEncoder().encode(styles) { UserDefaults.standard.set(d, forKey: stylesKey) }
+        if let d = try? JSONEncoder().encode(styles) { Profile.defaults.set(d, forKey: stylesKey) }
     }
 
     // MARK: 사진
 
     private func fileURL(_ k: CoverKind) -> URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Cover", isDirectory: true)
+        let dir = Profile.supportDir.appendingPathComponent("Cover", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("cover-\(key(k)).jpg")
     }

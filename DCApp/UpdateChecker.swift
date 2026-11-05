@@ -27,7 +27,7 @@ enum UpdateChecker {
         case everyOpen, daily
         static let storageKey = "updateCheckFrequency"
         static var current: Frequency {
-            Frequency(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .everyOpen
+            Frequency(rawValue: Profile.defaults.string(forKey: storageKey) ?? "") ?? .everyOpen
         }
         var name: String {
             switch self { case .everyOpen: "열 때마다"; case .daily: "하루 한 번" }
@@ -36,7 +36,7 @@ enum UpdateChecker {
 
     /// 자동 확인 켜짐 여부 (기본 켬)
     static var autoCheckEnabled: Bool {
-        UserDefaults.standard.object(forKey: autoCheckKey) as? Bool ?? true
+        Profile.defaults.object(forKey: autoCheckKey) as? Bool ?? true
     }
 
     static var currentVersion: String {
@@ -60,7 +60,7 @@ enum UpdateChecker {
     /// 버전이 올라간 새 릴리스가 있고 '건너뛰기'한 버전이 아니면 돌려줌
     static func checkIfDue() async -> AppRelease? {
         guard autoCheckEnabled else { return nil }
-        let defaults = UserDefaults.standard
+        let defaults = Profile.defaults
         if Frequency.current == .daily, let last = defaults.object(forKey: lastCheckKey) as? Date,
            Calendar.current.isDateInToday(last) { return nil }
         guard let latest = await fetchLatest() else { return nil }   // 실패하면 다음에 열 때 다시
@@ -82,7 +82,7 @@ enum UpdateChecker {
     }
 
     static func skip(_ version: String) {
-        UserDefaults.standard.set(version, forKey: skippedKey)
+        Profile.defaults.set(version, forKey: skippedKey)
     }
 
     nonisolated static func fetchLatest() async -> AppRelease? {

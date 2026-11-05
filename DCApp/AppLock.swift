@@ -19,8 +19,8 @@ final class AppLock: ObservableObject {
     private var watchdog: Task<Void, Never>?
     private var phase: ScenePhase = .active
 
-    static var lockEnabled: Bool { UserDefaults.standard.bool(forKey: lockKey) }
-    static var blurEnabled: Bool { UserDefaults.standard.bool(forKey: blurKey) }
+    static var lockEnabled: Bool { Profile.defaults.bool(forKey: lockKey) }
+    static var blurEnabled: Bool { Profile.defaults.bool(forKey: blurKey) }
 
     private var cancellables = Set<AnyCancellable>()
 

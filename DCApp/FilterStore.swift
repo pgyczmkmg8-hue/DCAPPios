@@ -67,7 +67,7 @@ final class FilterStore: ObservableObject {
     private let key = "filterSettings"
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode(FilterSettings.self, from: data) {
             settings = saved
         } else {
@@ -77,7 +77,7 @@ final class FilterStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(settings) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
     }
 
@@ -172,16 +172,16 @@ final class FilterStore: ObservableObject {
             "keywords": s.keywords.map { $0.lowercased() },
             "selectors": s.hiddenElements.map(\.selector),
             "hideBest": s.hideBestNotice,
-            "dockComment": UserDefaults.standard.object(forKey: "dockComment") as? Bool ?? true,
-            "fontSizes": ["title": UserDefaults.standard.integer(forKey: "textSizeTitle"), "body": UserDefaults.standard.integer(forKey: "textSizeBody"), "list": UserDefaults.standard.integer(forKey: "textSizeList")],   // 글자 크기 (0 = 기본)
-            "hideHeader": UserDefaults.standard.object(forKey: "hideSiteHeader") as? Bool ?? true,
-            "homeRank": UserDefaults.standard.object(forKey: "homeRankOnly") as? Bool ?? true,
-            "hideDory": UserDefaults.standard.object(forKey: "hideDory") as? Bool ?? true,
-            "nativeComment": UserDefaults.standard.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
+            "dockComment": Profile.defaults.object(forKey: "dockComment") as? Bool ?? true,
+            "fontSizes": ["title": Profile.defaults.integer(forKey: "textSizeTitle"), "body": Profile.defaults.integer(forKey: "textSizeBody"), "list": Profile.defaults.integer(forKey: "textSizeList")],   // 글자 크기 (0 = 기본)
+            "hideHeader": Profile.defaults.object(forKey: "hideSiteHeader") as? Bool ?? true,
+            "homeRank": Profile.defaults.object(forKey: "homeRankOnly") as? Bool ?? true,
+            "hideDory": Profile.defaults.object(forKey: "hideDory") as? Bool ?? true,
+            "nativeComment": Profile.defaults.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
             "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
-            "floatBar": UserDefaults.standard.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
+            "floatBar": Profile.defaults.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
             "memos": MemoStore.shared.memos.map { ["k": $0.kind.rawValue, "v": $0.value, "t": $0.text, "g": $0.gallery ?? ""] },   // 유저 메모
             "autoMemo": AutoMemo.scriptValue,   // 자동메모 ("" 꺼짐 / all / gallery / selected)
             "autoMemoGalleries": AutoMemo.selectedIDs,   // "선택한 갤러리만"에서 고른 갤러리

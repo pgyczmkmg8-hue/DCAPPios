@@ -17,7 +17,7 @@ enum WriteImageSize: String, CaseIterable, Identifiable {
     /// 앱에서 줄일 가로 크기 (원본이면 nil)
     var maxWidth: CGFloat? { Double(rawValue).map { CGFloat($0) } }
     static var current: WriteImageSize {
-        WriteImageSize(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .original
+        WriteImageSize(rawValue: Profile.defaults.string(forKey: key) ?? "") ?? .original
     }
 }
 

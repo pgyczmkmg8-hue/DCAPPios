@@ -84,11 +84,11 @@ final class AutoImageStore: ObservableObject {
     let folder: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = Profile.supportDir
         folder = base.appendingPathComponent("AutoImages", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode(AutoImageSettings.self, from: data) {
             settings = saved
         } else {
@@ -98,7 +98,7 @@ final class AutoImageStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(settings) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
     }
 

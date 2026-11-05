@@ -29,7 +29,7 @@ final class FooterStore: ObservableObject {
     }
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: rulesKey),
+        if let data = Profile.defaults.data(forKey: rulesKey),
            let saved = try? JSONDecoder().decode([FooterRule].self, from: data) {
             rules = saved
         } else {
@@ -39,11 +39,11 @@ final class FooterStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(rules) {
-            UserDefaults.standard.set(data, forKey: rulesKey)
+            Profile.defaults.set(data, forKey: rulesKey)
         }
     }
 
-    static var enabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
+    static var enabled: Bool { Profile.defaults.bool(forKey: enabledKey) }
 
     /// 이 글(계정·갤러리)에 붙일 꼬릿말 내용. 계정+갤러리 > 계정 > 갤러리 > 전체 순으로 구체적인 규칙이 이김
     /// account: 유동이면 FooterRule.anon, 로그인이면 디시 아이디 (모르면 nil → 전체 규칙만)
@@ -99,7 +99,7 @@ enum FooterFormat {
 
 struct FooterSettingsView: View {
     @ObservedObject private var store = FooterStore.shared
-    @AppStorage(FooterStore.enabledKey) private var enabled = false
+    @AppStorage(FooterStore.enabledKey, store: Profile.defaults) private var enabled = false
     @State private var editing: FooterRule?
     @State private var adding = false
 
@@ -219,7 +219,7 @@ struct FooterRuleEditor: View {
                         let store = FooterStore.shared
                         if let i = store.rules.firstIndex(where: { $0.id == rule.id }) { store.rules[i] = rule }
                         else { store.rules.append(rule) }
-                        UserDefaults.standard.set(true, forKey: FooterStore.enabledKey)   // 꼬릿말을 정했으면 사용 켜기
+                        Profile.defaults.set(true, forKey: FooterStore.enabledKey)   // 꼬릿말을 정했으면 사용 켜기
                         dismiss()
                     }
                     .disabled(FooterStore.clean(rule.text).isEmpty)

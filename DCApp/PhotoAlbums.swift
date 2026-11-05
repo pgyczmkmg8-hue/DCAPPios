@@ -9,10 +9,10 @@ enum PhotoSaver {
     static let askKey = "photoSaveAskAlbum"
 
     static var defaultAlbumID: String? {
-        let v = UserDefaults.standard.string(forKey: albumKey) ?? ""
+        let v = Profile.defaults.string(forKey: albumKey) ?? ""
         return v.isEmpty ? nil : v
     }
-    static var askEveryTime: Bool { UserDefaults.standard.bool(forKey: askKey) }
+    static var askEveryTime: Bool { Profile.defaults.bool(forKey: askKey) }
 
     /// 앨범 목록을 보려면 사진 '읽기' 권한까지 필요 (저장만 할 땐 추가 전용 권한으로 충분)
     static func requestFullAccess() async -> Bool {
@@ -169,8 +169,8 @@ struct PhotoAlbumPicker: View {
 
 /// 설정 → 세부 설정 → 사진 저장
 struct PhotoSaveSettingsSection: View {
-    @AppStorage(PhotoSaver.albumKey) private var albumID = ""
-    @AppStorage(PhotoSaver.askKey) private var ask = false
+    @AppStorage(PhotoSaver.albumKey, store: Profile.defaults) private var albumID = ""
+    @AppStorage(PhotoSaver.askKey, store: Profile.defaults) private var ask = false
 
     var body: some View {
         Section {

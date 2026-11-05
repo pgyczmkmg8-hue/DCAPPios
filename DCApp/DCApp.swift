@@ -178,16 +178,16 @@ struct DCApp: App {
 struct RootView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var favorites: FavoritesStore
-    @AppStorage("compactMode") private var compactMode = false
-    @AppStorage("splitView") private var splitSetting = true
-    @AppStorage("showPerfHUD") private var showPerfHUD = false
+    @AppStorage("compactMode", store: Profile.defaults) private var compactMode = false
+    @AppStorage("splitView", store: Profile.defaults) private var splitSetting = true
+    @AppStorage("showPerfHUD", store: Profile.defaults) private var showPerfHUD = false
     /// 테마가 바뀌면 화면을 새로 그려 상단바·강조색에 바로 반영
-    @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
+    @AppStorage(DCTheme.storageKey, store: Profile.defaults) private var themeRaw = AppTheme.dc.rawValue
     @Environment(\.colorScheme) private var systemScheme
     /// GitHub에 새 버전이 있으면 알림창
     @State private var availableUpdate: AppRelease?
     /// 처음 켰을 때 기능 소개 (한 번 보면 다시 안 뜸)
-    @AppStorage(Tutorial.seenKey) private var tutorialSeen = false
+    @AppStorage(Tutorial.seenKey, store: Profile.defaults) private var tutorialSeen = false
     @State private var showTutorial = false
     /// 처음 켠 튜토리얼이 끝나면 앱 아이콘 고르기 화면을 한 번 보여 줌
     @State private var iconPickAfterTutorial = false
@@ -197,7 +197,7 @@ struct RootView: View {
     @State private var bannerTask: Task<Void, Never>?
     /// 듀오 오른쪽 빈 줄 (상단바가 그 줄까지 늘어나지 않게 위쪽을 바탕색으로 덮음)
     @ObservedObject private var sideColumn = SideColumnLayout.shared
-    @AppStorage("compactTopRatio") private var topRatio = 0.34
+    @AppStorage("compactTopRatio", store: Profile.defaults) private var topRatio = 0.34
     @State private var keyboardVisible = false
     @State private var dragStartRatio: Double?      // 핸들을 끌기 시작할 때의 높이
     @State private var exitHoldTask: Task<Void, Never>?   // 맨 위에서 버티는 시간 재기

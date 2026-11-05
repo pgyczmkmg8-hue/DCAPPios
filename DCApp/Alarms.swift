@@ -28,7 +28,7 @@ final class AlarmStore: ObservableObject {
 
     @Published private(set) var items: [AlarmItem] = [] {
         didSet {
-            if let data = try? JSONEncoder().encode(items) { UserDefaults.standard.set(data, forKey: key) }
+            if let data = try? JSONEncoder().encode(items) { Profile.defaults.set(data, forKey: key) }
         }
     }
 
@@ -37,10 +37,10 @@ final class AlarmStore: ObservableObject {
     /// 방금 새로 들어온 알림 (앱 사용 중 화면 위 배너용). more: 같이 들어온 나머지 개수
     @Published var incoming: (item: AlarmItem, more: Int)?
     static let bannerKey = "alarmBanner"
-    static var bannerEnabled: Bool { UserDefaults.standard.object(forKey: bannerKey) as? Bool ?? true }
+    static var bannerEnabled: Bool { Profile.defaults.object(forKey: bannerKey) as? Bool ?? true }
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([AlarmItem].self, from: data) {
             items = saved
         }
@@ -48,7 +48,7 @@ final class AlarmStore: ObservableObject {
 
     /// 차단한 사람이 보낸 것이라 버린 알림 (디시가 같은 알림을 계속 다시 보내서, 다시 확인하지 않게 기억)
     private let skippedKey = "alarmSkipped"
-    private lazy var skipped: [String] = UserDefaults.standard.stringArray(forKey: skippedKey) ?? []
+    private lazy var skipped: [String] = Profile.defaults.stringArray(forKey: skippedKey) ?? []
     /// 작성자를 확인하는 중인 알림
     private var checking = Set<String>()
 
@@ -68,7 +68,7 @@ final class AlarmStore: ObservableObject {
         checking.subtract(keep.map(\.id)); checking.subtract(skip.map(\.id))
         if !skip.isEmpty {
             skipped = Array((skip.map(\.id) + skipped).prefix(500))
-            UserDefaults.standard.set(skipped, forKey: skippedKey)
+            Profile.defaults.set(skipped, forKey: skippedKey)
         }
         insert(keep)
     }

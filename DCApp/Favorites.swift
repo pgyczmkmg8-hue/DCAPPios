@@ -108,7 +108,7 @@ final class FavoritesStore: ObservableObject {
     private let key = "favoriteGalleries"
 
     init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([Gallery].self, from: data) {
             items = saved
         }
@@ -141,7 +141,7 @@ final class FavoritesStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
     }
 }
@@ -174,7 +174,7 @@ final class VisitedStore: ObservableObject {
     private let limit = 100
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([VisitedGallery].self, from: data) {
             // 예전에 미니 갤러리 글쓰기 주소를 잘못 읽어 생긴 'write' 같은 가짜 갤러리 지우기
             items = saved.filter { !["write", "modify", "delete"].contains($0.gallery.galleryID) && !$0.gallery.galleryID.contains("$") }
@@ -184,7 +184,7 @@ final class VisitedStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
     }
 
@@ -281,7 +281,7 @@ struct FavoritesView: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var alarms = AlarmStore.shared
-    @AppStorage("librarySection") private var sectionRaw = LibrarySection.visited.rawValue
+    @AppStorage("librarySection", store: Profile.defaults) private var sectionRaw = LibrarySection.visited.rawValue
     @State private var galleryQuery = ""
     @State private var showingAdd = false
     @State private var showAlarms = false

@@ -55,7 +55,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
 enum DCTheme {
     static let storageKey = "appTheme"
     static var current: AppTheme {
-        AppTheme(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .dc
+        AppTheme(rawValue: Profile.defaults.string(forKey: storageKey) ?? "") ?? .dc
     }
     /// 상단바 색 (이름은 예전 그대로 navy)
     static var navy: Color { Color(uiColor: current.bar) }
@@ -137,10 +137,10 @@ struct GallerySearchSheet: View {
     let onSearch: (URL) -> Void
     @State private var head: HeadTab?
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("gallerySearchType") private var typeRaw = GallerySearchType.subjectMemo.rawValue
+    @AppStorage("gallerySearchType", store: Profile.defaults) private var typeRaw = GallerySearchType.subjectMemo.rawValue
     @State private var keyword = ""
     @State private var recommendOnly = false
-    @State private var recent: [String] = UserDefaults.standard.stringArray(forKey: "gallerySearchRecent") ?? []
+    @State private var recent: [String] = Profile.defaults.stringArray(forKey: "gallerySearchRecent") ?? []
     @FocusState private var focused: Bool
 
     private var type: GallerySearchType { GallerySearchType(rawValue: typeRaw) ?? .subjectMemo }
@@ -214,7 +214,7 @@ struct GallerySearchSheet: View {
         dismiss()
     }
 
-    private func saveRecent() { UserDefaults.standard.set(recent, forKey: "gallerySearchRecent") }
+    private func saveRecent() { Profile.defaults.set(recent, forKey: "gallerySearchRecent") }
 }
 
 /// 웹뷰 + 남색 상단바 + 공식 앱 스타일 하단 바. NavigationStack 안에 넣어서 사용하세요.
@@ -226,14 +226,14 @@ struct BrowserView: View {
     @ObservedObject private var savedPosts = SavedPostStore.shared
     @ObservedObject private var alarms = AlarmStore.shared
     @ObservedObject private var hwKeyboard = HardwareKeyboard.shared
-    @AppStorage("compactMode") private var compactMode = false
+    @AppStorage("compactMode", store: Profile.defaults) private var compactMode = false
     /// 오른쪽 세로 버튼 막대 (끄면 ⋮ 메뉴가 상단바로 감)
     /// 오른쪽 세로 버튼 막대는 없앰 (⋮는 상단바, 한손 모드는 제목 길게 누르기, 글 볼 때만 댓글 새로고침 버튼)
     private let showFloatingBar = false
     /// 컨트롤바 버튼 순서 (설정에서 바꿈)
-    @AppStorage(ControlBarItem.storageKey) private var controlOrderRaw = ""
+    @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var controlOrderRaw = ""
     /// ⋮ 메뉴를 상단바 오른쪽에 둘지 (켜면 컨트롤바에서는 빠짐)
-    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = true
+    @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -261,9 +261,9 @@ struct BrowserView: View {
 
     // 글 보관 버튼: 폴더 고르기 / 이미 보관한 글 메뉴
     @State private var showSaveFolderPicker = false
-    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
-    @AppStorage(DarkMode.key) private var darkMode = false
-    @AppStorage(DarkMode.followKey) private var darkFollowSystem = false
+    @AppStorage("showDiagnoseMenu", store: Profile.defaults) private var showDiagnoseMenu = false
+    @AppStorage(DarkMode.key, store: Profile.defaults) private var darkMode = false
+    @AppStorage(DarkMode.followKey, store: Profile.defaults) private var darkFollowSystem = false
     @State private var newFolderName = ""
     @State private var newFolderFor: SavedPost?        // nil이면 지금 글을 새 폴더에 보관, 있으면 그 글을 새 폴더로 옮기기
     @State private var showNewFolder = false
@@ -338,11 +338,11 @@ struct BrowserView: View {
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var showFooterEditor = false
     @Environment(\.verticalSizeClass) private var vSizeClass
-    @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
-    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
+    @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
+    @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     /// 스크롤 중이라 컨트롤바를 화면 밖으로 넣었는지
     private var barTucked: Bool { autoHideBar && model.isScrolling }
-    @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
+    @AppStorage(ControlBarItem.verticalPortraitKey, store: Profile.defaults) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
     /// 화면(이 브라우저 영역) 크기 — 가로로 쓰는지 판단
     @State private var viewSize: CGSize = .zero
     private var isLandscape: Bool { viewSize.width > viewSize.height }
@@ -611,6 +611,8 @@ struct BrowserView: View {
                                 collapsedSideButton
                             } else { sideBar }
                         }
+                    } else if collapsedInColumn && !keyboardVisible {
+                        collapsedColumnButton      // 듀오: 가로 막대를 접은 버튼도 세로 막대를 접었을 때처럼 옆 세로 줄 한가운데
                     } else if showsMenuButton && showsRefresh && !keyboardVisible && !barCollapsed {
                         refreshButtonPlaced        // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침
                     }
@@ -635,7 +637,7 @@ struct BrowserView: View {
                     VStack(spacing: 0) {
                         modeBanner
                         if showsMenuButton && !usesSideBar {
-                            Group { if barCollapsed { collapsedBarButton } else { galleryBar } }
+                            Group { if barCollapsed { if !collapsedInColumn { collapsedBarButton } } else { galleryBar } }
                                 // 스크롤하는 동안 화면 아래로 들어갔다가 멈추면 다시 나옴
                                 .offset(y: barTucked ? 160 : 0)
                                 .animation(.easeOut(duration: 0.2), value: barTucked)
@@ -1174,7 +1176,7 @@ struct BrowserView: View {
                     HStack(spacing: 16) {
                         if showsKeyboardBack { backButton { Image(systemName: "chevron.backward") } }
                         accountMenu                          // 로그인 / 계정 (글쓰기 화면은 컨트롤바 대신 여기)
-                        if menuInTopBar { topMoreMenu }     // 글쓰기 화면은 오른쪽이 임시저장·등록이라 ⋮는 왼쪽
+                        if menuInTopBarShown { topMoreMenu }     // 글쓰기 화면은 오른쪽이 임시저장·등록이라 ⋮는 왼쪽
                     }
                     .foregroundStyle(.white)
                 }
@@ -1241,7 +1243,7 @@ struct BrowserView: View {
                                 .accessibilityLabel("게시물 필터")
                             }
                             // ⋮ 메뉴: 설정에서 '상단바에 두기'를 켰을 때만 (아니면 컨트롤바 안)
-                            if menuInTopBar {
+                            if menuInTopBarShown {
                                 Menu { moreMenu } label: {
                                     Image(systemName: "ellipsis")
                                         .rotationEffect(.degrees(90))
@@ -1376,7 +1378,9 @@ struct BrowserView: View {
     /// 상단바 양옆 버튼 칸 (제목 가운데 맞춤용)
     static let topSlotWidth: CGFloat = 28
     static let topSlotSpacing: CGFloat = 14
-    private var topTrailingCount: Int { (isListPage ? 1 : 0) + (menuInTopBar ? 1 : 0) }
+    /// ⋮를 실제로 상단바에 놓는지 — 설정이 켜져 있어도, 듀오처럼 옆 세로 줄(시계)이 상단바 오른쪽을 가리는 화면에서는 보이지 않으므로 컨트롤바에 둠
+    private var menuInTopBarShown: Bool { menuInTopBar && !fillsTrailing }
+    private var topTrailingCount: Int { (isListPage ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
     /// 하드웨어 키보드(트랙패드)용 뒤로가기 버튼 — 아이패드만. 아이폰(듀오 포함)은 키보드를 연결해도 쓸어서 뒤로가기만
     private var showsKeyboardBack: Bool {
         hwKeyboard.connected && UIDevice.current.userInterfaceIdiom != .phone
@@ -1460,7 +1464,7 @@ struct BrowserView: View {
     /// 꾹 눌러 밀기 중 — 이때는 막대 안 버튼이 눌리지 않게 (손을 뗄 때 버튼이 눌리던 문제)
     @State private var barGestureActive = false
     /// 컨트롤바를 동그란 버튼 하나로 접어 둠
-    @AppStorage(ControlBarItem.collapsedKey) private var barCollapsed = false
+    @AppStorage(ControlBarItem.collapsedKey, store: Profile.defaults) private var barCollapsed = false
     /// 가로 막대: 설정 ⋮만 보이는 상태
     @State private var barMenuMode = false
     @State private var barMenuChangedAt = Date.distantPast
@@ -1468,13 +1472,13 @@ struct BrowserView: View {
     @State private var galleryBarWidth: CGFloat = 0
     @State private var sideBarHeight: CGFloat = 0
     /// 세로 막대 위치 (가운데 기준 위아래 거리, 저장)
-    @AppStorage("sideBarOffsetY") private var sideBarOffsetY = 0.0
+    @AppStorage("sideBarOffsetY", store: Profile.defaults) private var sideBarOffsetY = 0.0
     @State private var sideDragY: CGFloat = 0
     @State private var sideMoving = false
     @State private var sideMovedAt = Date.distantPast
     @State private var collapsedHeight: CGFloat = 0
     /// 좌우반전: 세로 막대·접은 버튼·새로고침 버튼을 왼쪽에, 가로 막대 밀기 방향도 반대로
-    @AppStorage(ControlBarItem.mirroredKey) private var barMirrored = false
+    @AppStorage(ControlBarItem.mirroredKey, store: Profile.defaults) private var barMirrored = false
 
     /// 막대가 화면 밖으로 나가지 않게
     private func clampedSideOffset(_ y: CGFloat) -> CGFloat {
@@ -1556,6 +1560,18 @@ struct BrowserView: View {
     }
 
     /// 가로 배치일 때: 오른쪽 아래
+    /// 가로 막대를 접은 상태인데 듀오처럼 오른쪽에 세로 줄이 있으면, 전개버튼을 그 줄 안(세로 막대를 접었을 때와 같은 자리)에 놓음
+    private var collapsedInColumn: Bool {
+        barCollapsed && showsMenuButton && !usesSideBar && fillsTrailing && Self.hasSideColumnOnly && !barMirrored
+    }
+
+    private var collapsedColumnButton: some View {
+        collapsedBarCore
+            .padding(.trailing, barEdge + 6)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+    }
+
     private var collapsedBarButton: some View {
         collapsedBarCore
             .padding(barMirrored ? .leading : .trailing, 16)
@@ -1752,7 +1768,7 @@ struct BrowserView: View {
     /// 가로 막대: 평소엔 설정 ⋮을 빼고, 오른쪽→왼쪽으로 밀면 설정 ⋮만 보임
     private func barItems(horizontal: Bool) -> some View {
         // 글쓰기 화면은 로그인을 상단바 왼쪽에 두므로 컨트롤바에서는 뺌
-        let all = ControlBarItem.order(from: controlOrderRaw).filter { !(menuInTopBar && $0 == .menu) && !(model.isWritePage && $0 == .account) }
+        let all = ControlBarItem.order(from: controlOrderRaw).filter { !(menuInTopBarShown && $0 == .menu) && !(model.isWritePage && $0 == .account) }
         return Group {
             if horizontal && barMenuMode {
                 // 밀어서 나오는 둘째 칸: 설정 / 탭해서 차단 / 메모하기 / 전체 검색 / 링크 공유
@@ -2210,7 +2226,7 @@ extension View {
 
 /// 컨트롤바 유리: 기본은 가장 투명한 .clear, 설정의 '유리 진하기'를 올리면 밝은 막이 더해짐
 private struct GlassBarModifier: ViewModifier {
-    @AppStorage("barGlassTint") private var tint = 0.0
+    @AppStorage("barGlassTint", store: Profile.defaults) private var tint = 0.0
     @Environment(\.colorScheme) private var colorScheme
 
     @ViewBuilder

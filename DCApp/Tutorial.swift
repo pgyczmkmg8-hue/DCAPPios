@@ -17,7 +17,7 @@ struct TutorialView: View {
     /// 끝나거나 건너뛰면 (본 것으로 저장한 뒤) 부름
     let onFinish: () -> Void
 
-    @AppStorage(Tutorial.seenKey) private var seen = false
+    @AppStorage(Tutorial.seenKey, store: Profile.defaults) private var seen = false
     @State private var index = 0
 
     private let pages: [TutorialPage] = [

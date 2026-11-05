@@ -109,7 +109,7 @@ final class WebViewModel: NSObject, ObservableObject {
 
     init(url: URL) {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
+        config.websiteDataStore = Profile.websiteDataStore
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         // 실제 사파리와 같은 형식의 UA (iOS 버전과 Version 값이 어긋나면 봇 검사에 더 자주 걸릴 수 있음)
@@ -496,14 +496,14 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     static var customSwipeEnabled: Bool {
-        UserDefaults.standard.object(forKey: "fullSwipeBack") as? Bool ?? true
+        Profile.defaults.object(forKey: "fullSwipeBack") as? Bool ?? true
     }
 
     /// 스와이프 민감도 (설정 → 앱, 1 = 둔감 … 5 = 민감, 기본 3)
     /// distance: 이만큼 밀면 뒤로 / flickSpeed: 절반만 밀어도 이 속도 이상으로 튕기면 뒤로
     /// ratio: 가로로 민 거리가 세로의 몇 배 이상이어야 하는지 (클수록 위아래 스크롤과 덜 헷갈림)
     static var swipeThresholds: (distance: CGFloat, flickSpeed: CGFloat, ratio: CGFloat) {
-        let level = min(5, max(1, UserDefaults.standard.object(forKey: "swipeSensitivity") as? Double ?? 3))
+        let level = min(5, max(1, Profile.defaults.object(forKey: "swipeSensitivity") as? Double ?? 3))
         let d = CGFloat(3 - level)                 // 둔감할수록 + , 민감할수록 -
         // 보통(3) = 지금까지 쓰던 값 (50pt / 초속 500 / 1.5배)
         return (distance: 50 * pow(2, d * 0.6),        // 매우 둔감 ≈115pt … 매우 민감 ≈22pt
@@ -551,7 +551,7 @@ final class WebViewModel: NSObject, ObservableObject {
         let q = webView.url?.query ?? ""
         let isSearch = q.contains("serval=") || q.contains("s_keyword=")
         return isGalleryListPage && !isSearch && listPageNumber <= 1 && onGallerySwipe != nil &&
-            (UserDefaults.standard.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
+            (Profile.defaults.object(forKey: "gallerySwipeOpensList") as? Bool ?? true)
     }
 
     /// 글 보는 중인지 (그 갤러리) — 돌아갈 페이지가 없을 때 목록 1페이지로 보내기 위함
@@ -908,7 +908,7 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 앱 글쓰기 화면
 
     static let nativeWriteKey = "nativeWrite"
-    static var nativeWriteEnabled: Bool { UserDefaults.standard.object(forKey: nativeWriteKey) as? Bool ?? true }
+    static var nativeWriteEnabled: Bool { Profile.defaults.object(forKey: nativeWriteKey) as? Bool ?? true }
 
     /// 글쓰기 페이지가 열리면 앱 글쓰기 화면을 만들고, 디시 양식에서 유동 여부·말머리 등을 읽어 옴
     /// 앱 글쓰기 화면을 먼저 띄움 (디시 글쓰기 주소로 이동을 시작하는 순간) — 페이지 로딩 중에도 브라우저 상단바 대신 앱 상단바가 보이게
@@ -1551,7 +1551,7 @@ final class WebViewModel: NSObject, ObservableObject {
         if manualLogin { return }
         let switching = pendingLogin != nil
         guard let cred = pendingLogin ?? CredentialStore.load() else { return }
-        let auto = switching || UserDefaults.standard.bool(forKey: "autoLogin")
+        let auto = switching || Profile.defaults.bool(forKey: "autoLogin")
         Task {
             await call("return window.__dcapp ? window.__dcapp.fillLogin(id, pw, auto, 0, force) : 'none';",
                        ["id": cred.id, "pw": cred.password, "auto": auto, "force": switching])

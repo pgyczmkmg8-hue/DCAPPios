@@ -29,14 +29,14 @@ final class SavedPostStore: ObservableObject {
     let archiveDir: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = Profile.supportDir
         archiveDir = base.appendingPathComponent("SavedPosts", isDirectory: true)
         try? FileManager.default.createDirectory(at: archiveDir, withIntermediateDirectories: true)
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([SavedPost].self, from: data) {
             posts = saved
         }
-        if let data = UserDefaults.standard.data(forKey: foldersKey),
+        if let data = Profile.defaults.data(forKey: foldersKey),
            let saved = try? JSONDecoder().decode([PostFolder].self, from: data) {
             folders = saved
         }
@@ -44,10 +44,10 @@ final class SavedPostStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(posts) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
         if let data = try? JSONEncoder().encode(folders) {
-            UserDefaults.standard.set(data, forKey: foldersKey)
+            Profile.defaults.set(data, forKey: foldersKey)
         }
     }
 
@@ -204,7 +204,7 @@ struct DraftPart: Codable, Hashable {
 /// 임시저장 글의 사진 파일 (Application Support/DraftImages)
 enum DraftImageStore {
     static let dir: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = Profile.supportDir
         let d = base.appendingPathComponent("DraftImages", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
@@ -241,7 +241,7 @@ final class DraftStore: ObservableObject {
     private let key = "drafts"
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([Draft].self, from: data) {
             drafts = saved
         }
@@ -249,7 +249,7 @@ final class DraftStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(drafts) {
-            UserDefaults.standard.set(data, forKey: key)
+            Profile.defaults.set(data, forKey: key)
         }
         DraftImageStore.cleanup(keeping: Set(drafts.flatMap { $0.parts ?? [] }.compactMap(\.file)))
     }

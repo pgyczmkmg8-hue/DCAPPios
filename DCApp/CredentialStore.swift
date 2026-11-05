@@ -12,7 +12,7 @@ struct LoginCredential: Codable, Equatable, Identifiable {
 /// (암호화되어 저장되며, 이 기기에서 잠금 해제 상태일 때만 읽을 수 있고, 백업/다른 기기로 넘어가지 않습니다)
 /// 목록의 맨 앞 계정 = 가장 최근에 쓴 계정(기본 계정)
 enum CredentialStore {
-    private static let service = "DCApp.dcinside.accounts"
+    private static let service = "DCApp.dcinside.accounts" + Profile.keychainSuffix
     private static let account = "list"
     private static let legacyService = "DCApp.dcinside.login"   // 예전 버전(계정 1개) 저장 위치
     private static let currentKey = "currentAccountID"
@@ -39,7 +39,7 @@ enum CredentialStore {
             return list
         }
         // 예전 버전에서 저장한 계정 1개가 있으면 옮겨오기
-        if let old = read(legacyService, "default"),
+        if Profile.isPrimary, let old = read(legacyService, "default"),
            let c = try? JSONDecoder().decode(LoginCredential.self, from: old) {
             saveAll([c], notify: false)
             SecItemDelete(query(legacyService, "default") as CFDictionary)
@@ -84,9 +84,9 @@ enum CredentialStore {
 
     /// 이 앱에서 마지막으로 로그인한 계정 (표시용)
     static var currentAccountID: String? {
-        get { UserDefaults.standard.string(forKey: currentKey) }
+        get { Profile.defaults.string(forKey: currentKey) }
         set {
-            UserDefaults.standard.set(newValue, forKey: currentKey)
+            Profile.defaults.set(newValue, forKey: currentKey)
             NotificationCenter.default.post(name: DC.credentialsChanged, object: nil)
         }
     }
@@ -96,7 +96,7 @@ enum CredentialStore {
 enum DCSession {
     @MainActor
     static func clear(notify: Bool) async {
-        let store = WKWebsiteDataStore.default()
+        let store = Profile.websiteDataStore
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
         let records = await store.dataRecords(ofTypes: types)
         await store.removeData(ofTypes: types, for: records.filter { $0.displayName.contains("dcinside") })
@@ -111,7 +111,7 @@ enum DCSession {
 enum AnonStore {
     private static let nickKey = "anonNick"
     private static let galleryNickKey = "anonNickByGallery"
-    private static let service = "DCApp.dcinside.anon"
+    private static let service = "DCApp.dcinside.anon" + Profile.keychainSuffix
     private static let account = "password"
 
     private static func query(_ acc: String) -> [String: Any] {
@@ -142,8 +142,8 @@ enum AnonStore {
     // MARK: 모든 갤러리 공통
 
     static var nick: String {
-        get { UserDefaults.standard.string(forKey: nickKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: nickKey) }
+        get { Profile.defaults.string(forKey: nickKey) ?? "" }
+        set { Profile.defaults.set(newValue, forKey: nickKey) }
     }
 
     static var password: String {
@@ -154,8 +154,8 @@ enum AnonStore {
     // MARK: 갤러리별 (있으면 공통보다 우선)
 
     private static var galleryNicks: [String: String] {
-        get { UserDefaults.standard.dictionary(forKey: galleryNickKey) as? [String: String] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: galleryNickKey) }
+        get { Profile.defaults.dictionary(forKey: galleryNickKey) as? [String: String] ?? [:] }
+        set { Profile.defaults.set(newValue, forKey: galleryNickKey) }
     }
 
     private static func gid(_ g: String) -> String { DCGalleryID.bare(g) }

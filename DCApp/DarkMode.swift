@@ -10,7 +10,7 @@ enum DarkMode {
 
     /// 설정: 다크모드를 아이폰 설정(시스템)에 맞출지 (끄면 ⋮ 메뉴 버튼으로 직접)
     static let followKey = "darkModeFollowSystem"
-    static var followSystem: Bool { UserDefaults.standard.bool(forKey: followKey) }
+    static var followSystem: Bool { Profile.defaults.bool(forKey: followKey) }
     /// 시스템이 지금 다크인지 (화면이 알려 줄 때마다 갱신)
     private static var systemDark: Bool?
 
@@ -20,9 +20,9 @@ enum DarkMode {
             let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
             return scene?.traitCollection.userInterfaceStyle == .dark
         }
-        return UserDefaults.standard.bool(forKey: key)
+        return Profile.defaults.bool(forKey: key)
     }
-    private static var isSet: Bool { followSystem || UserDefaults.standard.object(forKey: key) != nil }
+    private static var isSet: Bool { followSystem || Profile.defaults.object(forKey: key) != nil }
 
     /// 시스템 다크/라이트가 바뀌었을 때 (시스템 따라가기가 켜져 있으면 화면·디시 쿠키도 같이)
     static func systemChanged(dark: Bool) {
@@ -40,7 +40,7 @@ enum DarkMode {
     }
 
     static func toggle() {
-        UserDefaults.standard.set(!isOn, forKey: key)
+        Profile.defaults.set(!isOn, forKey: key)
         apply()
         NotificationCenter.default.post(name: changed, object: nil)
     }
@@ -57,7 +57,7 @@ enum DarkMode {
     }
 
     private static func syncCookie() {
-        let store = WKWebsiteDataStore.default().httpCookieStore
+        let store = Profile.websiteDataStore.httpCookieStore
         if isOn {
             for name in cookieNames {
                 if let c = HTTPCookie(properties: [

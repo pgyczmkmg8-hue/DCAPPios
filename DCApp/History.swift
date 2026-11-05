@@ -31,7 +31,7 @@ enum PostKey {
 /// 파일 하나에 JSON으로 저장 (UserDefaults보다 큰 목록에 알맞음)
 private enum HistoryFile {
     static func url(_ name: String) -> URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = Profile.supportDir
             .appendingPathComponent("History", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent(name)
@@ -394,10 +394,10 @@ final class ListFilterStore: ObservableObject {
     static let shared = ListFilterStore()
     private let key = "listFilter"
     @Published var filter: ListFilter {
-        didSet { if let d = try? JSONEncoder().encode(filter) { UserDefaults.standard.set(d, forKey: key) } }
+        didSet { if let d = try? JSONEncoder().encode(filter) { Profile.defaults.set(d, forKey: key) } }
     }
     private init() {
-        filter = UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(ListFilter.self, from: $0) } ?? ListFilter()
+        filter = Profile.defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(ListFilter.self, from: $0) } ?? ListFilter()
     }
 }
 

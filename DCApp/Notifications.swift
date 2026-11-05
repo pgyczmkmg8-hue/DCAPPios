@@ -16,7 +16,7 @@ enum DCNotify {
     /// 알림 기능 전체 스위치 — 아직 제대로 동작하지 않아서 꺼 둠 (true로 바꾸면 설정에 다시 나타남)
     static let featureAvailable = false
 
-    static var enabled: Bool { featureAvailable && UserDefaults.standard.bool(forKey: enabledKey) }
+    static var enabled: Bool { featureAvailable && Profile.defaults.bool(forKey: enabledKey) }
     /// 앱이 꺼져 있을 때 알림을 눌러 켠 경우, 화면이 뜬 뒤 열 주소
     static var pendingURL: URL?
 
@@ -67,7 +67,7 @@ enum DCNotify {
     static func check() async -> String {
         do {
             let items = try await fetchItems()
-            let defaults = UserDefaults.standard
+            let defaults = Profile.defaults
             let firstRun = defaults.object(forKey: seenKey) == nil
             var seen = defaults.stringArray(forKey: seenKey) ?? []
             let seenSet = Set(seen)
@@ -88,7 +88,7 @@ enum DCNotify {
     }
 
     private static func fetchItems() async throws -> [Item] {
-        let cookies = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+        let cookies = await Profile.websiteDataStore.httpCookieStore.allCookies()
             .filter { $0.domain.hasSuffix("dcinside.com") }
         // 1) 그냥 요청 → 2) 안 되면 첫 화면에서 csrf 토큰을 읽어 다시 요청
         if let items = try? await request(cookies: cookies, csrf: nil) { return items }

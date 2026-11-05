@@ -53,7 +53,7 @@ enum BackupManager {
 
         var prefs: [String: Bool] = [:]
         for k in prefKeys {
-            if let v = UserDefaults.standard.object(forKey: k) as? Bool { prefs[k] = v }
+            if let v = Profile.defaults.object(forKey: k) as? Bool { prefs[k] = v }
         }
 
         let backup = BackupFile(
@@ -68,10 +68,10 @@ enum BackupManager {
             autoImageFiles: images,
             prefs: prefs,
             stringPrefs: Dictionary(uniqueKeysWithValues: stringPrefKeys.compactMap { k in
-                UserDefaults.standard.string(forKey: k).map { (k, $0) }
+                Profile.defaults.string(forKey: k).map { (k, $0) }
             }),
             memos: MemoStore.shared.memos,
-            recentSearches: UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [],
+            recentSearches: Profile.defaults.stringArray(forKey: "recentSearches") ?? [],
             visited: VisitedStore.shared.items
         )
 
@@ -119,9 +119,9 @@ enum BackupManager {
         }
         auto.settings = b.autoImages
 
-        for (k, v) in b.prefs { UserDefaults.standard.set(v, forKey: k) }
-        for (k, v) in b.stringPrefs ?? [:] { UserDefaults.standard.set(v, forKey: k) }
-        UserDefaults.standard.set(b.recentSearches, forKey: "recentSearches")
+        for (k, v) in b.prefs { Profile.defaults.set(v, forKey: k) }
+        for (k, v) in b.stringPrefs ?? [:] { Profile.defaults.set(v, forKey: k) }
+        Profile.defaults.set(b.recentSearches, forKey: "recentSearches")
         if let v = b.visited { VisitedStore.shared.replaceAll(v) }
         if let m = b.memos { MemoStore.shared.replaceAll(m) }
 
@@ -133,8 +133,8 @@ enum BackupManager {
 
 struct BackupView: View {
     @EnvironmentObject private var favorites: FavoritesStore
-    @AppStorage("backupIncludeArchives") private var includeArchives = true
-    @AppStorage("backupIncludeImages") private var includeImages = true
+    @AppStorage("backupIncludeArchives", store: Profile.defaults) private var includeArchives = true
+    @AppStorage("backupIncludeImages", store: Profile.defaults) private var includeImages = true
 
     @State private var backupURL: URL?
     @State private var isWorking = false

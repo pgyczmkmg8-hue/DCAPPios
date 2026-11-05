@@ -30,12 +30,12 @@ enum AutoMemo {
     static let modeKey = "autoMemoMode"
     static let allKey = "autoMemoAllGalleries"      // 예전 설정 (모드 키가 아직 없을 때만 읽음)
     static let selectedKey = "autoMemoGalleries"    // '선택한 갤러리만'에서 고른 갤러리 아이디들
-    static var enabled: Bool { UserDefaults.standard.bool(forKey: enabledKey) }
+    static var enabled: Bool { Profile.defaults.bool(forKey: enabledKey) }
     static var mode: Mode {
-        if let raw = UserDefaults.standard.string(forKey: modeKey), let m = Mode(rawValue: raw) { return m }
-        return (UserDefaults.standard.object(forKey: allKey) as? Bool ?? true) ? .all : .gallery
+        if let raw = Profile.defaults.string(forKey: modeKey), let m = Mode(rawValue: raw) { return m }
+        return (Profile.defaults.object(forKey: allKey) as? Bool ?? true) ? .all : .gallery
     }
-    static var selectedIDs: [String] { UserDefaults.standard.stringArray(forKey: selectedKey) ?? [] }
+    static var selectedIDs: [String] { Profile.defaults.stringArray(forKey: selectedKey) ?? [] }
     /// 페이지 스크립트에 넘길 값: "" = 꺼짐 / "all" / "gallery" / "selected"
     static var scriptValue: String { enabled ? mode.rawValue : "" }
 }
@@ -47,13 +47,13 @@ final class MemoStore: ObservableObject {
 
     @Published private(set) var memos: [UserMemo] = [] {
         didSet {
-            if let data = try? JSONEncoder().encode(memos) { UserDefaults.standard.set(data, forKey: key) }
+            if let data = try? JSONEncoder().encode(memos) { Profile.defaults.set(data, forKey: key) }
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 열린 페이지에 바로 반영
         }
     }
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = Profile.defaults.data(forKey: key),
            let saved = try? JSONDecoder().decode([UserMemo].self, from: data) {
             memos = Self.withUIDs(saved)
         }

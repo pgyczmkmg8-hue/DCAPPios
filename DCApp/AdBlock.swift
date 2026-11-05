@@ -8,7 +8,7 @@ import WebKit
 @MainActor
 enum AdBlock {
     static let key = "adBlock"
-    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+    static var enabled: Bool { Profile.defaults.object(forKey: key) as? Bool ?? true }
 
     /// 댓글 등록하는 동안 잠시 끔 (설정값은 그대로, 앱을 다시 켜면 풀림)
     private(set) static var paused = false

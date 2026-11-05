@@ -7,7 +7,7 @@ struct SearchView: View {
     @EnvironmentObject private var router: AppRouter
     @State private var query = ""
     @FocusState private var searchFocused: Bool
-    @State private var recent: [String] = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    @State private var recent: [String] = Profile.defaults.stringArray(forKey: "recentSearches") ?? []
 
     /// 입력한 글자가 들어간 즐겨찾기 갤러리
     private var matches: [Gallery] {
@@ -117,7 +117,7 @@ struct SearchView: View {
     }
 
     private func saveRecent() {
-        UserDefaults.standard.set(recent, forKey: "recentSearches")
+        Profile.defaults.set(recent, forKey: "recentSearches")
     }
 }
 

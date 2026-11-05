@@ -5,13 +5,13 @@ import WebKit
 
 struct SettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
-    @AppStorage(DCTheme.storageKey) private var themeRaw = AppTheme.dc.rawValue
-    @AppStorage(DarkMode.followKey) private var darkFollowSystem = false
-    @AppStorage(AlarmStore.bannerKey) private var alarmBanner = true
-    @AppStorage(AppLock.lockKey) private var appLock = false
-    @AppStorage(AppLock.blurKey) private var privacyBlur = false
+    @AppStorage(DCTheme.storageKey, store: Profile.defaults) private var themeRaw = AppTheme.dc.rawValue
+    @AppStorage(DarkMode.followKey, store: Profile.defaults) private var darkFollowSystem = false
+    @AppStorage(AlarmStore.bannerKey, store: Profile.defaults) private var alarmBanner = true
+    @AppStorage(AppLock.lockKey, store: Profile.defaults) private var appLock = false
+    @AppStorage(AppLock.blurKey, store: Profile.defaults) private var privacyBlur = false
     @State private var lockMessage: String?
-    @AppStorage(DCNotify.enabledKey) private var notifyEnabled = false
+    @AppStorage(DCNotify.enabledKey, store: Profile.defaults) private var notifyEnabled = false
     @State private var notifyResult: String?
     @State private var notifyChecking = false
     @EnvironmentObject private var router: AppRouter
@@ -225,7 +225,7 @@ enum SettingsPage: Hashable { case account, block }
 
 struct AccountSettingsView: View {
     @EnvironmentObject private var router: AppRouter
-    @AppStorage("autoLogin") private var autoLogin = false
+    @AppStorage("autoLogin", store: Profile.defaults) private var autoLogin = false
     @State private var accounts: [LoginCredential] = CredentialStore.all()
     @State private var currentID: String? = CredentialStore.currentAccountID
     @State private var showAddAccount = false
@@ -333,7 +333,7 @@ struct AutoMemoGalleryList: View {
                         get: { selected.contains(g.galleryID) },
                         set: { on in
                             if on { selected.insert(g.galleryID) } else { selected.remove(g.galleryID) }
-                            UserDefaults.standard.set(Array(selected).sorted(), forKey: AutoMemo.selectedKey)
+                            Profile.defaults.set(Array(selected).sorted(), forKey: AutoMemo.selectedKey)
                             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                         }))
                 }
@@ -348,7 +348,7 @@ struct AutoMemoGalleryList: View {
 
 struct BlockSettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
-    @AppStorage(AutoMemo.enabledKey) private var autoMemo = false
+    @AppStorage(AutoMemo.enabledKey, store: Profile.defaults) private var autoMemo = false
     @State private var autoMemoMode = AutoMemo.mode
 
     var body: some View {
@@ -394,7 +394,7 @@ struct BlockSettingsView: View {
         }
         .onChange(of: autoMemo) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
         .onChange(of: autoMemoMode) { _, v in
-            UserDefaults.standard.set(v.rawValue, forKey: AutoMemo.modeKey)
+            Profile.defaults.set(v.rawValue, forKey: AutoMemo.modeKey)
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
         .navigationTitle("차단 / 메모")
@@ -406,14 +406,14 @@ struct BlockSettingsView: View {
 
 struct DetailSettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
-    @AppStorage("fullSwipeBack") private var fullSwipeBack = true
-    @AppStorage("swipeSensitivity") private var swipeSensitivity = 3.0
-    @AppStorage("gallerySwipeOpensList") private var gallerySwipeOpensList = true
-    @AppStorage("hideSiteHeader") private var hideSiteHeader = true
-    @AppStorage("homeRankOnly") private var homeRankOnly = true
-    @AppStorage("hideDory") private var hideDory = true
-    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
-    @AppStorage("barGlassTint") private var barGlassTint = 0.0
+    @AppStorage("fullSwipeBack", store: Profile.defaults) private var fullSwipeBack = true
+    @AppStorage("swipeSensitivity", store: Profile.defaults) private var swipeSensitivity = 3.0
+    @AppStorage("gallerySwipeOpensList", store: Profile.defaults) private var gallerySwipeOpensList = true
+    @AppStorage("hideSiteHeader", store: Profile.defaults) private var hideSiteHeader = true
+    @AppStorage("homeRankOnly", store: Profile.defaults) private var homeRankOnly = true
+    @AppStorage("hideDory", store: Profile.defaults) private var hideDory = true
+    @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
+    @AppStorage("barGlassTint", store: Profile.defaults) private var barGlassTint = 0.0
 
     private var sensitivityLabel: String {
         switch Int(swipeSensitivity) {
@@ -493,7 +493,7 @@ struct DetailSettingsView: View {
                 FontSizeRow(title: "목록", key: "textSizeList", base: 14)
                 Button("기본으로 되돌리기", role: .destructive) {
                     for key in ["textSizeTitle", "textSizeBody", "textSizeList"] {
-                        UserDefaults.standard.set(0, forKey: key)
+                        Profile.defaults.set(0, forKey: key)
                     }
                     NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                 }
@@ -834,13 +834,13 @@ struct AnonGalleryEditView: View {
 
 /// 설정 → 컨트롤바 버튼 순서 (끌어서 바꾸기)
 struct ControlBarOrderView: View {
-    @AppStorage(ControlBarItem.storageKey) private var raw = ""
-    @AppStorage(ControlBarItem.menuInTopBarKey) private var menuInTopBar = true
-    @AppStorage(ControlBarItem.verticalLandscapeKey) private var verticalInLandscape = true
-    @AppStorage(ControlBarItem.autoHideKey) private var autoHideBar = true
-    @AppStorage("sideBarOffsetY") private var sideBarOffsetY = 0.0
-    @AppStorage(ControlBarItem.mirroredKey) private var mirrored = false
-    @AppStorage(ControlBarItem.verticalPortraitKey) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
+    @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var raw = ""
+    @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
+    @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
+    @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
+    @AppStorage("sideBarOffsetY", store: Profile.defaults) private var sideBarOffsetY = 0.0
+    @AppStorage(ControlBarItem.mirroredKey, store: Profile.defaults) private var mirrored = false
+    @AppStorage(ControlBarItem.verticalPortraitKey, store: Profile.defaults) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
 
     private var items: [ControlBarItem] { ControlBarItem.order(from: raw) }
 
@@ -917,11 +917,11 @@ struct ControlBarOrderView: View {
 
 struct ToolsSettingsView: View {
     @ObservedObject private var autoImages = AutoImageStore.shared
-    @AppStorage("dockComment") private var dockComment = true
-    @AppStorage("nativeComment") private var nativeComment = true
-    @AppStorage("splitView") private var splitView = true
-    @AppStorage(WebViewModel.nativeWriteKey) private var nativeWrite = true
-    @AppStorage(WriteImageSize.key) private var imageSize = WriteImageSize.original.rawValue
+    @AppStorage("dockComment", store: Profile.defaults) private var dockComment = true
+    @AppStorage("nativeComment", store: Profile.defaults) private var nativeComment = true
+    @AppStorage("splitView", store: Profile.defaults) private var splitView = true
+    @AppStorage(WebViewModel.nativeWriteKey, store: Profile.defaults) private var nativeWrite = true
+    @AppStorage(WriteImageSize.key, store: Profile.defaults) private var imageSize = WriteImageSize.original.rawValue
 
     var body: some View {
         Form {

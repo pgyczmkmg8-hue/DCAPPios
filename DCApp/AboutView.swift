@@ -13,8 +13,9 @@ struct AboutView: View {
         ("AboutImageTTT3", 20),
         ("AboutImageTTT4", 15),
         ("AboutImageTTT5", 10),
-        ("AboutImageWalkure", 75),
-        ("AboutImageghkdwhdrb", 25),
+        ("AboutImageWalkure", 90),
+        ("AboutImageyamiQray", 90),
+        ("AboutImageghkdwhdrb", 20),
     ]
 
     /// 확률에 따라 하나 뽑기 (excluding: 방금 보던 사진은 빼고 — 다른 사진이 없으면 그대로)
@@ -74,9 +75,6 @@ struct AboutView: View {
             }
             .foregroundStyle(.primary)
             .padding(.vertical, 12)
-            Divider()
-            Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
-                .padding(.vertical, 10)
             if PerfHUDSettings.toggleVisible {
                 Divider()
                 Toggle("성능 숫자 보이기 (메모리·CPU)", isOn: $showPerfHUD)
@@ -88,25 +86,46 @@ struct AboutView: View {
         .frame(maxWidth: 420)
     }
 
-    /// 광고 차단 (설정 화면에서 옮겨 옴)
-    private var adBlockBox: some View {
-        Toggle("광고 차단", isOn: $adBlock)
-            .onChange(of: adBlock) { _, _ in
-                NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+    /// 히든영역: 사진을 20번 누르면 나타나고, 나타난 뒤 다시 20번 누르면 숨겨짐 (광고 차단 / 페이지 구조 진단 / 프로필 변경)
+    private var hiddenBox: some View {
+        VStack(spacing: 0) {
+            Toggle("광고 차단", isOn: $adBlock)
+                .onChange(of: adBlock) { _, _ in
+                    NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                }
+                .padding(.vertical, 10)
+            Divider()
+            Toggle("메뉴에 페이지 구조 진단 보이기", isOn: $showDiagnoseMenu)
+                .padding(.vertical, 10)
+            Divider()
+            NavigationLink {
+                ProfileView()
+            } label: {
+                HStack {
+                    Text("프로필 변경")
+                    Spacer()
+                    Text(Profile.activeName).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 16)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(.primary)
+            .padding(.vertical, 12)
+        }
+        .padding(.horizontal, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .frame(maxWidth: 420)
     }
 
     private func photoTapped() {
         confetti += 1
-        guard !adBlockUnlocked else { return }
         photoTaps += 1
-        if photoTaps >= 10 {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation { adBlockUnlocked = true }
+        if photoTaps >= 20 {
+            photoTaps = 0
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            withAnimation { hiddenUnlocked.toggle() }
         }
     }
 
@@ -118,11 +137,11 @@ struct AboutView: View {
 
     @State private var confetti = 0
     @State private var image: (name: String, image: UIImage)? = AboutView.pickImage()
-    @AppStorage("showDiagnoseMenu") private var showDiagnoseMenu = false
-    @AppStorage("showPerfHUD") private var showPerfHUD = false
-    @AppStorage(AdBlock.key) private var adBlock = true
-    /// 광고 차단 스위치는 처음엔 숨김 — 사진을 10번 누르면 나타나고 그 뒤로 계속 보임
-    @AppStorage("adBlockUnlocked") private var adBlockUnlocked = false
+    @AppStorage("showDiagnoseMenu", store: Profile.defaults) private var showDiagnoseMenu = false
+    @AppStorage("showPerfHUD", store: Profile.defaults) private var showPerfHUD = false
+    @AppStorage(AdBlock.key, store: Profile.defaults) private var adBlock = true
+    /// 히든영역 표시 여부 — 프로필과 상관없이 하나 (프로필을 바꿔도 같은 상태). 예전 '광고 차단 보이기' 값을 그대로 이어 씀
+    @AppStorage("adBlockUnlocked") private var hiddenUnlocked = false
     @State private var photoTaps = 0
 
     var body: some View {
@@ -153,7 +172,7 @@ struct AboutView: View {
                 }
 
                 updateBox
-                if adBlockUnlocked { adBlockBox }
+                if hiddenUnlocked { hiddenBox }
 
             }
             .frame(maxWidth: .infinity)
@@ -176,9 +195,9 @@ struct AboutView: View {
 
 /// 버전 정보 → 업데이트: 자동 확인, 지금 확인, 사이드로드 앱으로 바로 설치
 struct UpdateView: View {
-    @AppStorage(UpdateChecker.autoCheckKey) private var autoCheck = true
-    @AppStorage(UpdateChecker.Frequency.storageKey) private var frequency: UpdateChecker.Frequency = .everyOpen
-    @AppStorage(Installer.storageKey) private var installer: Installer = .feather
+    @AppStorage(UpdateChecker.autoCheckKey, store: Profile.defaults) private var autoCheck = true
+    @AppStorage(UpdateChecker.Frequency.storageKey, store: Profile.defaults) private var frequency: UpdateChecker.Frequency = .everyOpen
+    @AppStorage(Installer.storageKey, store: Profile.defaults) private var installer: Installer = .feather
     @State private var checking = false
     @State private var checkResult: String?
     @State private var installing = false
@@ -272,7 +291,7 @@ struct UpdateView: View {
         static let storageKey = "installerApp"
         /// 업데이트 화면에서 고른 앱 (업데이트 알림창의 '바로 설치'도 이걸로)
         static var current: Installer {
-            Installer(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .feather
+            Installer(rawValue: Profile.defaults.string(forKey: storageKey) ?? "") ?? .feather
         }
         var name: String {
             switch self { case .feather: "Feather"; case .sideStore: "SideStore"; case .liveContainer: "LiveContainer" }
