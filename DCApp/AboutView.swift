@@ -188,6 +188,7 @@ struct AboutView: View {
             confetti += 1                                       // 들어오면 축하 꽃가루
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
+        .onDisappear { photoTaps = 0 }                          // 이 화면을 벗어나면 사진 누른 횟수는 0부터 다시
         .navigationTitle("버전 정보/업데이트 확인")
         .navigationBarTitleDisplayMode(.inline)
     }
