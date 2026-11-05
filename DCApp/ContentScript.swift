@@ -1860,7 +1860,8 @@ enum ContentScript {
       var at = shots.indexOf(tapped);
       if (at >= 0) {
         e.preventDefault(); e.stopPropagation();
-        post('images', { urls: shots.map(galleryMediaURL), index: at });
+        post('images', { urls: shots.map(galleryMediaURL), index: at,
+          filenos: shots.map(function (x) { return parseInt(x.getAttribute('data-fileno'), 10) || 0; }) });
         return;
       }
     }
@@ -3472,7 +3473,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v216-sidecolbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v217-photoorder', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

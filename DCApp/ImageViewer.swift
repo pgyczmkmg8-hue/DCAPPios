@@ -9,6 +9,8 @@ struct ImageViewerItem: Identifiable {
     let index: Int
     /// 사진이 있는 글 주소 (원본 다운로드 주소를 PC 글에서 찾는 데 씀)
     var pageURL: URL? = nil
+    /// 본문 사진마다 디시가 붙인 파일 번호 (원본 첨부 목록은 이 번호 순이라 본문 순서와 다를 수 있음)
+    var filenos: [Int]? = nil
 }
 
 /// 글 속 사진 전체 화면 보기: 핀치·더블탭 확대 / 좌우로 넘기기 / 위아래로 쓸어서 닫기 / 저장
@@ -67,6 +69,8 @@ struct ImageViewer: View {
                 chrome
                     .padding(.leading, Self.windowInset(\.left))    // 닫기·저장 버튼은 안전 영역 안(듀오 시계 줄을 피함)
                     .padding(.trailing, Self.windowInset(\.right))
+                    .padding(.top, Self.windowInset(\.top))          // 사진은 위·아래 끝까지 채우고 버튼만 안전 영역 안에
+                    .padding(.bottom, Self.windowInset(\.bottom))
                     .opacity(showChrome && dismissDrag == 0 ? 1 : 0)
                     .animation(.easeOut(duration: 0.15), value: showChrome)
             }
@@ -77,7 +81,7 @@ struct ImageViewer: View {
             .onTapGesture { showChrome.toggle() }
         }
         // 사진은 안전 영역(듀오 옆 세로 줄) 밖까지 한 장씩 꽉 채움 — 안 그러면 줄 자리에 다음 사진 일부가 보임
-        .ignoresSafeArea(.container, edges: [.leading, .trailing])
+        .ignoresSafeArea(.container)
         .statusBarHidden(!showChrome)
         .sheet(isPresented: $askAlbum) {
             NavigationStack {
@@ -243,8 +247,10 @@ struct ImageViewer: View {
             linksLoaded = true
             originalLinks = await Self.originalLinks(page: item.pageURL, count: count)
         }
-        guard let links = originalLinks, i < links.count,
-              let data = await Self.download(links[i]),
+        guard let links = originalLinks else { return }
+        let slot = Self.linkSlot(i, filenos: item.filenos)
+        guard slot < links.count,
+              let data = await Self.download(links[slot]),
               let img = Self.decode(data) else { return }
         datas[i] = data
         images[i] = img
@@ -272,6 +278,13 @@ struct ImageViewer: View {
             .compactMap { URL(string: $0) }
         // 사진 수와 원본 파일 수가 같을 때만 순서로 짝지음 (다르면 엉뚱한 파일일 수 있어서)
         return links.count == count ? links : nil
+    }
+
+    /// 본문 i번째 사진의 원본이 첨부 목록의 몇 번째인지 — 첨부 목록은 파일 번호가 작은 순이므로 본문 사진의 파일 번호 순위로 구함
+    /// (파일 번호가 없거나 겹치면 본문 순서 그대로)
+    nonisolated private static func linkSlot(_ i: Int, filenos: [Int]?) -> Int {
+        guard let f = filenos, i < f.count, !f.contains(0), Set(f).count == f.count else { return i }
+        return f.filter { $0 < f[i] }.count
     }
 
     nonisolated private static func download(_ u: URL) async -> Data? {

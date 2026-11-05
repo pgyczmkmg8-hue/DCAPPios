@@ -126,7 +126,7 @@ final class AppLock: ObservableObject {
         }
         authenticating = true
         defer { authenticating = false }
-        let ok = (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "DCAPP 잠금을 풀어요")) ?? false
+        let ok = (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: " ")) ?? false
         if ok {
             locked = false
             updateOverlay()

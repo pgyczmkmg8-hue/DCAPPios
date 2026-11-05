@@ -1352,6 +1352,15 @@ struct BrowserView: View {
             .keyboardShortcut("[", modifiers: .command)
     }
 
+    /// 링크 공유 대상 — 분할 화면에서 컨트롤바는 왼쪽(목록) 화면에 붙어 있지만 사용자가 보는 글은 오른쪽이므로, 오른쪽에 글이 열려 있으면 그 주소를 공유
+    private var shareTarget: URL? {
+        if router.splitActive, model === router.mainBrowser,
+           let u = router.detailBrowser.url, u.scheme?.hasPrefix("http") == true {
+            return u
+        }
+        return model.url
+    }
+
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }
 
     /// 갤러리 글 목록 화면인지 (model.url을 읽어 주소가 바뀌면 다시 그림)
@@ -1804,7 +1813,7 @@ struct BrowserView: View {
             router.sheet = .search                   // 홈 화면의 검색과 같은 전체 검색
         }
         barItem("link", "link", "링크 공유", selected: false, enabled: model.url != nil) {
-            if let url = model.url { model.share(url) }
+            if let url = shareTarget { model.share(url) }
         }
     }
 
@@ -1955,7 +1964,7 @@ struct BrowserView: View {
         }
         if let url = model.url {
             // ShareLink를 메뉴 안에 두면 아이패드에서 공유 창이 상단바 제목에 붙어 화면이 깨짐 → 직접 띄움
-            Button { model.share(url) } label: { Label("링크 공유", systemImage: "link") }
+            Button { model.share(shareTarget ?? url) } label: { Label("링크 공유", systemImage: "link") }
         }
         Section("캡처") {
             Button { Task { await model.captureVisible() } } label: {

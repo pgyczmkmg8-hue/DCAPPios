@@ -1612,7 +1612,8 @@ extension WebViewModel: WKScriptMessageHandler {
         case "images":
             let urls = (body["urls"] as? [String] ?? []).compactMap(URL.init(string:))
             if !urls.isEmpty {
-                imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url)
+                imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url,
+                                           filenos: (body["filenos"] as? [NSNumber])?.map(\.intValue))
             }
         case "automemo":   // 자동메모: 글 목록에서 메모 없는 로그인 계정을 아이디로 메모
             MemoStore.shared.addAuto(body["items"] as? [[String: Any]] ?? [])
