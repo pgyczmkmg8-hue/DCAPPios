@@ -322,10 +322,14 @@ struct BrowserView: View {
     /// 듀오를 돌려서 시계·배터리 세로 줄이 왼쪽에 있는 상태
     private var leftColumn: Bool {
         _ = viewSize   // 화면 크기(회전)가 바뀌면 다시 계산
+        // 웹 화면이 실제로 받은 안전 영역 (분할 화면에서 왼쪽에 놓인 앱은 창 값이 아니라 웹 화면 값에만 왼쪽 여백이 잡힘)
+        if webInsets.left >= 56 && webInsets.right < 20 { return true }
         let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
         return (ws.map(\.safeAreaInsets.left).max() ?? 0) >= 56 && (ws.map(\.safeAreaInsets.right).max() ?? 0) < 20
     }
+    /// 웹 화면(WKWebView)의 좌우 안전 영역 — 크기가 바뀔 때 다시 읽음
+    @State private var webInsets: (left: CGFloat, right: CGFloat) = (0, 0)
     /// 컨트롤바와 화면 가장자리 사이 간격: 듀오는 막대를 옆 세로 줄 안(가운데)에 놓음
     private var barEdge: CGFloat { (fillsTrailing && Self.hasSideColumnOnly && !barMirrored) ? max((trailingInset - 64) / 2, 4) : 12 }
     /// 듀오처럼 오른쪽에만 세로 줄(안전 영역)이 있는 상태 — 가로로 눕힌 일반 아이폰은 양쪽에 생김
@@ -373,6 +377,8 @@ struct BrowserView: View {
     private func applySideColumn() {
         let inset = Self.windowTrailingInset
         if inset != trailingInset { trailingInset = inset }
+        let wi = model.webView.safeAreaInsets
+        if wi.left != webInsets.left || wi.right != webInsets.right { webInsets = (wi.left, wi.right) }
         guard showsMenuButton else { return }
         SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
     }
@@ -1478,7 +1484,9 @@ struct BrowserView: View {
     @State private var sideMovedAt = Date.distantPast
     @State private var collapsedHeight: CGFloat = 0
     /// 좌우반전: 세로 막대·접은 버튼·새로고침 버튼을 왼쪽에, 가로 막대 밀기 방향도 반대로
-    @AppStorage(ControlBarItem.mirroredKey, store: Profile.defaults) private var barMirrored = false
+    @AppStorage(ControlBarItem.mirroredKey, store: Profile.defaults) private var barMirroredSetting = false
+    /// 실제로 막대를 왼쪽에 둘지: 설정의 좌우반전, 또는 시스템이 왼쪽에만 여백(안전 영역)을 준 창(분할 화면에서 왼쪽에 놓인 앱 등)이면 그 여백 쪽(왼쪽)으로
+    private var barMirrored: Bool { barMirroredSetting || leftColumn }
 
     /// 막대가 화면 밖으로 나가지 않게
     private func clampedSideOffset(_ y: CGFloat) -> CGFloat {
