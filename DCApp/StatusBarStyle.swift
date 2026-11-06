@@ -22,13 +22,14 @@ enum StatusBarStyler {
         return luminance > 0.62 ? .darkContent : .lightContent
     }
 
-    private static let prefix = "DCAppStatusBar2_"
+    private static let prefix = "DCAppStatusBar11_"
 
     private static var observing = false
 
     /// 모든 창의 맨 아래 화면에 적용 (이미 적용됐으면 색만 다시 계산)
     /// iOS가 앱 창 위에 따로 띄우는 창(UITrackingElementWindowController 등)도 상태바 색을 가져가서 같이 바꿈
     static func apply() {
+        watchOrientation()
         if !observing {
             observing = true
             // 창이 새로 보일 때마다 (iOS가 늦게 띄우는 창 포함) 다시 적용
@@ -38,6 +39,52 @@ enum StatusBarStyler {
         }
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             for w in scene.windows { patch(w.rootViewController) }
+        }
+    }
+
+    // MARK: 듀오 방향 보정
+    // 듀오는 앱 창(안쪽 큰 화면)과 시스템 기본 화면(바깥 화면) 크기가 달라서, 시스템이 기기 방향(바깥 화면 기준)에 맞춰
+    // 앱을 가로로 눕혀 놓음 (Safari·게임은 같은 자세에서 세로로 긴 모양). 진단: 이 자세의 기기 방향 raw=4 →
+    // 그때는 세로 방향(거꾸로 세로 포함)만 허용해서 시스템이 알맞은 세로를 고르게 함. 그 밖의 자세는 네 방향 모두 허용.
+    // 알려진 문제: 시스템이 먼저 한 번 돌고 허용 방향이 바뀐 뒤 다시 돌아서 회전이 두 번 보임 (미해결).
+    /// 지금 허용할 방향 (앱 델리게이트·맨 위 화면 컨트롤러가 읽음)
+    /// test5 방식: 듀오이고 기기 방향이 가로(오른쪽, raw=4)일 때만 세로(거꾸로 세로 포함)만 허용. 그 밖은 네 방향.
+    /// 알려진 문제: 시스템이 먼저 한 번 돌고 허용 방향이 바뀐 뒤 다시 돌아서 회전이 두 번 보임 (미해결).
+    private(set) static var orientationMask: UIInterfaceOrientationMask = .all
+    private static var watchingOrientation = false
+    private(set) static var orientationFixLog = "(아직 없음)"
+
+    private static func watchOrientation() {
+        guard !watchingOrientation else { return }
+        watchingOrientation = true
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        NotificationCenter.default.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                for ms in [0, 600] {
+                    try? await Task.sleep(for: .milliseconds(ms))
+                    updateOrientationMask()
+                }
+            }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            updateOrientationMask()
+        }
+    }
+
+    private static func updateOrientationMask() {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return }
+        let sb = scene.coordinateSpace.bounds.size, ub = UIScreen.main.bounds.size
+        let isDuo = ub.width * ub.height > 0 && (sb.width * sb.height) / (ub.width * ub.height) > 1.3
+        let dev = UIDevice.current.orientation
+        let want: UIInterfaceOrientationMask = (isDuo && dev == .landscapeRight) ? [.portrait, .portraitUpsideDown] : .all
+        guard want != orientationMask else { return }
+        orientationMask = want
+        orientationFixLog = "듀오=\(isDuo) 기기방향=\(dev.rawValue) → 허용 \(want.rawValue) 요청 (화면 방향 \(scene.interfaceOrientation.rawValue))"
+        for w in scene.windows { w.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: want)) { error in
+            Task { @MainActor in orientationFixLog += " / 실패: \(error.localizedDescription)" }
         }
     }
 
@@ -54,7 +101,18 @@ enum StatusBarStyler {
 
     /// 진단용: 창마다 맨 아래 화면 클래스와 상태바 색 결정 경로
     static func diagnostics() -> String {
-        var out = ["--- 상태바 ---"]
+        var out = ["--- 방향 ---"]
+        let dev = UIDevice.current
+        out.append("기기 방향 raw=\(dev.orientation.rawValue) (1세로 2거꾸로세로 3가로(왼) 4가로(오)) idiom=\(dev.userInterfaceIdiom.rawValue) 화면=\(Int(UIScreen.main.bounds.width))x\(Int(UIScreen.main.bounds.height))")
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            out.append("scene 인터페이스 방향 raw=\(scene.interfaceOrientation.rawValue) 창=\(Int(scene.coordinateSpace.bounds.width))x\(Int(scene.coordinateSpace.bounds.height))")
+            for w in scene.windows {
+                guard let vc = w.rootViewController else { continue }
+                out.append("  \(type(of: w)) 맨위 화면 허용 방향 mask=\(vc.supportedInterfaceOrientations.rawValue) (30=네 방향, 26=거꾸로 세로 뺌) autorotate=\(vc.shouldAutorotate)")
+            }
+        }
+        out.append("방향 보정 기록: \(orientationFixLog)")
+        out.append("--- 상태바 ---")
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             out.append("scene statusBar style=\(scene.statusBarManager?.statusBarStyle.rawValue ?? -1)")
             for w in scene.windows {
@@ -94,6 +152,14 @@ enum StatusBarStyler {
             let childSel = #selector(getter: UIViewController.childForStatusBarStyle)
             let noChild: @convention(block) (UIViewController) -> UIViewController? = { _ in nil }
             class_addMethod(c, childSel, imp_implementationWithBlock(noChild), "@@:")
+            // 화면 방향: SwiftUI 화면 컨트롤러는 아이폰 계열이면 '거꾸로 세로'를 뺀 방향만 허용 → 네 방향 모두 허용 (앱 델리게이트·Info.plist가 허용해도 맨 위 화면 컨트롤러가 막으면 안 돌아감)
+            let orientSel = #selector(getter: UIViewController.supportedInterfaceOrientations)
+            let allOrient: @convention(block) (UIViewController) -> UInt = { _ in MainActor.assumeIsolated { StatusBarStyler.orientationMask.rawValue } }
+            class_addMethod(c, orientSel, imp_implementationWithBlock(allOrient), "Q@:")
+            // 진단에서 맨 위 화면의 자동 회전(shouldAutorotate)이 꺼져 있었음 → 켜 둠
+            let rotSel = #selector(getter: UIViewController.shouldAutorotate)
+            let autoRot: @convention(block) (UIViewController) -> Bool = { _ in true }
+            class_addMethod(c, rotSel, imp_implementationWithBlock(autoRot), "B@:")
             objc_registerClassPair(c)
             sub = c
         }

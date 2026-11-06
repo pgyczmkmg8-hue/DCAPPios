@@ -183,7 +183,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     // 거꾸로 세로를 포함해 네 방향 모두 허용 (듀오 내부 디스플레이)
     nonisolated func application(_ application: UIApplication,
                                  supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        .all
+        MainActor.assumeIsolated { StatusBarStyler.orientationMask }
     }
 
     // 앱을 보고 있을 때도 배너로 표시
