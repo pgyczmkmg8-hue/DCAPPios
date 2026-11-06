@@ -2766,7 +2766,8 @@ enum ContentScript {
   async function txtconOpen() {
     var ta = ensureTarget({ reply: composeTarget ? undefined : false });
     if (!ta || typeof window.show_txtcon !== 'function') return null;
-    try { window.show_txtcon(ta.id === 'comment_memo' ? 'txtconWrite' : 'txtconReple'); } catch (e) { return null; }
+    var fmT = ta.closest ? ta.closest('form') : null;      // 대댓글에 다는 답은 txtconMention (디시콘과 같은 이유)
+    try { window.show_txtcon(ta.id === 'comment_memo' ? 'txtconWrite' : (fmT && fmT.id === 'comment_write_mention' ? 'txtconMention' : 'txtconReple')); } catch (e) { return null; }
     for (var i = 0; i < 20 && !document.getElementById('txtcon_memo'); i++) await sleep(100);
     return document.getElementById('txtcon_memo') ? txtconInfo() : null;
   }
@@ -2804,7 +2805,9 @@ enum ContentScript {
     if (tsNeedsCheck()) return revealCheck(form);
     if (typeof window.insertDccon !== 'function') return 'nofeature';
     try {
-      window.dcconMode = ta.id === 'comment_memo' ? 'commentWrite' : 'commentReple';
+      // 대댓글에 다는 답(@멘션)은 디시가 별도 양식(comment_write_mention)과 모드(com_mention)를 씀 → 모드를 잘못 주면 대댓글 자기 번호로 답글이 가서 '삭제된 댓글'이라고 나옴
+      var fm = ta.closest ? ta.closest('form') : null;
+      window.dcconMode = ta.id === 'comment_memo' ? 'commentWrite' : (fm && fm.id === 'comment_write_mention' ? 'commentMention' : 'commentReple');
       window.insertDccon({ dcconPackage: String(pkg), dcconDetail: String(detail) });
     } catch (e) { return 'err:' + e.message; }
     return 'sent';
@@ -3510,7 +3513,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v222-cmtcoderef', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v223-dcconmention', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
