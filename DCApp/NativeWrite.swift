@@ -1076,14 +1076,22 @@ struct NativeWriteView: View {
 }
 
 private extension View {
-    /// 상단 테마색 위의 흰 입력 상자 (공식 앱처럼)
-    func headerBox() -> some View {
-        self.font(.system(size: 16))
-            .foregroundStyle(.black)
+    /// 상단 테마색 위의 입력 상자 (공식 앱처럼 흰색, 다크모드에서는 어두운 회색)
+    func headerBox() -> some View { modifier(HeaderBoxStyle()) }
+}
+
+private struct HeaderBoxStyle: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        let dark = scheme == .dark
+        content
+            .font(.system(size: 16))
+            .foregroundStyle(dark ? Color.white : Color.black)
+            .tint(dark ? Color.white : DCTheme.navy)
             .padding(.horizontal, 10)
             .frame(height: 38)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 3))
-            .environment(\.colorScheme, .light)
+            .background(dark ? Color(white: 0.17) : Color.white, in: RoundedRectangle(cornerRadius: 3))
     }
 }
 

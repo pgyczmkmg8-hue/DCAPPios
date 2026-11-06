@@ -643,6 +643,13 @@ final class WebViewModel: NSObject, ObservableObject {
 })();
 """#
 
+    /// 듀오 세로 줄이 왼쪽↔오른쪽으로 바뀌었을 때 지금 페이지의 글자 여백 방향을 바로 바꿈
+    func setColumnFlip(_ on: Bool) {
+        applyFilters()   // 다음 페이지부터 쓸 설정도 갱신
+        let js = "(function(on){var r=document.documentElement;if(!r)return;if(on)r.classList.add('dcapp-duocol');r.classList.toggle('dcapp-duoflip',on);})(\(on)); true"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     func applyFilters() {
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
         installUserScript()   // 다음 페이지부터 적용

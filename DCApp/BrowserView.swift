@@ -330,9 +330,16 @@ struct BrowserView: View {
     }
     /// 웹 화면(WKWebView)의 좌우 안전 영역 — 크기가 바뀔 때 다시 읽음
     @State private var webInsets: (left: CGFloat, right: CGFloat) = (0, 0)
+    @State private var lastFlip = false
     /// 컨트롤바와 화면 가장자리 사이 간격: 듀오는 막대를 옆 세로 줄 안(가운데)에 놓음
     private var barEdge: CGFloat { (fillsTrailing && Self.hasSideColumnOnly && !barMirrored) ? max((trailingInset - 64) / 2, 4) : 12 }
     /// 듀오처럼 오른쪽에만 세로 줄(안전 영역)이 있는 상태 — 가로로 눕힌 일반 아이폰은 양쪽에 생김
+    /// 듀오를 돌려 창 전체의 왼쪽에 세로 줄이 생긴 상태 (분할 화면에서 왼쪽에 놓인 앱은 창 자체의 줄이 없어 해당 없음)
+    static var windowLeftColumn: Bool {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        return (ws.map(\.safeAreaInsets.left).max() ?? 0) >= 56 && (ws.map(\.safeAreaInsets.right).max() ?? 0) < 20
+    }
     static var hasSideColumnOnly: Bool {
         let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
@@ -379,6 +386,12 @@ struct BrowserView: View {
         if inset != trailingInset { trailingInset = inset }
         let wi = model.webView.safeAreaInsets
         if wi.left != webInsets.left || wi.right != webInsets.right { webInsets = (wi.left, wi.right) }
+        // 듀오를 반대 방향으로 돌려 세로 줄이 왼쪽↔오른쪽으로 바뀌면, 열려 있는 페이지의 글자 여백도 바로 뒤집음
+        let flip = Self.windowLeftColumn
+        if flip != lastFlip {
+            lastFlip = flip
+            model.setColumnFlip(flip)
+        }
         guard showsMenuButton else { return }
         SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
     }
@@ -389,7 +402,11 @@ struct BrowserView: View {
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
             .filter { $0.windowLevel == .normal && !$0.isHidden }
-        return windows.map(\.safeAreaInsets.right).max() ?? 0
+        let r = windows.map(\.safeAreaInsets.right).max() ?? 0
+        let l = windows.map(\.safeAreaInsets.left).max() ?? 0
+        // 듀오를 돌려 창 전체의 왼쪽에 세로 줄이 생기면 → 오른쪽 줄처럼 다룸 (여백·컨트롤바를 오른쪽으로 뒤집어 씀)
+        if l >= 56 && r < 20 { return l }
+        return r
     }
 
     init(startURL: URL, fallbackTitle: String) {
@@ -529,7 +546,7 @@ struct BrowserView: View {
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
             .ignoresSafeArea(.container, edges: UIDevice.current.userInterfaceIdiom == .phone ? [.bottom, .leading, .trailing]   // 폰(가로 포함): 안전 영역 없이 화면 끝까지
-                                                : (fillsTrailing ? [.bottom, .trailing] : (leftColumn ? [.bottom, .leading] : .bottom)))
+                                                : (fillsTrailing ? (leftColumn ? [.bottom, .leading, .trailing] : [.bottom, .trailing]) : (leftColumn ? [.bottom, .leading] : .bottom)))
             // 상단바 뒤~화면 맨 위까지 남색으로 (듀오를 펼치면 상단바 위에 띠가 생기고, 내비게이션 화면의 기본 흰 배경이 보임)
             // 웹페이지 뒤에 깔리므로 다른 곳에는 안 보임
             // 웹페이지 위쪽(상단바 뒤 ~ 화면 맨 위)만 남색으로, 오른쪽 빈 줄(듀오)의 위쪽까지 포함.
@@ -1486,7 +1503,16 @@ struct BrowserView: View {
     /// 좌우반전: 세로 막대·접은 버튼·새로고침 버튼을 왼쪽에, 가로 막대 밀기 방향도 반대로
     @AppStorage(ControlBarItem.mirroredKey, store: Profile.defaults) private var barMirroredSetting = false
     /// 실제로 막대를 왼쪽에 둘지: 설정의 좌우반전, 또는 시스템이 왼쪽에만 여백(안전 영역)을 준 창(분할 화면에서 왼쪽에 놓인 앱 등)이면 그 여백 쪽(왼쪽)으로
-    private var barMirrored: Bool { barMirroredSetting || leftColumn }
+    private var barMirrored: Bool { barMirroredSetting || splitLeftMargin }
+    /// 분할 화면에서 왼쪽에 놓여 웹 화면에만 왼쪽 여백이 생긴 상태 (창 자체의 안전 영역은 0).
+    /// 듀오를 돌려 창 전체에 왼쪽 세로 줄이 생긴 상태는 해당 없음 → 컨트롤바는 예전처럼 오른쪽
+    private var splitLeftMargin: Bool {
+        _ = viewSize
+        guard webInsets.left >= 56 && webInsets.right < 20 else { return false }
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        return (ws.map(\.safeAreaInsets.left).max() ?? 0) < 20
+    }
 
     /// 막대가 화면 밖으로 나가지 않게
     private func clampedSideOffset(_ y: CGFloat) -> CGFloat {

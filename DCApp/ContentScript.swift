@@ -121,6 +121,10 @@ enum ContentScript {
       'html.dcapp-duocol::before{content:"";position:fixed;top:0;bottom:0;right:0;width:env(safe-area-inset-right);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol::after{content:"";position:fixed;top:0;bottom:0;left:0;width:env(safe-area-inset-left);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol .thum-txtin img,html.dcapp-duocol .thum-txtin video,html.dcapp-duocol .thum-txtin iframe{max-width:calc(100% + env(safe-area-inset-left) + env(safe-area-inset-right))!important}',
+      // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
+      'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add,html.dcapp-duoflip #dcapp-headbar{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      'html.dcapp-duoflip::before{width:env(safe-area-inset-left)!important}',
+      'html.dcapp-duoflip::after{width:0!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
@@ -2628,6 +2632,8 @@ enum ContentScript {
     if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
     var dc = sideColumnNow() || cfg.duoCol === true;
     if (root.classList.contains('dcapp-duocol') !== dc) root.classList.toggle('dcapp-duocol', dc);
+    var fl = dc && cfg.duoFlip === true;
+    if (root.classList.contains('dcapp-duoflip') !== fl) root.classList.toggle('dcapp-duoflip', fl);
     Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
       if (on && isCommentField(t)) {
         if (!t.hasAttribute('readonly')) { t.setAttribute('readonly', ''); t.setAttribute('data-dcapp-ro', '1'); }
@@ -3513,7 +3519,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v223-dcconmention', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v225-duoflip', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
