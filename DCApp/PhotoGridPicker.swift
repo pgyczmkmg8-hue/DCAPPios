@@ -95,6 +95,8 @@ struct PhotoGridPicker: View {
     let maxCount: Int
     /// 고른 사진 (고른 순서대로)
     let onPick: ([PHAsset]) -> Void
+    /// 카메라로 찍은 사진 (찍는 즉시 글에 넣음 — 이 창은 그대로 열려 있음)
+    let onCapture: (UIImage) -> Void
     /// 사진 접근이 막혀 있을 때 iOS 기본 선택기로
     let onUseSystemPicker: () -> Void
 
@@ -103,6 +105,9 @@ struct PhotoGridPicker: View {
     @State private var selected: [String] = []        // localIdentifier, 고른 순서
     @State private var picked: [String: PHAsset] = [:]
     @State private var limitNotice = false
+    @State private var showCamera = false
+    @State private var cameraNotice = false
+    private let cameraAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 4)
 
@@ -117,6 +122,34 @@ struct PhotoGridPicker: View {
         .task { await model.start() }
         .onDisappear { model.stop() }
         .onChange(of: model.album) { _, _ in model.reload() }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { img in
+                onCapture(img)
+                withAnimation { cameraNotice = true }
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    withAnimation { cameraNotice = false }
+                }
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    /// 격자 맨 앞에 고정된 카메라 버튼
+    private var cameraCell: some View {
+        Color(uiColor: .secondarySystemBackground)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                VStack(spacing: 6) {
+                    Image(systemName: "camera.fill").font(.system(size: 28))
+                    Text("촬영").font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.primary)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { showCamera = true }
+            .accessibilityLabel("카메라로 사진 찍기")
+            .accessibilityAddTraits(.isButton)
     }
 
     private var header: some View {
@@ -148,6 +181,14 @@ struct PhotoGridPicker: View {
             VStack(spacing: 0) {
                 if model.status == .limited { limitedBar }
                 grid
+                if cameraNotice {
+                    Text("찍은 사진을 글에 넣었어요")
+                        .font(.footnote)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(.thinMaterial)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 if limitNotice {
                     Text("사진은 \(maxCount)장까지 고를 수 있어요")
                         .font(.footnote)
@@ -214,6 +255,7 @@ struct PhotoGridPicker: View {
     private var grid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 2) {
+                if cameraAvailable { cameraCell }
                 ForEach(0..<model.assets.count, id: \.self) { i in
                     let asset = model.assets.object(at: i)
                     PhotoGridCell(asset: asset, manager: model.cache,
@@ -331,5 +373,31 @@ private struct PhotoGridCell: View {
                                          contentMode: .aspectFill, options: o) { img, _ in
             if let img { image = img }
         }
+    }
+}
+
+/// 카메라 촬영 화면 (찍고 '사진 사용'을 누르면 돌려줌)
+private struct CameraPicker: UIViewControllerRepresentable {
+    let onShot: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let vc = UIImagePickerController()
+        vc.sourceType = .camera
+        vc.mediaTypes = ["public.image"]
+        vc.delegate = context.coordinator
+        return vc
+    }
+    func updateUIViewController(_ vc: UIImagePickerController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: CameraPicker
+        init(_ p: CameraPicker) { parent = p }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let img = info[.originalImage] as? UIImage { parent.onShot(img) }
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
     }
 }

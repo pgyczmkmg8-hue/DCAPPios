@@ -56,6 +56,15 @@ enum DarkMode {
         syncCookie()
     }
 
+    /// 다크모드를 정해 둔 상태에서 켜짐이면 true (페이지가 열릴 때마다 쿠키·야간 모드 표시를 다시 맞춤. 가벼운 작업)
+    static var needsRepair: Bool { isSet && isOn }
+
+    /// 로그인·로그아웃으로 디시 사이트 데이터가 지워진 뒤 다크모드 쿠키만 다시 심음 (정한 적 없으면 그대로 둠)
+    static func restoreCookie() {
+        guard isSet else { return }
+        syncCookie()
+    }
+
     private static func syncCookie() {
         let store = Profile.websiteDataStore.httpCookieStore
         if isOn {

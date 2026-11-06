@@ -105,7 +105,6 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 새로고침 후 댓글 위치로 이동할지
     private var scrollToCommentsAfterLoad = false
     /// 댓글 429로 마지막에 처리한 시각 (디시가 곧바로 한 번 더 보내 연달아 오는 429는 한 번만)
-    private var last429 = Date.distantPast
 
     init(url: URL) {
         let config = WKWebViewConfiguration()
@@ -896,14 +895,6 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     // MARK: - 댓글 429 자동 재등록
-
-    /// 429: 쓰던 내용만 복사 (디시가 곧바로 한 번 더 보내 연달아 오는 429는 한 번만)
-    private func handleComment429(memo: String) {
-        guard Date().timeIntervalSince(last429) > 5 else { return }
-        last429 = Date()
-        guard !memo.isEmpty else { return }
-        UIPasteboard.general.string = memo        // 혹시 몰라 복사만 (안내는 자동 재등록 쪽에서)
-    }
 
     // MARK: - 앱 글쓰기 화면
 
@@ -1732,8 +1723,8 @@ extension WebViewModel: WKScriptMessageHandler {
                 try? await Task.sleep(for: .milliseconds(60))
                 await call("return window.__dcapp ? window.__dcapp.focusReply() : false;")
             }
-        case "cmt429":   // 댓글 등록이 429로 막힘 → 쓰던 내용 복사
-            handleComment429(memo: body["memo"] as? String ?? "")
+        case "cmt429":   // 댓글 등록이 429로 막힘 → 자동 재등록이 처리함 (기기 클립보드는 건드리지 않음)
+            break
         case "alarms":   // 디시 알림 응답(/alarm/notification) → 갤러리 창의 알림 탭에 쌓기
             if let list = body["items"] as? [[String: Any]] { addAlarmsSkippingBlocked(list) }
         case "pwskip":
@@ -1835,6 +1826,8 @@ extension WebViewModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
+        // 로그인 과정에서 다크모드가 풀렸으면(디시가 쿠키를 덮어씀) 다시 맞춤
+        if DarkMode.needsRepair { Task { _ = try? await webView.evaluateJavaScript(DarkMode.pageScript); DarkMode.restoreCookie() } }
         if let u = webView.url, PostKey.from(u) != nil { postLanded?(u) }
         // 분할 화면에서 글을 수정하고 등록하면 디시가 목록으로 보내기도 함 → 수정한 글로
         if let ret = pendingModifyReturn, let u = webView.url, AutoImageStore.writeGalleryID(from: u) == nil {

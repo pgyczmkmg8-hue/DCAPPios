@@ -101,6 +101,7 @@ enum DCSession {
         let records = await store.dataRecords(ofTypes: types)
         await store.removeData(ofTypes: types, for: records.filter { $0.displayName.contains("dcinside") })
         CredentialStore.currentAccountID = nil
+        DarkMode.restoreCookie()      // 사이트 데이터와 같이 지워진 다크모드 쿠키 복구
         if notify { NotificationCenter.default.post(name: DC.sessionChanged, object: nil) }
     }
 }

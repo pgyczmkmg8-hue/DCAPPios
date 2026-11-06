@@ -443,7 +443,7 @@ struct NativeWriteView: View {
                       matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
         .onChange(of: photoItems) { _, items in loadPhotos(items) }
         .sheet(isPresented: $showGridPicker) {
-            PhotoGridPicker(maxCount: 20, onPick: loadAssets) {
+            PhotoGridPicker(maxCount: 20, onPick: loadAssets, onCapture: loadCaptured) {
                 // 사진 접근이 막혀 있으면 iOS 기본 선택기로 (시트가 다 닫힌 뒤에)
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
@@ -1040,6 +1040,20 @@ struct NativeWriteView: View {
             }
             if added.count < assets.count { model.showToast("사진 \(assets.count - added.count)장을 불러오지 못했어요") }
             withAnimation { session.addImages(added) }
+        }
+    }
+
+    /// 카메라로 찍은 사진 (글 끝에 붙임)
+    private func loadCaptured(_ image: UIImage) {
+        let maxWidth = WriteImageSize.current.maxWidth
+        Task {
+            guard let raw = image.jpegData(compressionQuality: 0.95),
+                  let p = await Task.detached(operation: { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }).value else {
+                model.showToast("찍은 사진을 불러오지 못했어요")
+                return
+            }
+            let w = WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage())
+            withAnimation { session.addImages([w]) }
         }
     }
 

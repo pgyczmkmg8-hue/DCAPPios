@@ -38,6 +38,8 @@ final class AppRouter: ObservableObject {
     /// 설정을 열 때 바로 보여줄 칸 (예: "block" = 차단)
     var settingsAnchor: String?
     let mainBrowser: WebViewModel
+    private var syncBag = Set<AnyCancellable>()
+    private var lastWriteSyncURL: URL?
     /// 분할 화면의 오른쪽(글) 화면 — 분할이 켜졌을 때만 화면에 붙음
     let detailBrowser: WebViewModel
     /// 가로로 넓은 화면에서 글 목록(왼쪽)과 글(오른쪽)을 나란히 보여 주는 중인지
@@ -74,6 +76,21 @@ final class AppRouter: ObservableObject {
             self.detailBrowser.load(url)
             return true
         }
+        // 분할 화면에서 오른쪽(글)에서 글쓰기를 열면 왼쪽 목록도 그 갤러리로 바꿈
+        detailBrowser.$url
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] url in
+                guard let self, self.splitActive, let url,
+                      let gid = AutoImageStore.writeGalleryID(from: url), !gid.isEmpty,
+                      url != self.lastWriteSyncURL else { return }
+                self.lastWriteSyncURL = url
+                let parts = url.pathComponents.filter { $0 != "/" }
+                let kind: GalleryKind = parts.contains("writemini") ? .mini : (parts.contains("writepr") ? .person : .board)
+                let bare = DCGalleryID.bare(gid)
+                if let cur = self.mainBrowser.url.flatMap(Gallery.parse), cur.id == bare, cur.kind == kind { return }
+                self.mainBrowser.load(Gallery(galleryID: bare, name: bare, kind: kind).url)
+            }
+            .store(in: &syncBag)
         // 어떤 경로로든 왼쪽 화면에 글이 열려 버리면 바로 오른쪽으로 옮김
         mainBrowser.postLanded = { [weak self] url in
             guard let self, self.splitActive else { return }
