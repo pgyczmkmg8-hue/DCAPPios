@@ -1081,6 +1081,19 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// 댓글 입력창의 코드 그림 새로고침
+    func refreshCommentCode() {
+        guard let s = commentCompose else { return }
+        Task {
+            await reattachCompose(s)
+            let img = await call("return window.__dcapp ? await window.__dcapp.cmtRefreshCode(p) : null;", composeArgs(s)) as? String
+            if commentCompose === s {
+                if let i = CommentComposeSession.codeImage(from: img) { s.codeImage = i } else { showToast("코드를 새로 받지 못했어요") }
+                s.code = ""
+            }
+        }
+    }
+
     func refreshNativeCaptcha() {
         guard let s = nativeWrite else { return }
         Task {
@@ -1698,6 +1711,15 @@ extension WebViewModel: WKScriptMessageHandler {
                 swipeBack()
             }
             showBanAlert(message: msg)
+        case "cmtcaptcha":   // 디시가 코드를 요구함 → 앱 입력창에 코드 칸을 띄우고 다시 등록하게
+            if let s = commentCompose {
+                s.hasCode = true
+                s.codeImage = CommentComposeSession.codeImage(from: body["img"] as? String)
+                if let ph = body["ph"] as? String, !ph.isEmpty { s.codePlaceholder = ph }
+                s.code = ""
+                s.sending = false
+                showToast((body["wrong"] as? Bool ?? false) ? "코드가 달라요. 다시 입력해 주세요" : "코드를 입력한 뒤 다시 등록해 주세요")
+            }
         case "cmtok":   // 댓글 등록 성공 → 입력창 닫기
             if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
             commentCarry = nil

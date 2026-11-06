@@ -1099,10 +1099,18 @@ enum ContentScript {
     return id.replace(/^(mi|pr)\$/, '');
   }
   function fillAnon() {
+    if (loginState() === 'in') return;     // 로그인 상태면 유동 닉네임을 채우지 않음 (채우면 로그인 댓글인데도 코드 입력이 뜸)
+    var allF = anonFields();
     var a = cfg.anon || {};
     var ag = (cfg.anonG || {})[anonGalleryId()];
     if (ag) a = { nick: ag.nick || a.nick, pw: ag.pw || a.pw };      // 갤러리별 설정이 우선
-    anonFields().forEach(function (f) {
+    allF.forEach(function (f) {
+      // 비밀번호 칸이 없는 폼 = 로그인 상태(갤닉 'ㅇㅇ' 포함). 여기에 유동 닉네임을 채우면 갤닉이 꺼져 코드 입력이 뜸
+      if (f.kind === 'nick') {
+        var scope = f.el.closest('form') || document;
+        var hasPw = allF.some(function (g) { return g.kind === 'pw' && scope.contains(g.el); });
+        if (!hasPw) return;
+      }
       if (f.el.getAttribute('data-dcapp-user') === '1') return;     // 직접 입력한 칸
       if (f.el.getAttribute('data-dcapp-unlocking') === '1') return; // 지금 푸는 중
       var tries = +(f.el.getAttribute('data-dcapp-anon-tries') || 0);
@@ -2426,6 +2434,22 @@ enum ContentScript {
     cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
   }
   // 댓글이 등록됐는데 목록에 안 나타나는 경우(가끔 디시가 새로 불러온 목록에 빠져 있음) → 앱이 글을 다시 불러오게
+  // 디시가 코드(캡차)를 요구하면 → 앱 댓글 입력창에 코드 칸과 그림을 띄움 (로그인했어도 링크가 든 댓글 등은 코드를 요구함)
+  window.addEventListener('dcapp-cmtwrite', function (ev) {
+    var d = ev.detail || {};
+    if (d.status !== 200) return;
+    var j = null;
+    try { j = JSON.parse(d.text || '{}'); } catch (e) { return; }
+    if (!j || j.result !== false) return;
+    var cause = String(j.cause || '');
+    var captcha = cause === 'captcha', wrong = !captcha && cause.indexOf('코드') >= 0;
+    if (!captcha && !wrong) return;
+    var ta = composeTarget;
+    if (!ta) return;
+    setTimeout(function () {      // 디시가 코드 칸을 그릴 때까지 잠깐 기다림
+      composeInfo(ta).then(function (info) { post('cmtcaptcha', { img: info.codeImg || '', ph: info.codePh || '', wrong: wrong }); });
+    }, 600);
+  });
   window.addEventListener('dcapp-cmtwrite', function (ev) {
     var d = ev.detail || {};
     if (d.status !== 200) return;
@@ -2572,7 +2596,7 @@ enum ContentScript {
     return {
       reply: ta.id !== 'comment_memo', replyNick: replyNickOf(ta), ch: replyChOf(ta), text: ta.value || '',
       anon: !!(nick || pw), nick: nick ? nick.value : '', pw: pw ? pw.value : '',
-      nickLocked: !!(nick && (nick.disabled || nick.readOnly)), code: codeOn, codeImg: img
+      nickLocked: !!(nick && (nick.disabled || nick.readOnly)), code: codeOn, codeImg: img, codePh: code ? (code.getAttribute('placeholder') || '') : ''
     };
   }
   function composeFor(ta) {
@@ -2700,6 +2724,19 @@ enum ContentScript {
     if (box) box.setAttribute('data-dcapp-show', '1');
     try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
     return 'check';
+  }
+  // 코드 새로고침: 디시 댓글 양식의 새로고침 버튼을 눌러 새 그림을 받아 돌려줌
+  async function cmtRefreshCode(p) {
+    var ta = ensureTarget(p);
+    if (!ta) return null;
+    var form = ta.closest('form');
+    if (!form) return null;
+    var btn = form.querySelector('[id*="captcha_reload"], .code [class*="reload"], .code button, .code a, [class*="reload"]');
+    if (!btn) return null;
+    try { btn.click(); } catch (e) { return null; }
+    await sleep(800);
+    var info = await composeInfo(ta);
+    return info.codeImg || null;
   }
   function cmtSubmit(p) {
     var form = composeFill(p);
@@ -3473,7 +3510,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v217-photoorder', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v222-cmtcoderef', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3752,6 +3789,7 @@ enum ContentScript {
     focusReply: focusReply,
     replyPending: replyPending,
     cmtSubmit: cmtSubmit,
+    cmtRefreshCode: cmtRefreshCode,
     findPostByTitle: findPostByTitle,
     composeSync: composeSync,
     ensureReplyTarget: ensureReplyTarget,

@@ -12,8 +12,10 @@ final class CommentComposeSession: ObservableObject, Identifiable {
     let replyCh: String
     let anon: Bool
     let nickLocked: Bool
-    let hasCode: Bool
-    let codeImage: UIImage?
+    @Published var hasCode = false
+    @Published var codeImage: UIImage?
+    /// 코드 입력칸에 회색으로 보이는 안내 (디시 페이지의 안내 문구, 예: 코드 3자리 입력)
+    @Published var codePlaceholder = "코드 입력"
 
     @Published var text: String
     @Published var nick: String
@@ -32,18 +34,20 @@ final class CommentComposeSession: ObservableObject, Identifiable {
         anon = info["anon"] as? Bool ?? false
         nickLocked = info["nickLocked"] as? Bool ?? false
         hasCode = info["code"] as? Bool ?? false
-        if let s = info["codeImg"] as? String, let comma = s.firstIndex(of: ","),
-           let data = Data(base64Encoded: String(s[s.index(after: comma)...])) {
-            codeImage = UIImage(data: data)
-        } else {
-            codeImage = nil
-        }
+        if let ph = info["codePh"] as? String, !ph.isEmpty { codePlaceholder = ph }
+        codeImage = Self.codeImage(from: info["codeImg"] as? String)
         text = info["text"] as? String ?? ""
         let pageNick = info["nick"] as? String ?? ""
         let pagePw = info["pw"] as? String ?? ""
         let saved = AnonStore.nick(for: gallery)
         nick = !pageNick.isEmpty ? pageNick : (saved.isEmpty ? "ㅇㅇ" : saved)
         pw = !pagePw.isEmpty ? pagePw : AnonStore.password(for: gallery)
+    }
+
+    static func codeImage(from s: String?) -> UIImage? {
+        guard let s, let comma = s.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(s[s.index(after: comma)...])) else { return nil }
+        return UIImage(data: data)
     }
 
     /// 같은 칸을 다시 눌렀는지 (입력창을 새로 만들지 않고 그대로 둠)
@@ -121,11 +125,14 @@ private struct CommentComposer: View {
     @FocusState private var focus: Field?
     private enum Panel { case dccon, txtcon }
     @State private var panel: Panel?
+    /// 댓글 입력칸(UIKit)에 키보드를 띄울지 — SwiftUI FocusState와 따로 둠 (FocusState가 UIKit 칸의 포커스를 비우는 일을 막음)
+    @State private var textFocus = false
     @State private var contentH: CGFloat = 0
 
     private func togglePanel(_ p: Panel) {
         panel = panel == p ? nil : p
-        focus = panel == nil ? .text : nil      // 디시콘·글자콘을 보는 동안은 키보드를 내림
+        textFocus = panel == nil      // 디시콘·글자콘을 보는 동안은 키보드를 내림
+        focus = nil
     }
 
     var body: some View {
@@ -163,16 +170,22 @@ private struct CommentComposer: View {
                     } else {
                         Text("코드").font(.footnote).foregroundStyle(.secondary)
                     }
-                    TextField("코드 입력", text: $session.code)
+                    Button { model.refreshCommentCode() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    TextField(session.codePlaceholder, text: $session.code)
                         .focused($focus, equals: .code)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .fieldBox()
                 }
             }
-            TextField(session.isReply ? "대댓글을 입력해주세요" : "댓글을 입력해주세요", text: $session.text, axis: .vertical)
-                .lineLimit(2...8)
-                .focused($focus, equals: .text)
+            CommentTextView(
+                text: $session.text,
+                placeholder: session.isReply ? "대댓글을 입력해주세요" : "댓글을 입력해주세요",
+                isFocused: $textFocus,
+                onCommandReturn: { model.submitComment() })
                 .fieldBox(minHeight: 70)
             HStack(spacing: 14) {
                 Button { togglePanel(.dccon) } label: {
@@ -229,7 +242,7 @@ private struct CommentComposer: View {
         .onAppear {
             Task {
                 try? await Task.sleep(for: .milliseconds(250))
-                focus = .text
+                textFocus = true
             }
         }
     }
@@ -518,5 +531,79 @@ enum CommentDraftStore {
     static func remove(_ key: String) {
         guard !key.isEmpty else { return }
         items = items.filter { $0.key != key }
+    }
+}
+
+
+/// 댓글 입력칸 (UITextView) — SwiftUI 여러 줄 입력칸은 줄이 늘어나면 하드웨어 키보드 입력이 끊기는 일이 있어 UIKit으로 만듦
+/// 2~8줄 높이 안에서 줄이 늘고, 넘치면 칸 안에서 스크롤. 엔터 = 줄바꿈, ⌘엔터 = 등록
+private struct CommentTextView: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    @Binding var isFocused: Bool
+    let onCommandReturn: () -> Void
+
+    final class TV: UITextView {
+        var onCommandReturn: (() -> Void)?
+        override var keyCommands: [UIKeyCommand]? {
+            let c = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(cmdReturn))
+            c.wantsPriorityOverSystemBehavior = true
+            return [c]
+        }
+        @objc private func cmdReturn() { onCommandReturn?() }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> TV {
+        let v = TV()
+        v.delegate = context.coordinator
+        v.backgroundColor = .clear
+        v.font = .preferredFont(forTextStyle: .body)
+        v.textContainerInset = .zero
+        v.textContainer.lineFragmentPadding = 0
+        v.autocorrectionType = .default
+        v.onCommandReturn = onCommandReturn
+        v.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let ph = UILabel()
+        ph.text = placeholder
+        ph.font = v.font
+        ph.textColor = .placeholderText
+        ph.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(ph)
+        NSLayoutConstraint.activate([ph.topAnchor.constraint(equalTo: v.topAnchor), ph.leadingAnchor.constraint(equalTo: v.leadingAnchor)])
+        context.coordinator.placeholderLabel = ph
+        return v
+    }
+
+    func updateUIView(_ v: TV, context: Context) {
+        v.onCommandReturn = onCommandReturn
+        if v.text != text && v.markedTextRange == nil { v.text = text }
+        context.coordinator.placeholderLabel?.text = placeholder
+        context.coordinator.placeholderLabel?.isHidden = !v.text.isEmpty
+        if isFocused, !v.isFirstResponder { DispatchQueue.main.async { v.becomeFirstResponder() } }
+        if !isFocused, v.isFirstResponder { DispatchQueue.main.async { v.resignFirstResponder() } }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView v: TV, context: Context) -> CGSize? {
+        let w = proposal.width ?? 300
+        let line = v.font?.lineHeight ?? 20
+        let h = v.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
+        return CGSize(width: w, height: min(max(h, line * 2), line * 8))
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: CommentTextView
+        weak var placeholderLabel: UILabel?
+        init(_ p: CommentTextView) { parent = p }
+        func textViewDidChange(_ tv: UITextView) {
+            parent.text = tv.text
+            placeholderLabel?.isHidden = !tv.text.isEmpty
+            tv.invalidateIntrinsicContentSize()
+            // 커서가 보이게 (줄이 8줄을 넘으면 칸 안에서 스크롤)
+            if let r = tv.selectedTextRange { tv.scrollRectToVisible(tv.caretRect(for: r.end), animated: false) }
+        }
+        func textViewDidBeginEditing(_ tv: UITextView) { if !parent.isFocused { parent.isFocused = true } }
+        func textViewDidEndEditing(_ tv: UITextView) { if parent.isFocused { parent.isFocused = false } }
     }
 }
