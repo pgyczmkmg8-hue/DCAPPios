@@ -9,6 +9,10 @@ final class AppLock: ObservableObject {
     static let shared = AppLock()
     static let lockKey = "appLockEnabled"     // 생체인식 잠금
     static let blurKey = "privacyBlur"        // 앱 전환 화면에서 가리기
+    static let graceKey = "appLockGraceMinutes"   // 다른 앱에 갔다 와도 이 시간(분) 안이면 다시 묻지 않음 (0 = 바로 잠금)
+    static var graceMinutes: Int { Profile.defaults.integer(forKey: graceKey) }
+    /// 백그라운드로 간 시각 (유예 시간 계산용)
+    private var leftAt: Date?
 
     @Published private(set) var locked: Bool
     /// 가림막 바탕으로 쓸, 앱 화면을 찍어 흐리게 만든 그림
@@ -57,6 +61,7 @@ final class AppLock: ObservableObject {
         guard phase != .active else { return }
         foregroundAt = Date()
         phase = .active
+        applyGrace()
         updateOverlay()
         Task { await unlock() }
     }
@@ -104,9 +109,19 @@ final class AppLock: ObservableObject {
         if p == .inactive, let t = foregroundAt, Date().timeIntervalSince(t) < 2 { return }   // 돌아오는 중에 늦게 온 값
         if p == .background { foregroundAt = nil }
         phase = p
-        if p == .background, Self.lockEnabled { locked = true }
+        if p == .background, Self.lockEnabled {
+            if Self.graceMinutes > 0 { if leftAt == nil { leftAt = Date() } } else { locked = true }
+        }
+        if p == .active { applyGrace() }
         updateOverlay()
         if p == .active { Task { await unlock() } }
+    }
+
+    /// 돌아왔을 때: 유예 시간을 넘겼으면 잠그고, 안 넘겼으면 그대로 연 채로 둠
+    private func applyGrace() {
+        guard let t = leftAt else { return }
+        leftAt = nil
+        if Self.lockEnabled, Date().timeIntervalSince(t) >= Double(Self.graceMinutes) * 60 { locked = true }
     }
 
     // MARK: - 잠금 해제

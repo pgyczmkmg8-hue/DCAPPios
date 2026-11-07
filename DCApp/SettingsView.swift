@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(AlarmStore.bannerKey, store: Profile.defaults) private var alarmBanner = true
     @AppStorage(AppLock.lockKey, store: Profile.defaults) private var appLock = false
     @AppStorage(AppLock.blurKey, store: Profile.defaults) private var privacyBlur = false
+    @AppStorage(AppLock.graceKey, store: Profile.defaults) private var lockGrace = 0
     @State private var lockMessage: String?
     @AppStorage(DCNotify.enabledKey, store: Profile.defaults) private var notifyEnabled = false
     @State private var notifyResult: String?
@@ -136,6 +137,16 @@ struct SettingsView: View {
                                 }
                             }
                         }
+                    if appLock {
+                        Picker("다시 잠그기까지", selection: $lockGrace) {
+                            Text("바로").tag(0)
+                            Text("1분").tag(1)
+                            Text("3분").tag(3)
+                            Text("5분").tag(5)
+                            Text("10분").tag(10)
+                            Text("30분").tag(30)
+                        }
+                    }
                     Toggle("앱 전환 화면에서 가리기", isOn: $privacyBlur)
                     NavigationLink { CoverSettingsView() } label: {
                         Label("가림막 꾸미기", systemImage: "paintbrush")
@@ -146,7 +157,7 @@ struct SettingsView: View {
                 } header: {
                     Text("보안")
                 } footer: {
-                    Text("앱 잠금을 켜면 앱을 켜거나 다른 앱에서 돌아올 때 \(AppLock.biometryName)(안 되면 기기 암호)로 잠금을 풀어야 해요. '가리기'를 켜면 앱 전환 화면(멀티태스킹)에서 내용이 흐리게 보여요.")
+                    Text("앱 잠금을 켜면 앱을 켜거나 다른 앱에서 돌아올 때 \(AppLock.biometryName)(안 되면 기기 암호)로 잠금을 풀어야 해요. '다시 잠그기까지'를 정하면 다른 앱에 갔다가 그 시간 안에 돌아올 땐 다시 묻지 않아요(앱을 완전히 종료하면 항상 물어요). '가리기'를 켜면 앱 전환 화면(멀티태스킹)에서 내용이 흐리게 보여요.")
                 }
 
                 // 디시 알림 (앱 안)

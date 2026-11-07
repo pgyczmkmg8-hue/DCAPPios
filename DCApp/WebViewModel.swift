@@ -609,6 +609,29 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.scrollView.refreshControl?.endRefreshing()
     }
 
+    /// 디시가 요청한 alert/confirm/prompt 창을 띄움. 닫히는 중인 팝업 위라서 안 뜨거나, 뜬 뒤 액션 없이 사라져도
+    /// 반드시 한 번은 응답(giveUp)하게 함 — 응답이 없으면 웹 화면이 영영 멈춤(페이지 이동·새로고침 불가)
+    private func presentPanel(_ alert: UIAlertController, giveUp: @escaping () -> Void) {
+        Task { @MainActor in
+            var shown = false
+            for _ in 0..<8 {
+                if let vc = presenter(), !vc.isBeingDismissed, !vc.isBeingPresented {
+                    vc.present(alert, animated: true)
+                    try? await Task.sleep(for: .milliseconds(350))
+                    if alert.presentingViewController != nil || alert.isBeingPresented { shown = true; break }
+                } else {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            guard shown else { giveUp(); return }
+            // 뜬 뒤 사용자가 누르지 않았는데 사라졌으면(부모 팝업이 닫히며 같이 사라짐 등) 응답 처리
+            while true {
+                try? await Task.sleep(for: .milliseconds(400))
+                if alert.presentingViewController == nil && !alert.isBeingPresented && !alert.isBeingDismissed { giveUp(); return }
+            }
+        }
+    }
+
     private func presenter() -> UIViewController? {
         var top = webView.window?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
@@ -1723,7 +1746,14 @@ extension WebViewModel: WKScriptMessageHandler {
             commentCarry = nil
             if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
         case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
-            if let s = body["href"] as? String, let u = URL(string: s) { commentLink = u }
+            if var s = body["href"] as? String {
+                // 디시가 <br>·다음 링크까지 한 주소로 묶어 둔 경우 첫 주소만 (스크립트가 옛 버전이어도 안전하게)
+                if let r = s.range(of: "(%3C|<)br|%0[AD]|\\s|(?<=.)https?://", options: [.regularExpression, .caseInsensitive],
+                                   range: s.index(s.startIndex, offsetBy: min(8, s.count))..<s.endIndex) {
+                    s = String(s[..<r.lowerBound])
+                }
+                if let u = URL(string: s) { commentLink = u }
+            }
         case "wantfocus":   // 댓글을 눌러 답글 칸이 열림 → 키보드 띄우기 (스크립트 focus 허용)
             FocusUnlock.allow(for: 1.5)
             Task {
@@ -1989,6 +2019,12 @@ extension WebViewModel: WKNavigationDelegate {
 
 // MARK: - 새 창 / alert / confirm
 
+/// 디시 alert 응답을 한 번만 하게 하는 상자 (액션과 안전장치가 겹쳐도 두 번 응답하지 않음)
+final class PanelOnce {
+    private var done = false
+    func run(_ f: () -> Void) { if !done { done = true; f() } }
+}
+
 extension WebViewModel: WKUIDelegate {
     /// 디시 로그인 후 뜨는 '비밀번호 변경 권장' 창인지 ("다음에 변경할까요?"처럼 확인=건너뛰기인 문구는 제외)
     nonisolated static func isPasswordChangeNag(_ message: String) -> Bool {
@@ -2028,10 +2064,10 @@ extension WebViewModel: WKUIDelegate {
             if nativeWrite != nil { forceCloseNativeWrite(quiet: true) }
         }
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            let once = PanelOnce()
             let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in cont.resume() })
-            guard let vc = presenter() else { cont.resume(); return }
-            vc.present(alert, animated: true)
+            alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in once.run { cont.resume() } })
+            presentPanel(alert) { once.run { cont.resume() } }
         }
     }
 
@@ -2044,11 +2080,11 @@ extension WebViewModel: WKUIDelegate {
             return false
         }
         return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            let once = PanelOnce()
             let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in cont.resume(returning: false) })
-            alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in cont.resume(returning: true) })
-            guard let vc = presenter() else { cont.resume(returning: false); return }
-            vc.present(alert, animated: true)
+            alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in once.run { cont.resume(returning: false) } })
+            alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in once.run { cont.resume(returning: true) } })
+            presentPanel(alert) { once.run { cont.resume(returning: false) } }
         }
     }
 
@@ -2057,14 +2093,15 @@ extension WebViewModel: WKUIDelegate {
                  defaultText: String?,
                  initiatedByFrame frame: WKFrameInfo) async -> String? {
         await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
+            let once = PanelOnce()
             let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
             alert.addTextField { $0.text = defaultText }
-            alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in cont.resume(returning: nil) })
+            alert.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in once.run { cont.resume(returning: nil) } })
             alert.addAction(UIAlertAction(title: "확인", style: .default) { [weak alert] _ in
-                cont.resume(returning: alert?.textFields?.first?.text)
+                let t = alert?.textFields?.first?.text
+                once.run { cont.resume(returning: t) }
             })
-            guard let vc = presenter() else { cont.resume(returning: nil); return }
-            vc.present(alert, animated: true)
+            presentPanel(alert) { once.run { cont.resume(returning: nil) } }
         }
     }
 }

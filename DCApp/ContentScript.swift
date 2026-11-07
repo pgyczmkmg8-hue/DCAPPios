@@ -2908,7 +2908,46 @@ enum ContentScript {
     e.preventDefault(); e.stopPropagation();
     if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     pendingReplyLi = li;
-    post('cmtlink', { href: a.href });
+    // 디시가 줄바꿈(<br>)·다음 링크까지 한 주소로 묶어 놓는 경우가 있음 → 누른 위치의 주소를 고름 (못 고르면 첫 주소)
+    var href = a.href;
+    var cut = href.search(/%3Cbr|<br|%0A|%0D|%20https?:|\s/i);
+    if (cut > 8) {
+      var first = href.slice(0, cut);
+      try {
+        // 주소 경계는 'http' 시작점 (사이에 <br>만 있어 글자로는 붙어 보임). 눌린 지점에서 가장 가까운 주소의 글자 영역을 고름
+        var txt = a.textContent || '', urls = [], re = /https?:\/\/.*?(?=https?:\/\/|[\s<>"']|$)/gi, mm;
+        while ((mm = re.exec(txt))) { if (!mm[0]) { re.lastIndex++; continue; } urls.push({ u: mm[0], s: mm.index, e: mm.index + mm[0].length }); }
+        if (urls.length > 1) {
+          var tw = document.createTreeWalker(a, NodeFilter.SHOW_TEXT, null), nodes = [], pos = 0, tn;
+          while ((tn = tw.nextNode())) { nodes.push({ n: tn, s: pos }); pos += tn.nodeValue.length; }
+          var locate = function (off, atEnd) {
+            for (var ni = 0; ni < nodes.length; ni++) {
+              var nd = nodes[ni], len = nd.n.nodeValue.length;
+              if (off < nd.s + len || (atEnd && off <= nd.s + len)) return { n: nd.n, o: Math.max(0, off - nd.s) };
+            }
+            return null;
+          };
+          var best = null, bestD = 1e9;
+          urls.forEach(function (it) {
+            var st = locate(it.s, false), en = locate(it.e, true);
+            if (!st || !en) return;
+            var r = document.createRange();
+            r.setStart(st.n, st.o); r.setEnd(en.n, en.o);
+            var rects = r.getClientRects(), d = 1e9;
+            for (var ri = 0; ri < rects.length; ri++) {
+              var rc = rects[ri];
+              var dx = e.clientX < rc.left ? rc.left - e.clientX : (e.clientX > rc.right ? e.clientX - rc.right : 0);
+              var dy = e.clientY < rc.top ? rc.top - e.clientY : (e.clientY > rc.bottom ? e.clientY - rc.bottom : 0);
+              d = Math.min(d, dy * 4 + dx);       // 줄(세로)이 가장 중요
+            }
+            if (d < bestD) { bestD = d; best = it; }
+          });
+          if (best) first = best.u;
+        }
+      } catch (err) {}
+      href = first;
+    }
+    post('cmtlink', { href: href });
   }, true);
   // 앱에서 '대댓글 달기'를 고르면: 댓글 본문을 눌러 디시가 답글 칸을 열게 하고 포커스
   function replyPending() {
@@ -3519,7 +3558,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v225-duoflip', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v228-cmtlink3', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
