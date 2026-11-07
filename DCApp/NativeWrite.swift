@@ -644,7 +644,7 @@ struct NativeWriteView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
                     }
                     Divider()
                 }
@@ -657,7 +657,7 @@ struct NativeWriteView: View {
                     .onSubmit { focus = nil; session.focusFirstText() }
                     // 하드웨어 키보드 Tab: 제목 → 본문
                     .onKeyPress(.tab) { focus = nil; session.focusFirstText(); return .handled }
-                    .padding(.horizontal, 8).padding(.vertical, 16)
+                    .padding(.horizontal, 14).padding(.vertical, 16)      // 글자 왼쪽을 위쪽 닉네임 칸(14pt)과 맞춤
                 Rectangle().fill(DCTheme.navy.opacity(0.7)).frame(height: 1)
 
                 if session.hasCaptcha { captchaRow }
@@ -670,11 +670,11 @@ struct NativeWriteView: View {
                         } else {
                             RichTextView(blockID: block.id, session: session,
                                          minLines: block.id == session.blocks.last?.id ? 8 : 1)   // 맨 끝 칸은 넉넉하게
-                                .padding(.horizontal, 5)
+                                .padding(.horizontal, 9)      // 본문 글자 왼쪽도 닉네임 칸·제목과 맞춤
                                 .overlay(alignment: .topLeading) {
                                     if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
                                         Text("내용").font(.system(size: 16)).foregroundStyle(Color(uiColor: .placeholderText))
-                                            .padding(.leading, 8).padding(.top, 12)
+                                            .padding(.leading, 12).padding(.top, 12)
                                             .allowsHitTesting(false)
                                     }
                                 }
@@ -726,7 +726,7 @@ struct NativeWriteView: View {
                 .padding(8)
                 .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 6))
         }
-        .padding(.horizontal, 16).padding(.top, 12)
+        .padding(.horizontal, 14).padding(.top, 12)
     }
 
     /// 사진을 끌 때 놓을 자리: 색칠된 큰 칸 (놓으면 여기 들어감)

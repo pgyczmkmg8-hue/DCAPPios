@@ -1017,11 +1017,14 @@ final class WebViewModel: NSObject, ObservableObject {
         s.isAnon = info["anon"] as? Bool ?? false
         s.nickLocked = info["nickLocked"] as? Bool ?? false
         if s.isAnon {
+            // 앱에 저장된 값(설정에서 바꾼 것·마지막에 쓴 것)이 우선. 디시가 기억해 둔 옛 값이나 잠긴 기본 닉네임은 저장된 값이 없을 때만 씀
             let pageNick = info["nick"] as? String ?? ""
             let saved = AnonStore.nick(for: s.galleryID)
-            s.nick = !pageNick.isEmpty ? pageNick : (saved.isEmpty ? "ㅇㅇ" : saved)
+            if s.nickLocked { s.nick = !pageNick.isEmpty ? pageNick : (saved.isEmpty ? "ㅇㅇ" : saved) }
+            else { s.nick = !saved.isEmpty ? saved : (!pageNick.isEmpty ? pageNick : "ㅇㅇ") }
             let pagePw = info["pw"] as? String ?? ""
-            s.pw = !pagePw.isEmpty ? pagePw : AnonStore.password(for: s.galleryID)
+            let savedPw = AnonStore.password(for: s.galleryID)
+            s.pw = !savedPw.isEmpty ? savedPw : pagePw
         } else {
             s.nick = ""; s.pw = ""
         }

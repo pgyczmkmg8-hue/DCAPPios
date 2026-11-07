@@ -1124,7 +1124,7 @@ enum ContentScript {
       var locked = f.el.disabled || f.el.readOnly;
       var cur = f.el.value;
       if (!locked && cur === saved) return;
-      if (!locked && cur && !(f.kind === 'nick' && cur === 'ㅇㅇ')) return;   // 잠기지 않은 칸의 다른 값은 그대로
+      // 잠기지 않은 칸에 이미 있는 값(디시가 기억해 둔 이전 닉네임·비밀번호)은 앱 설정으로 바꿈. 사람이 직접 친 칸은 위에서 이미 제외
       f.el.setAttribute('data-dcapp-anon-tries', String(tries + 1));
       if (locked) { unlockAndFill(f.el, saved); return; }
       setVal(f.el, saved);
@@ -2693,6 +2693,7 @@ enum ContentScript {
     var form = ta.closest('form');
     function setv(el, v) {
       if (!el || v == null) return;
+      el.setAttribute('data-dcapp-user', '1');     // 앱 입력창 값 → 자동 채우기가 덮어쓰지 않게
       el.value = v;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -3454,8 +3455,9 @@ enum ContentScript {
     if (!isWritePage()) return 'notwrite';
     var $ = window.jQuery;
     var name = document.getElementById('name'), pw = document.getElementById('password');
-    if (name && p.nick != null && !name.disabled && !name.readOnly) setField(name, p.nick);
-    if (pw && p.pw != null) setField(pw, p.pw);
+    // 앱이 정한 값은 '직접 입력한 칸'으로 표시 → 유동 닉네임 자동 채우기가 옛 값으로 덮어쓰지 않게
+    if (name && p.nick != null && !name.disabled && !name.readOnly) { setField(name, p.nick); name.setAttribute('data-dcapp-user', '1'); }
+    if (pw && p.pw != null) { setField(pw, p.pw); pw.setAttribute('data-dcapp-user', '1'); }
     var cap = document.getElementById('dcblock');
     if (cap && p.captcha != null) setField(cap, p.captcha);
     // 사진 크기: 디시 '이미지 크기 일괄 설정'과 같은 칸 (기본 850px로 줄어드는 것 방지)
@@ -3558,7 +3560,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v228-cmtlink3', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v229-anonfill', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
