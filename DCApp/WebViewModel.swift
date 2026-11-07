@@ -959,6 +959,28 @@ final class WebViewModel: NSObject, ObservableObject {
 
     private var retrySession: NativeWriteSession?
 
+    /// 디시의 '너무 많은 요청으로 이용하실 수 없습니다' 안내 페이지가 뜨면 → 풀릴 때까지 빠르게 자동 새로고침
+    private var tooManyTries = 0
+    private func retryIfTooManyRequests() {
+        let url = webView.url
+        Task { @MainActor in
+            let js = "(function(){var b=document.body;if(!b)return false;var t=b.innerText||'';return t.length<600 && t.indexOf('너무 많은 요청으로')>=0 && t.indexOf('이용하실 수 없습니다')>=0;})()"
+            let hit = (try? await webView.evaluateJavaScript(js)) as? Bool ?? false
+            guard hit else { tooManyTries = 0; return }
+            tooManyTries += 1
+            guard tooManyTries <= 300 else {
+                showToast("요청 제한이 계속돼서 자동 새로고침을 멈췄어요")
+                tooManyTries = 0
+                return
+            }
+            if tooManyTries == 1 { showToast("요청이 많아 안 열려요. 열릴 때까지 자동으로 다시 불러와요") }
+            try? await Task.sleep(for: .milliseconds(600))
+            // 그 사이에 다른 페이지로 옮겼으면 멈춤
+            guard webView.url == url, !webView.isLoading else { return }
+            if let u = url { webView.load(URLRequest(url: u)) } else { webView.reload() }
+        }
+    }
+
     private func startNativeWrite(_ gid: String) {
         let (s, restored) = beginNativeWrite(gid)
         finishNativeWriteStart(s, gid, restored: restored)
@@ -1206,7 +1228,8 @@ final class WebViewModel: NSObject, ObservableObject {
         ]
         Task {
             let r = await call("return window.__dcapp ? await window.__dcapp.nativeSubmit(p) : 'noscript';", ["p": payload]) as? String ?? "error"
-            guard nativeWrite === s else { return }
+            // 재시도로 이미 새 등록으로 넘어갔으면(또는 페이지가 바뀌며 이 호출이 오류로 끝났으면) 이 결과는 버림
+            guard nativeWrite === s, s.submitToken == token else { return }
             switch r {
             case "submitted":
                 // 디시가 등록하고 글 화면으로 넘어가면 닫힘. 안 넘어가면(오류) 잠시 뒤 다시 쓸 수 있게
@@ -1395,6 +1418,7 @@ final class WebViewModel: NSObject, ObservableObject {
                                    parts: s.draftParts())
         retrySession = s
         s.loaded = false
+        s.submitToken = UUID()      // 진행 중이던 등록 호출이 페이지가 바뀌며 '오류'로 끝나도 결과를 무시하게
         showToast("글쓰기 페이지를 다시 불러와요…")
         webView.stopLoading()
         webView.load(URLRequest(url: u))
@@ -1925,6 +1949,7 @@ extension WebViewModel: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
+        retryIfTooManyRequests()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
         // 로그인 과정에서 다크모드가 풀렸으면(디시가 쿠키를 덮어씀) 다시 맞춤
         if DarkMode.needsRepair { Task { _ = try? await webView.evaluateJavaScript(DarkMode.pageScript); DarkMode.restoreCookie() } }
