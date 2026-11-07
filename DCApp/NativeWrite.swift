@@ -96,6 +96,8 @@ final class NativeWriteSession: ObservableObject {
     /// 글 수정 화면이면 수정하는 글의 주소 (분할 화면에서 수정이 끝나면 그 글을 다시 보여 주기 위해)
     var modifyPostURL: URL?
     @Published var submitting = false
+    /// 등록을 시작할 때마다 바뀜 — 재시도 때 앞선 등록의 늦은 타이머가 '등록 중'을 풀지 않게
+    var submitToken = UUID()
     /// 디시 화면을 보여주는 중 (Cloudflare 체크, 또는 동영상·디시콘 등 디시 기능 쓰는 중)
     @Published var showingWeb = false
     /// 디시 화면에서 쓰는 중인 기능 이름 (nil이면 Cloudflare 체크)
@@ -391,13 +393,16 @@ struct NativeWriteView: View {
     /// 앱 전용 사진 고르기 (한 장씩 눌러서만 선택)
     @State private var showGridPicker = false
     @State private var showDraftPicker = false
+    @ObservedObject private var draftStore = DraftStore.shared     // 헤더의 '저장 N' 개수
     @State private var didFocus = false
     @State private var dropTarget: UUID?
     @State private var showDcconPicker = false
     @State private var endDropID = UUID()
     /// 등록이 10초 넘게 걸리면 나오는 '글쓰기 취소' 버튼
     @State private var showSubmitCancel = false
-    @State private var confirmSubmitCancel = false
+    /// 등록이 오래 걸릴 때 누른 버튼의 확인 창 (같은 화면에 confirmationDialog를 둘 겹치면 하나만 떠서 하나로 합침)
+    private enum SubmitChoice { case retry, cancel }
+    @State private var submitChoice: SubmitChoice?
     /// 화면 크기(접기·펴기) 바뀔 때 올려서 상단바 배치를 다시 읽게 함
     @State private var sizeTick = 0
     @Environment(\.verticalSizeClass) private var vSizeClass
@@ -430,11 +435,22 @@ struct NativeWriteView: View {
         .background(Color(uiColor: Self.pageBackground).ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) { toolbar }
         .overlay { if session.submitting { submittingCover } }
-        .confirmationDialog("글쓰기를 취소하고 나갈까요?", isPresented: $confirmSubmitCancel, titleVisibility: .visible) {
-            Button("취소하고 나가기", role: .destructive) { model.forceCloseNativeWrite() }
-            Button("계속 기다리기", role: .cancel) {}
+        .confirmationDialog(submitChoice == .retry ? "글쓰기 페이지를 다시 불러와 재시도할까요?" : "글쓰기를 취소하고 나갈까요?",
+                            isPresented: Binding(get: { submitChoice != nil }, set: { if !$0 { submitChoice = nil } }),
+                            titleVisibility: .visible) {
+            if submitChoice == .retry {
+                Button("재시도") { submitChoice = nil; model.retrySubmitNative() }
+                Button("계속 기다리기", role: .cancel) {}
+            } else {
+                Button("취소하고 나가기", role: .destructive) { submitChoice = nil; model.forceCloseNativeWrite() }
+                Button("계속 기다리기", role: .cancel) {}
+            }
         } message: {
-            Text("이미 등록됐을 수도 있어요. 나가도 쓰던 내용은 임시저장에 남아 있어요.")
+            if submitChoice == .retry {
+                Text("이미 등록됐을 수도 있어서 글이 두 번 올라갈 수 있어요. 쓰던 내용은 그대로 유지돼요.")
+            } else {
+                Text("이미 등록됐을 수도 있어요. 나가도 쓰던 내용은 임시저장에 남아 있어요.")
+            }
         }
         // 안내 문구 (브라우저 화면의 안내는 이 화면에 가려서 여기서도 띄움)
         .overlay(alignment: .bottom) { NativeWriteToast(model: model).padding(.bottom, 70) }
@@ -513,7 +529,7 @@ struct NativeWriteView: View {
                 // 듀오 상태 줄: 다이나믹 아일랜드가 켜져 시계가 밀려도 등록이 가려지지 않게 임시저장·불러오기는 ⋯ 하나로
                 Menu {
                     Button { model.saveNativeDraft() } label: { Label("임시저장", systemImage: "square.and.arrow.down") }
-                    Button { showDraftPicker = true } label: { Label("불러오기", systemImage: "tray.full") }
+                    Button { showDraftPicker = true } label: { Label("불러오기 (\(draftStore.drafts.count))", systemImage: "tray.full") }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 20, weight: .semibold))
@@ -521,11 +537,16 @@ struct NativeWriteView: View {
                         .contentShape(Rectangle())
                 }
             } else {
+                // [임시] = 지금 쓰던 글 임시저장, '저장 N' = 저장된 글 불러오기 (N은 저장된 개수)
                 Button { model.saveNativeDraft() } label: {
-                    Text("임시저장").font(.callout).lineLimit(1).fixedSize()
+                    Text("임시").font(.callout).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 12).padding(.vertical, 5)
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.55), lineWidth: 1.2))
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
                 }
                 Button { showDraftPicker = true } label: {
-                    Text("불러오기").font(.callout).lineLimit(1).fixedSize()
+                    Text("저장 \(draftStore.drafts.count)").font(.callout).lineLimit(1).fixedSize()
+                        .contentShape(Rectangle())
                 }
             }
             // 로딩 중 상단바(BrowserView)의 등록 버튼과 같은 모양: 둥근 네모 테두리만
@@ -1001,14 +1022,24 @@ struct NativeWriteView: View {
                 if showSubmitCancel {
                     // 등록이 오래 걸릴 때 강제로 나가기
                     Text("오래 걸리고 있어요").font(.footnote).foregroundStyle(.secondary)
-                    Button { confirmSubmitCancel = true } label: {
-                        Text("글쓰기 취소")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 18).padding(.vertical, 8)
-                            .background(Color.red, in: Capsule())
+                    HStack(spacing: 10) {
+                        Button { submitChoice = .retry } label: {
+                            Text("재시도")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18).padding(.vertical, 8)
+                                .background(DCTheme.navy, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        Button { submitChoice = .cancel } label: {
+                            Text("글쓰기 취소")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18).padding(.vertical, 8)
+                                .background(Color.red, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     .transition(.opacity)
                 }
             }

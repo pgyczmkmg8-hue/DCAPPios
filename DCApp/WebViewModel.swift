@@ -957,6 +957,8 @@ final class WebViewModel: NSObject, ObservableObject {
         return (s, restored)
     }
 
+    private var retrySession: NativeWriteSession?
+
     private func startNativeWrite(_ gid: String) {
         let (s, restored) = beginNativeWrite(gid)
         finishNativeWriteStart(s, gid, restored: restored)
@@ -1174,6 +1176,8 @@ final class WebViewModel: NSObject, ObservableObject {
                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
                                    parts: s.draftParts())
         s.submitting = true
+        let token = UUID()
+        s.submitToken = token
         // 분할 화면의 글 수정: 등록 뒤 디시가 글 목록을 열면 수정한 글을 오른쪽에 다시 띄움
         if isDetailPane, let u = s.modifyPostURL { pendingModifyReturn = (u, Date()) }
         var bodyBlocks: [[String: Any]] = s.blocks.compactMap { b -> [String: Any]? in
@@ -1207,7 +1211,7 @@ final class WebViewModel: NSObject, ObservableObject {
             case "submitted":
                 // 디시가 등록하고 글 화면으로 넘어가면 닫힘. 안 넘어가면(오류) 잠시 뒤 다시 쓸 수 있게
                 try? await Task.sleep(for: .seconds(15))
-                if nativeWrite === s, s.submitting { s.submitting = false }
+                if nativeWrite === s, s.submitting, s.submitToken == token { s.submitting = false }
             case "needcheck":
                 s.submitting = false
                 s.webFeature = nil
@@ -1378,6 +1382,62 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     /// 등록이 오래 걸릴 때 강제로 나가기: 진행 중인 로딩을 멈추고 글쓰기 화면을 닫고 이전 화면으로 (내용은 등록 직전에 자동 저장돼 있음)
+    /// 등록이 오래 걸릴 때 '재시도': 글쓰기 페이지를 새로 불러온 뒤 같은 내용으로 다시 등록
+    /// (새로고침이 아니라 주소를 다시 여는 것이라 등록 요청이 한 번 더 전송되지는 않음. 코드 입력이 있으면 새 코드를 받아 두고 직접 입력하게 함)
+    func retrySubmitNative() {
+        guard let s = nativeWrite, s.submitting else { return }
+        guard let u = webView.url, AutoImageStore.writeGalleryID(from: u) != nil else {
+            showToast("글쓰기 페이지를 다시 불러올 수 없어요. 글쓰기 취소 후 임시저장에서 이어 쓰세요")
+            return
+        }
+        DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: u,
+                                   parts: s.draftParts())
+        retrySession = s
+        s.loaded = false
+        showToast("글쓰기 페이지를 다시 불러와요…")
+        webView.stopLoading()
+        webView.load(URLRequest(url: u))
+        // 40초 안에 다시 열리지 않으면 '등록 중'을 풀어 직접 다시 등록할 수 있게
+        Task {
+            try? await Task.sleep(for: .seconds(40))
+            if retrySession === s {
+                retrySession = nil
+                if nativeWrite === s, s.submitting {
+                    s.submitting = false
+                    s.loaded = true
+                    showToast("페이지를 다시 불러오지 못했어요. 등록을 다시 눌러 주세요")
+                }
+            }
+        }
+    }
+
+    /// 재시도로 글쓰기 페이지가 다시 열렸을 때: 양식을 읽고 → (코드 입력이 없으면) 바로 다시 등록
+    private func continueRetry(_ s: NativeWriteSession) {
+        Task {
+            // 페이지 스크립트·글쓰기 양식이 준비될 때까지 기다림 (준비 전에 읽으면 앱 글쓰기 화면이 닫힐 수 있음)
+            var ready = false
+            for _ in 0..<40 {
+                ready = (await call("return !!(window.__dcapp && document.getElementById('subject'));") as? Bool) == true
+                if ready { break }
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            guard nativeWrite === s else { return }
+            let info: [String: Any]? = ready ? await readWriteInfo(s) : nil
+            guard nativeWrite === s else { return }
+            s.loaded = true
+            s.submitting = false
+            if s.hasCaptcha {
+                s.captcha = ""
+                showToast("새 코드를 입력하고 등록을 눌러 주세요")
+            } else if info != nil {
+                submitNative()
+            } else {
+                showToast("글쓰기 페이지를 읽지 못했어요. 다시 등록을 눌러 주세요")
+            }
+        }
+    }
+
     func forceCloseNativeWrite(quiet: Bool = false) {
         guard let s = nativeWrite else { return }
         webView.stopLoading()
@@ -1932,7 +1992,10 @@ extension WebViewModel: WKNavigationDelegate {
         // 앱 글쓰기 화면: 글쓰기 페이지면 덮고, 다른 페이지로 가면(등록 완료 등) 닫음
         var nativeHandled = false
         if let gid = writeGID, Self.nativeWriteEnabled, nativeSkipURL != webView.url {
-            if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true {
+            if let s = retrySession, nativeWrite === s {
+                retrySession = nil
+                continueRetry(s)           // 재시도: 같은 화면·내용을 유지한 채 다시 등록
+            } else if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true {
                 startNativeWrite(gid)
             } else if let s = nativeWrite, !s.infoRequested {
                 finishNativeWriteStart(s, gid, restored: s.restoredFromDraft)   // 이동을 시작할 때 먼저 띄운 화면 → 로딩이 끝났으니 양식 읽기
