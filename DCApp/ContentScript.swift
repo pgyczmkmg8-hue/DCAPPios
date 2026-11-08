@@ -294,6 +294,48 @@ enum ContentScript {
     });
   }
   /// 글 목록 정보 줄 칸 나누기 (자리는 CSS order로만 옮김 — 칸 순서는 그대로라 차단·메모 판정에 영향 없음)
+  /// 글 화면 작성자 닉네임: 디시가 긴 닉네임을 '가나다..'로 줄여 보냄 → 페이지의 숨은 칸(real_name)에 있는 원래 닉네임으로 되돌려 표시
+  function expandArticleNick() {
+    var rn = document.getElementById('real_name');
+    var full = rn ? (rn.value || '').trim() : '';
+    if (!full) return;
+    var nk = document.querySelector('.gallview-tit-box .ginfo2 .ginfo-area .nick, .ginfo2 .ginfo-area .nick');
+    if (nk) {
+      var tw = document.createTreeWalker(nk, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = tw.nextNode())) {
+        var m = n.nodeValue.match(/^(\s*)(.*?)\.\.(\s*)$/);
+        if (!m) continue;
+        var pre = m[2].trim();
+        if (pre && full.length > pre.length && full.indexOf(pre) === 0) n.nodeValue = m[1] + full + m[3];
+      }
+    }
+    var bn = document.getElementById('blockNick');          // 디시 '차단 닉네임'에 쓰이는 값도 원래 이름으로
+    var cur = bn ? (bn.getAttribute('data-set') || '') : '';
+    if (bn && /\.\.$/.test(cur) && full.indexOf(cur.replace(/\.+$/, '')) === 0) bn.setAttribute('data-set', full);
+  }
+  /// 글 목록의 닉네임: 디시가 긴 닉네임을 '가나다..'로 줄여 보냄 → 같은 행의 숨은 정보(blockInfo)에 있는 원래 닉네임으로 되돌려 표시
+  function expandListNicks() {
+    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+      var bi = li.querySelector('.blockInfo');
+      var full = bi ? (bi.getAttribute('data-name') || '').trim() : '';
+      if (!full) return;
+      var g = li.querySelector('ul.ginfo');
+      if (!g) return;
+      var nk = g.querySelector('li.list-nick');
+      if (!nk) {
+        var lis = Array.prototype.filter.call(g.children, function (c) { return c.tagName === 'LI'; });
+        nk = lis.length >= 5 ? lis[1] : lis[0];
+      }
+      if (!nk) return;
+      var tw = document.createTreeWalker(nk, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = tw.nextNode())) {
+        var m = n.nodeValue.match(/^(\s*)(.*?)\.\.(\([^)]*\))?\s*$/);
+        if (!m) continue;
+        var pre = m[2].trim();
+        if (pre && full.length > pre.length && full.indexOf(pre) === 0) n.nodeValue = m[1] + full + (m[3] || '');
+      }
+    });
+  }
   function listRowLayout() {
     document.querySelectorAll('ul.gall-detail-lst > li ul.ginfo').forEach(function (g) {
       if (g.getAttribute('data-dcapp-layout') === '1') return;
@@ -544,6 +586,12 @@ enum ContentScript {
       var m = raw.match(IP_RE);
       if (m) r.ip = m[1];
       r.nick = raw.replace(IP_RE, '').trim().slice(0, 40);
+      // 목록은 긴 닉네임을 '가나다..'로 줄여 보냄 → 같은 행의 숨은 정보(blockInfo)에 있는 원래 닉네임으로 (작성글 검색·메모가 줄인 이름으로 안 되게)
+      if (/\.\.$/.test(r.nick)) {
+        var bi0 = el.querySelector('.blockInfo'), dn0 = bi0 ? (bi0.getAttribute('data-name') || '').trim() : '';
+        if (!dn0 && u.kind === 'article') { var rn0 = document.getElementById('real_name'); dn0 = rn0 ? (rn0.value || '').trim() : ''; }   // 글 화면: 작성자 닉네임도 줄어 있음 → 숨은 칸에 원래 이름
+        if (dn0 && dn0.indexOf(r.nick.replace(/\.+$/, '')) === 0) r.nick = dn0.slice(0, 40);
+      }
       if (!r.ip && nickEl.parentElement && nickEl.parentElement !== el.parentElement) {
         var m2 = txt(nickEl.parentElement).match(IP_RE);
         if (m2) r.ip = m2[1];
@@ -1627,6 +1675,8 @@ enum ContentScript {
     try { adBlockCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
+    try { expandListNicks(); } catch (e) {}
+    try { expandArticleNick(); } catch (e) {}
     try { listRowLayout(); } catch (e) {}
     try { applyListFilter(); } catch (e) {}
     try { buildPager(); } catch (e) {}
@@ -3577,7 +3627,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v233-pwretry3', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v235-fullnick2', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

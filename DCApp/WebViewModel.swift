@@ -96,6 +96,10 @@ final class WebViewModel: NSObject, ObservableObject {
     private var toastTask: Task<Void, Never>?
 
     private var cancellables = Set<AnyCancellable>()
+    /// 아래로 끌어서 새로고침: 이 거리(pt)만큼 끌면 바로 새로고침 (기본 동작은 훨씬 길게 끌어야 함)
+    private static let pullTrigger: CGFloat = 55
+    private var pullObserver: NSKeyValueObservation?
+    private var pullFired = false
     private var lastHost: String?
     private var pendingCredential: LoginCredential?
     /// 계정 전환으로 로그인할 계정 (로그인 화면이 열리면 자동 입력 + 로그인)
@@ -144,6 +148,19 @@ final class WebViewModel: NSObject, ObservableObject {
         let refresh = UIRefreshControl()
         refresh.addTarget(self, action: #selector(handlePullToRefresh), for: .valueChanged)
         webView.scrollView.refreshControl = refresh
+        // 기본 새로고침은 한참 끌어야 걸림 → 손가락을 대고 일정 거리(pullTrigger)만 끌어도 바로 새로고침
+        pullObserver = webView.scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let over = -(sv.contentOffset.y + sv.adjustedContentInset.top)     // 맨 위에서 끌어내린 거리
+                if over < 4 { if !(sv.refreshControl?.isRefreshing ?? false) { self.pullFired = false }; return }
+                guard sv.isDragging, over >= Self.pullTrigger, !self.pullFired,
+                      let rc = sv.refreshControl, !rc.isRefreshing else { return }
+                self.pullFired = true
+                rc.beginRefreshing()
+                self.handlePullToRefresh()
+            }
+        }
 
         webView.publisher(for: \.title).map { $0 ?? "" }
             .receive(on: DispatchQueue.main).assign(to: &$title)
