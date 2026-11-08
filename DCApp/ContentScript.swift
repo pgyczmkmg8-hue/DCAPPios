@@ -2410,6 +2410,23 @@ enum ContentScript {
     }
     return null;
   }
+  // ---------- 글 수정·삭제 비밀번호 확인이 429(Too Many Attempts)로 막히면 → 잠시 뒤 확인 버튼을 자동으로 다시 누름 ----------
+  // 디시 페이지는 이 오류를 처리하지 않아 화면이 그대로 멈춘 것처럼 보임
+  var pwRetry = { n: 0, t: null, url: '' };
+  window.addEventListener('dcapp-pw429', function () {
+    var f = document.getElementById('board_pw_form'), pw = document.getElementById('board_pw');
+    if (!f || !pw || !pw.value) return;
+    if (pwRetry.url !== location.href) { pwRetry.url = location.href; pwRetry.n = 0; }
+    if (pwRetry.t) return;                                   // 이미 다음 시도를 예약함 (연달아 온 429)
+    if (pwRetry.n >= 300) { post('pw429end', {}); pwRetry.n = 0; return; }
+    if (pwRetry.n % 10 === 0) post('pw429', { n: pwRetry.n });      // 10번마다 진행 상황 알림
+    pwRetry.n++;
+    pwRetry.t = setTimeout(function () {
+      pwRetry.t = null;
+      var b = document.body.contains(f) ? f.querySelector('button[type="submit"]') : null;
+      if (b) b.click();
+    }, 200);
+  });
   // ---------- 댓글 등록이 429로 막히면 → 등록될 때까지 0.1초마다 등록 버튼 다시 누르기 ----------
   var cmtRetry = { form: null, memo: '', tries: 0, on: false, url: '', timer: null, watchdog: null };
   function commentFormOf(el) {
@@ -3560,7 +3577,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v229-anonfill', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v233-pwretry3', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3636,6 +3653,9 @@ enum ContentScript {
       out.push('[' + n.t + '] ' + n.kind + ' ' + n.method + ' ' + n.status + ' ' + n.url);
       if (n.body) out.push('    → ' + n.body);
     });
+    var bp = document.getElementById('board_pw');      // 글 수정·삭제 비밀번호 확인 페이지
+    if (bp) out.push('board_pw: 글자수=' + (bp.value || '').length + ' 직접입력표시=' + (bp.getAttribute('data-dcapp-user') || '0') +
+                     ' readonly=' + !!bp.readOnly + ' disabled=' + !!bp.disabled + ' 채우기시도=' + (bp.getAttribute('data-dcapp-anon-tries') || '0'));
     if (isLoginPage() || pwNagButton()) {
       out.push('--- 로그인/비번 페이지 --- ' + txt(document.body).slice(0, 300));
       out.push('buttons: ' + Array.prototype.filter.call(document.querySelectorAll('button, a, input[type="button"], input[type="submit"], [role="button"]'), visible)
@@ -3879,7 +3899,7 @@ enum ContentScript {
 (function () {
   if (window.__dcappNet) return;
   var log = window.__dcappNet = [];
-  var RE = /alarm|noti|push|alim|bell|memo|recv|message|comment-write|ts_state/i;
+  var RE = /alarm|noti|push|alim|bell|memo|recv|message|comment-write|ts_state|pwcheck|ajax\/access/i;
   // 댓글·글 등록 요청에 실린 Cloudflare 체크 상태만 뽑기 (비밀번호 등 다른 값은 안 뽑음)
   function tsSummary(body) {
     if (!body || body.indexOf('ts_state') < 0) return '';
@@ -3911,7 +3931,8 @@ enum ContentScript {
     x.addEventListener('loadend', function () {
       var text = '';
       try { text = (x.responseType === '' || x.responseType === 'text') ? x.responseText : '[' + x.responseType + ']'; } catch (e) {}
-      add('xhr', info.m, info.u + tsSummary(reqBody) + (reqBody ? '  <BODY ' + reqBody.slice(0, 200) + '>' : '') + (info.h ? '  <H' + info.h + '>' : ''), x.status, text);
+      var secret = /pwcheck/i.test(String(info.u));      // 비밀번호 확인 요청은 본문(비밀번호)을 기록하지 않음
+      add('xhr', info.m, info.u + tsSummary(reqBody) + (reqBody && !secret ? '  <BODY ' + reqBody.slice(0, 200) + '>' : '') + (info.h ? '  <H' + info.h + '>' : ''), x.status, text);
       // 댓글 등록 결과 → content 스크립트(429 자동 재등록)로
       try {
         if (/\/ajax\/comment-write/.test(String(info.u))) {
@@ -3923,6 +3944,10 @@ enum ContentScript {
         if (/\/ajax\/comment-write/.test(String(info.u))) {
           setTimeout(function () { window.webkit.messageHandlers.dcapp.postMessage({ type: 'cmtdone', status: x.status }); }, 0);
         }
+      } catch (e) {}
+      // 글 수정·삭제 비밀번호 확인이 429로 막히면 → 페이지 스크립트가 잠시 뒤 다시 시도
+      try {
+        if (x.status === 429 && /\/ajax\/pwcheck-board/.test(String(info.u))) window.dispatchEvent(new CustomEvent('dcapp-pw429'));
       } catch (e) {}
       // 댓글 등록이 429(Too Many Attempts)로 막히면 → 앱이 쓰던 내용을 복사
       try {

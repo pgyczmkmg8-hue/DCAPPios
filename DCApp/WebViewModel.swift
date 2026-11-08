@@ -1847,6 +1847,11 @@ extension WebViewModel: WKScriptMessageHandler {
                 try? await Task.sleep(for: .milliseconds(60))
                 await call("return window.__dcapp ? window.__dcapp.focusReply() : false;")
             }
+        case "pw429":   // 글 수정·삭제 비밀번호 확인이 디시 요청 제한(429)에 걸림 → 페이지가 자동으로 다시 시도
+            let n = (body["n"] as? NSNumber)?.intValue ?? 0
+            showToast(n == 0 ? "디시가 요청을 잠시 막았어요. 자동으로 다시 시도해요" : "다시 시도하는 중… (\(n)회)")
+        case "pw429end":
+            showToast("계속 막혀서 멈췄어요. 잠시 뒤 다시 시도해 주세요")
         case "cmt429":   // 댓글 등록이 429로 막힘 → 자동 재등록이 처리함 (기기 클립보드는 건드리지 않음)
             break
         case "alarms":   // 디시 알림 응답(/alarm/notification) → 갤러리 창의 알림 탭에 쌓기

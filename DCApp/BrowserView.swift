@@ -1448,6 +1448,12 @@ struct BrowserView: View {
 
     /// 글 보기 → 댓글 새로고침, 글 목록 → 페이지 새로고침
     private func refreshTapped() {
+        // 분할 화면: 버튼은 왼쪽(목록) 화면에 붙어 있지만 사용자가 보는 글은 오른쪽 → 오른쪽에 글이 열려 있으면 그 댓글을 새로고침
+        if router.splitActive, model === router.mainBrowser,
+           let u = router.detailBrowser.url, SavedPostStore.postInfo(u) != nil {
+            router.detailBrowser.refreshComments()
+            return
+        }
         if isPostPage { model.refreshComments() } else { model.reload() }
     }
 
