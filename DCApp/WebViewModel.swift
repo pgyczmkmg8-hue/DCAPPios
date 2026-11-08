@@ -97,7 +97,7 @@ final class WebViewModel: NSObject, ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     /// 아래로 끌어서 새로고침: 이 거리(pt)만큼 끌면 바로 새로고침 (기본 동작은 훨씬 길게 끌어야 함)
-    private static let pullTrigger: CGFloat = 55
+    private static let pullTrigger: CGFloat = 95
     private var pullObserver: NSKeyValueObservation?
     private var pullFired = false
     private var lastHost: String?
