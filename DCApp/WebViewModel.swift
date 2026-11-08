@@ -71,6 +71,10 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var captured: CapturedImage?
     /// 글 속 사진 보기 (사진 탭 → 전체 화면)
     @Published var imageViewer: ImageViewerItem?
+    /// 댓글을 길게 눌러 띄우는 '댓글 내용만 보기' (선택·복사용)
+    @Published var commentText: CommentTextItem?
+    /// 댓글을 길게 눌렀을 때 뜨는 '텍스트 선택' 버튼 (누르면 commentText로 넘어가 내용 화면이 열림)
+    @Published var commentTextPrompt: CommentTextItem?
     @Published var isBlockPickMode = false
     /// 탭해서 유저 메모 (탭하는 방식은 차단 모드와 같고, 고르면 메모 창)
     @Published var isMemoPickMode = false
@@ -1729,6 +1733,19 @@ extension WebViewModel: WKScriptMessageHandler {
         guard let body = message.body as? [String: Any],
               let type = body["type"] as? String else { return }
         switch type {
+        case "cmttext":   // 댓글 글자를 길게 누름 → 댓글 내용만 따로 띄움
+            let t = (body["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            var item = CommentTextItem(nick: body["nick"] as? String ?? "", text: t)
+            item.point = CGPoint(x: (body["x"] as? NSNumber)?.doubleValue ?? 0, y: (body["y"] as? NSNumber)?.doubleValue ?? 0)
+            commentTextPrompt = item
+            // 잠깐 뒤 저절로 사라짐 (그 사이 다른 댓글을 누르면 새 것으로 바뀜)
+            let id = item.id
+            Task {
+                try? await Task.sleep(for: .seconds(4))
+                if commentTextPrompt?.id == id { commentTextPrompt = nil }
+            }
         case "longpress":
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             if isMemoPickMode {
@@ -1963,6 +1980,7 @@ extension WebViewModel: WKNavigationDelegate {
 
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
         if AdBlock.paused {
             adResumeTask?.cancel()
             AdBlock.setPaused(false, controller: webView.configuration.userContentController)

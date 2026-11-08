@@ -847,6 +847,7 @@ struct AnonGalleryEditView: View {
 struct ControlBarOrderView: View {
     @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var raw = ""
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
+    @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBar = true
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     @AppStorage("sideBarOffsetY", store: Profile.defaults) private var sideBarOffsetY = 0.0
@@ -892,6 +893,11 @@ struct ControlBarOrderView: View {
                 Text("배치")
             } footer: {
                 Text("가로: 화면 아래쪽에 가로로. 세로: 화면 오른쪽 가운데에 세로로.\n휴대폰을 가로로 쓸 때 세로 막대는 아이콘만 보여요.")
+            }
+            Section {
+                Toggle("상단바 줄이기 (듀오)", isOn: $compactTopBar)
+            } footer: {
+                Text("듀오처럼 시계가 옆 세로 줄에 있는 화면에서, 제목·버튼을 위쪽 빈 띠 안에 그려 파란 영역을 줄여요. 스크롤해도 상단바가 위로 밀려 올라가지 않아요.")
             }
             Section {
                 Toggle("좌우반전", isOn: $mirrored)

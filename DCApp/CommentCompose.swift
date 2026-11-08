@@ -128,6 +128,13 @@ private struct CommentComposer: View {
     /// 댓글 입력칸(UIKit)에 키보드를 띄울지 — SwiftUI FocusState와 따로 둠 (FocusState가 UIKit 칸의 포커스를 비우는 일을 막음)
     @State private var textFocus = false
     @State private var contentH: CGFloat = 0
+    @State private var textH: CGFloat = 0
+
+    /// 댓글 입력칸 높이: 2~8줄 사이
+    private static func textBoxHeight(_ h: CGFloat) -> CGFloat {
+        let line = UIFont.preferredFont(forTextStyle: .body).lineHeight
+        return min(max(h, line * 2), line * 8)
+    }
 
     private func togglePanel(_ p: Panel) {
         panel = panel == p ? nil : p
@@ -185,7 +192,9 @@ private struct CommentComposer: View {
                 text: $session.text,
                 placeholder: session.isReply ? "대댓글을 입력해주세요" : "댓글을 입력해주세요",
                 isFocused: $textFocus,
+                contentHeight: $textH,
                 onCommandReturn: { model.submitComment() })
+                .frame(height: Self.textBoxHeight(textH))      // 입력칸이 잰 실제 높이로 못 박음 (글이 늘 때 상자가 안 따라 늘어 글자가 상자 밖으로 나오던 문제)
                 .fieldBox(minHeight: 70)
             HStack(spacing: 14) {
                 Button { togglePanel(.dccon) } label: {
@@ -541,10 +550,16 @@ private struct CommentTextView: UIViewRepresentable {
     @Binding var text: String
     let placeholder: String
     @Binding var isFocused: Bool
+    @Binding var contentHeight: CGFloat      // 글 전체가 차지하는 높이 (이 칸의 실제 너비로 잰 값)
     let onCommandReturn: () -> Void
 
     final class TV: UITextView {
         var onCommandReturn: (() -> Void)?
+        var onLayout: (() -> Void)?
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            onLayout?()      // 너비가 정해지거나 바뀌면 높이를 다시 잼
+        }
         override var keyCommands: [UIKeyCommand]? {
             let c = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(cmdReturn))
             c.wantsPriorityOverSystemBehavior = true
@@ -564,6 +579,7 @@ private struct CommentTextView: UIViewRepresentable {
         v.textContainer.lineFragmentPadding = 0
         v.autocorrectionType = .default
         v.onCommandReturn = onCommandReturn
+        v.onLayout = { [weak v, weak c = context.coordinator] in if let v { c?.measure(v) } }
         v.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let ph = UILabel()
         ph.text = placeholder
@@ -596,9 +612,18 @@ private struct CommentTextView: UIViewRepresentable {
         var parent: CommentTextView
         weak var placeholderLabel: UILabel?
         init(_ p: CommentTextView) { parent = p }
+        /// 실제 너비로 글 높이를 재서 SwiftUI에 알림 (바뀌었을 때만)
+        func measure(_ tv: UITextView) {
+            guard tv.bounds.width > 1 else { return }
+            let h = ceil(tv.sizeThatFits(CGSize(width: tv.bounds.width, height: .greatestFiniteMagnitude)).height)
+            if abs(h - parent.contentHeight) > 0.5 {
+                DispatchQueue.main.async { [weak self] in self?.parent.contentHeight = h }
+            }
+        }
         func textViewDidChange(_ tv: UITextView) {
             parent.text = tv.text
             placeholderLabel?.isHidden = !tv.text.isEmpty
+            measure(tv)
             tv.invalidateIntrinsicContentSize()
             // 커서가 보이게 (줄이 8줄을 넘으면 칸 안에서 스크롤)
             if let r = tv.selectedTextRange { tv.scrollRectToVisible(tv.caretRect(for: r.end), animated: false) }

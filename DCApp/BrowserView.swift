@@ -234,6 +234,8 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var controlOrderRaw = ""
     /// ⋮ 메뉴를 상단바 오른쪽에 둘지 (켜면 컨트롤바에서는 빠짐)
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
+    /// 듀오: 시계가 옆 세로 줄로 가서 비어 있는 위쪽 띠 안에 상단바(제목·버튼)를 그려 파란 영역을 줄임 (시스템 상단바는 숨김 → 스크롤해도 밀려 올라가지 않음)
+    @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBarSetting = true
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -476,6 +478,77 @@ struct BrowserView: View {
     }
 
     /// 분할 화면 왼쪽(목록) 상단바: 목록 폭 안에 제목(+글 목록이면 필터 버튼)
+    /// 앱 창의 위쪽 안전 영역 높이 (듀오: 옆 세로 줄 때문에 비어 있는 위쪽 띠 높이)
+    private static var windowTopInset: CGFloat {
+        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+            .map(\.safeAreaInsets.top).max() ?? 0
+    }
+    /// 위쪽 띠 안에 상단바를 그릴지 — 듀오(옆 세로 줄이 있는 화면)에서만. 글쓰기 화면은 자기 상단바가 따로 있음
+    private var compactTopBar: Bool {
+        _ = viewSize      // 접기·펴기·회전으로 크기가 바뀌면 다시 계산
+        return compactTopBarSetting && Self.hasSideColumnOnly && Self.windowTopInset >= 28 && !model.isWritePage
+    }
+
+    /// 위쪽 띠에 그리는 상단바: [뒤로] 제목 [필터·⋮]
+    private var compactTopBarView: some View {
+        GeometryReader { g in
+            let band = max(g.safeAreaInsets.top, Self.windowTopInset)
+            HStack(spacing: 6) {
+                Group {
+                    if showsTopBack {
+                        backButton { Image(systemName: "arrow.left").frame(width: Self.topSlotWidth, height: Self.topSlotWidth).contentShape(Rectangle()) }
+                    } else {
+                        Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                    }
+                }
+                topTitle.frame(maxWidth: .infinity, alignment: .center)
+                HStack(spacing: 6) {
+                    if showsMenuButton {
+                        if isListPage {
+                            Button { showListFilter = true } label: {
+                                Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                    .contentShape(Rectangle())
+                            }
+                            .accessibilityLabel("게시물 필터")
+                        }
+                        if menuInTopBarShown {
+                            Menu { moreMenu } label: {
+                                Image(systemName: "ellipsis").rotationEffect(.degrees(90))
+                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                    .contentShape(Rectangle())
+                            }
+                        }
+                    } else if !model.isDetailPane {
+                        if currentGallery != nil {
+                            Button { toggleFavorite() } label: {
+                                Image(systemName: isFavorite ? "star.fill" : "star")
+                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                    .contentShape(Rectangle())
+                            }
+                        }
+                        Menu { moreMenu } label: {
+                            Image(systemName: "ellipsis").rotationEffect(.degrees(90))
+                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .frame(minWidth: Self.topSlotWidth, alignment: .trailing)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .frame(width: splitListWidth, height: band)
+            .background(DCTheme.navy)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .offset(y: -band)
+        }
+        .frame(height: 0)
+    }
+
     private var splitTopBar: some View {
         HStack(spacing: 8) {
             Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
@@ -541,7 +614,7 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .modifier(SplitPane(width: splitListWidth))
-            .safeAreaInset(edge: .top, spacing: 0) { if splitListWidth != nil { splitTopBar } }   // 분할 화면의 목록: 시스템 내비게이션 바 대신
+            .safeAreaInset(edge: .top, spacing: 0) { if splitListWidth != nil && !compactTopBar { splitTopBar } }   // 분할 화면의 목록: 시스템 내비게이션 바 대신
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
@@ -650,6 +723,7 @@ struct BrowserView: View {
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
+            .toolbar(compactTopBar ? .hidden : .automatic, for: .navigationBar)      // 듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -986,6 +1060,15 @@ struct BrowserView: View {
                 ImageViewer(item: item)
                     .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
             }
+            .overlay { commentTextPromptButton }
+            .onChange(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
+            .fullScreenCover(item: $model.commentText) { item in
+                CommentTextViewer(item: item) { url in
+                    model.commentText = nil     // 디시 링크는 닫고 앱 안에서 열기
+                    model.load(url)
+                }
+                .presentationBackground(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
+            }
             .sheet(isPresented: Binding(get: { autoImageGallery != nil },
                                         set: { if !$0 { autoImageGallery = nil } })) {
                 if let gid = autoImageGallery {
@@ -1002,10 +1085,45 @@ struct BrowserView: View {
             }
     }
 
+    /// 댓글을 길게 누르면 그 자리 위에 뜨는 '텍스트 선택' 버튼
+    @ViewBuilder
+    private var commentTextPromptButton: some View {
+        if let item = model.commentTextPrompt {
+            GeometryReader { g in
+                let frame = g.frame(in: .global)
+                let origin = model.webView.convert(CGPoint.zero, to: nil)       // 웹 화면의 왼쪽 위 (창 기준)
+                let x = min(max(origin.x + item.point.x - frame.minX, 70), max(g.size.width - 70, 70))
+                let y = max(origin.y + item.point.y - frame.minY - 44, 30)
+                Button {
+                    model.commentTextPrompt = nil
+                    model.commentText = item
+                } label: {
+                    Label("텍스트 선택", systemImage: "text.cursor")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .background(Color.black.opacity(0.82), in: Capsule())
+                        .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                }
+                .buttonStyle(.plain)
+                .position(x: x, y: y)
+                .transition(.opacity)
+            }
+            .animation(.easeOut(duration: 0.15), value: item.id)
+        }
+    }
+
     // MARK: - 상단: 로딩바 / 캡처 중
 
     @ViewBuilder
     private var topOverlay: some View {
+        ZStack(alignment: .top) {
+            if compactTopBar { compactTopBarView }
+            topOverlayItems
+        }
+    }
+
+    private var topOverlayItems: some View {
         VStack(spacing: 0) {
             if model.isLoading {
                 ProgressView(value: model.progress).progressViewStyle(.linear)

@@ -1787,6 +1787,23 @@ enum ContentScript {
     var media = target.closest('img, video');
     if (!unitEl && !dcconKey(media)) return;
     if (unitEl && unitEl.classList.contains('dcapp-collapsed')) return;
+    // 댓글 글자를 길게 누르면 → 앱이 댓글 내용만 따로 띄움 (선택·복사하기 쉽게, 드래그하다 차단 메뉴가 뜨지 않게)
+    var cmtBox = (unitEl && unitEl.getAttribute('data-dcapp-unit') === 'comment' && !dcconKey(media)) ? target.closest('.txt, .usertxt') : null;
+    if (cmtBox && unitEl.contains(cmtBox) && !target.closest('a[href]')) {
+      var ct = e.touches[0];
+      clearLP();
+      lp = {
+        x: ct.clientX, y: ct.clientY,
+        timer: setTimeout(function () {
+          lp = null;
+          suppressClickUntil = Date.now() + 800;
+          var nickEl0 = nickElement({ el: unitEl, kind: 'comment' });
+          post('cmttext', { nick: nickEl0 ? txt(nickEl0).replace(IP_RE, '').trim() : '', text: (cmtBox.innerText || cmtBox.textContent || '').trim(), x: ct.clientX, y: ct.clientY });
+          [60, 300, 700].forEach(function (ms) { setTimeout(clearSelection, ms); });   // 길게 누르면 iOS가 글자를 선택해 버림 → 풀기
+        }, 450)
+      };
+      return;
+    }
     // 차단·메모 메뉴는 닉네임(또는 그 옆 메모 칸)을 길게 누를 때만 — 본문·댓글 글자는 평소처럼 길게 눌러 복사
     if (!dcconKey(media)) {
       var nk = unitEl ? nickElement({ el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') }) : null;
@@ -3627,7 +3644,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v235-fullnick2', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v237-cmttext2', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
