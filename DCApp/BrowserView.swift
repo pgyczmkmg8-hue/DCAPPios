@@ -373,6 +373,8 @@ struct BrowserView: View {
     @State private var lastTopBarBottom: CGFloat = 0
     private func updateSideColumn(top: CGFloat) {
         syncCommentPin()
+        // 화면을 돌린 뒤 웹 화면이 새 크기로 다시 그려지지 않고 비어 보이는 일이 있어, 크기가 바뀔 때마다 다시 배치하게 함
+        model.nudgeLayout()
         if model.isDetailPane, top > 20, abs(router.splitTopHeight - top) > 0.5 { router.splitTopHeight = top }
         lastTopBarBottom = top
         if !model.isDetailPane, top > 20 { ListBarMetrics.bottom = top }
@@ -383,7 +385,23 @@ struct BrowserView: View {
             try? await Task.sleep(for: .milliseconds(700)); applySideColumn()
         }
     }
+    /// 세로 컨트롤바가 웹 화면 위에 떠서 가리는 폭 (듀오 옆 세로 줄 안에 있으면 줄 여백이 이미 비워 주므로 0)
+    private var barCoverWidth: CGFloat {
+        guard usesSideBar, !barCollapsed, !(fillsTrailing && Self.hasSideColumnOnly) else { return 0 }
+        return 64 + barEdge + 8
+    }
+    /// 글 아래 수정·삭제 버튼 줄이 컨트롤바에 겹치지 않게 웹 화면에 비울 폭을 알림
+    private func applyBarInset() {
+        if showsMenuButton && !model.isDetailPane {
+            if router.barOverlayWidth != barCoverWidth { router.barOverlayWidth = barCoverWidth }
+            if router.barOverlayLeft != barMirrored { router.barOverlayLeft = barMirrored }
+        }
+        let w: CGFloat = model.isDetailPane ? router.barOverlayWidth : ((showsMenuButton && !router.splitActive) ? barCoverWidth : 0)
+        let left = model.isDetailPane ? router.barOverlayLeft : barMirrored
+        model.setBarInset(left: left ? w : 0, right: left ? 0 : w)
+    }
     private func applySideColumn() {
+        settleCompact()
         let inset = Self.windowTrailingInset
         if inset != trailingInset { trailingInset = inset }
         let wi = model.webView.safeAreaInsets
@@ -394,6 +412,7 @@ struct BrowserView: View {
             lastFlip = flip
             model.setColumnFlip(flip)
         }
+        applyBarInset()
         guard showsMenuButton else { return }
         SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
     }
@@ -485,68 +504,78 @@ struct BrowserView: View {
             .map(\.safeAreaInsets.top).max() ?? 0
     }
     /// 위쪽 띠 안에 상단바를 그릴지 — 듀오(옆 세로 줄이 있는 화면)에서만. 글쓰기 화면은 자기 상단바가 따로 있음
-    private var compactTopBar: Bool {
+    private var compactRaw: Bool {
         _ = viewSize      // 접기·펴기·회전으로 크기가 바뀌면 다시 계산
-        return compactTopBarSetting && Self.hasSideColumnOnly && Self.windowTopInset >= 28 && !model.isWritePage
+        return compactTopBarSetting && Self.hasSideColumnOnly && !model.isWritePage
+    }
+    /// 돌리는 도중 안전 영역 값이 잠깐 흔들려도 시스템 상단바가 켜졌다 꺼지지 않게: 값이 0.6초 동안 그대로일 때만 바꿈
+    @State private var compactStable: Bool?
+    private var compactTopBar: Bool { compactStable ?? compactRaw }
+    private func settleCompact() {
+        let raw = compactRaw
+        guard raw != compactStable else { return }
+        if compactStable == nil { compactStable = raw; return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            if compactRaw == raw { compactStable = raw }
+        }
     }
 
-    /// 위쪽 띠에 그리는 상단바: [뒤로] 제목 [필터·⋮]
+    /// 시스템 상단바(듀오에서 약 80pt) 대신 그리는 낮은 상단바: [뒤로] 제목 [필터·⋮]
+    static let compactTopBarHeight: CGFloat = 44
     private var compactTopBarView: some View {
-        GeometryReader { g in
-            let band = max(g.safeAreaInsets.top, Self.windowTopInset)
-            HStack(spacing: 6) {
-                Group {
-                    if showsTopBack {
-                        backButton { Image(systemName: "arrow.left").frame(width: Self.topSlotWidth, height: Self.topSlotWidth).contentShape(Rectangle()) }
-                    } else {
-                        Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                    }
+        HStack(spacing: 6) {
+            Group {
+                if showsTopBack {
+                    backButton { Image(systemName: "arrow.left").frame(width: Self.topSlotWidth, height: Self.topSlotWidth).contentShape(Rectangle()) }
+                } else {
+                    Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                 }
-                topTitle.frame(maxWidth: .infinity, alignment: .center)
-                HStack(spacing: 6) {
-                    if showsMenuButton {
-                        if isListPage {
-                            Button { showListFilter = true } label: {
-                                Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                                    .contentShape(Rectangle())
-                            }
-                            .accessibilityLabel("게시물 필터")
+            }
+            topTitle.frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: 6) {
+                if showsMenuButton {
+                    if isListPage {
+                        Button { showListFilter = true } label: {
+                            Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .contentShape(Rectangle())
                         }
-                        if menuInTopBarShown {
-                            Menu { moreMenu } label: {
-                                Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                                    .contentShape(Rectangle())
-                            }
-                        }
-                    } else if !model.isDetailPane {
-                        if currentGallery != nil {
-                            Button { toggleFavorite() } label: {
-                                Image(systemName: isFavorite ? "star.fill" : "star")
-                                    .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                                    .contentShape(Rectangle())
-                            }
-                        }
+                        .accessibilityLabel("게시물 필터")
+                    }
+                    if menuInTopBarShown {
                         Menu { moreMenu } label: {
                             Image(systemName: "ellipsis").rotationEffect(.degrees(90))
                                 .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                                 .contentShape(Rectangle())
                         }
                     }
+                } else if !model.isDetailPane {
+                    if currentGallery != nil {
+                        Button { toggleFavorite() } label: {
+                            Image(systemName: isFavorite ? "star.fill" : "star")
+                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                    Menu { moreMenu } label: {
+                        Image(systemName: "ellipsis").rotationEffect(.degrees(90))
+                            .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                            .contentShape(Rectangle())
+                    }
                 }
-                .buttonStyle(.plain)
-                .fixedSize()
-                .frame(minWidth: Self.topSlotWidth, alignment: .trailing)
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .frame(width: splitListWidth, height: band)
-            .background(DCTheme.navy)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .offset(y: -band)
+            .buttonStyle(.plain)
+            .fixedSize()
+            .frame(minWidth: Self.topSlotWidth, alignment: .trailing)
         }
-        .frame(height: 0)
+        .foregroundStyle(.white)
+        // 듀오 옆 세로 줄(시계 자리) 밖으로: 버튼이 줄 밑으로 들어가 가려지지 않게 (분할 화면의 왼쪽 목록 창은 줄이 없음)
+        .padding(.leading, 10 + (splitListWidth == nil && leftColumn ? trailingInset : 0))
+        .padding(.trailing, 10 + (splitListWidth == nil && !leftColumn && fillsTrailing ? trailingInset : 0))
+        .frame(width: splitListWidth, height: Self.compactTopBarHeight)
+        .background(DCTheme.navy)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var splitTopBar: some View {
@@ -614,7 +643,7 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .modifier(SplitPane(width: splitListWidth))
-            .safeAreaInset(edge: .top, spacing: 0) { if splitListWidth != nil && !compactTopBar { splitTopBar } }   // 분할 화면의 목록: 시스템 내비게이션 바 대신
+            .safeAreaInset(edge: .top, spacing: 0) { if compactTopBar { compactTopBarView } else if splitListWidth != nil { splitTopBar } }   // 듀오: 낮은 상단바 / 분할 화면의 목록: 시스템 내비게이션 바 대신
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
@@ -1118,9 +1147,13 @@ struct BrowserView: View {
     @ViewBuilder
     private var topOverlay: some View {
         ZStack(alignment: .top) {
-            if compactTopBar { compactTopBarView }
             topOverlayItems
         }
+        .onChange(of: Double(barCoverWidth) + (barMirrored ? 1000 : 0)) { _, _ in applyBarInset() }
+        .onChange(of: router.barOverlayWidth) { _, _ in applyBarInset() }
+        .onChange(of: router.barOverlayLeft) { _, _ in applyBarInset() }
+        .onChange(of: router.splitActive) { _, _ in applyBarInset() }
+        .onChange(of: compactRaw) { _, _ in settleCompact() }
     }
 
     private var topOverlayItems: some View {

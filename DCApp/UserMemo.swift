@@ -40,6 +40,13 @@ enum AutoMemo {
     static var scriptValue: String { enabled ? mode.rawValue : "" }
 }
 
+/// 고닉 식별코드(아이디) 보기: 메모가 없는 고닉의 메모 자리에 아이디를 '보여주기만' 함 (메모로 저장하지 않음)
+/// 자동메모와는 같이 쓸 수 없음(자동메모가 켜져 있으면 꺼진 것으로 침)
+enum IdCode {
+    static let key = "showIdCode"
+    static var enabled: Bool { Profile.defaults.bool(forKey: key) && !AutoMemo.enabled }
+}
+
 @MainActor
 final class MemoStore: ObservableObject {
     static let shared = MemoStore()

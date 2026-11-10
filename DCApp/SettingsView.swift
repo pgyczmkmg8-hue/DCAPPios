@@ -360,6 +360,7 @@ struct AutoMemoGalleryList: View {
 struct BlockSettingsView: View {
     @ObservedObject private var filters = FilterStore.shared
     @AppStorage(AutoMemo.enabledKey, store: Profile.defaults) private var autoMemo = false
+    @AppStorage(IdCode.key, store: Profile.defaults) private var showIdCode = false
     @State private var autoMemoMode = AutoMemo.mode
 
     var body: some View {
@@ -388,6 +389,16 @@ struct BlockSettingsView: View {
                 Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
             }
 
+            // 고닉 식별코드 보기 (자동메모와 같이 쓸 수 없음)
+            Section {
+                Toggle("고닉 식별코드 보기", isOn: Binding(get: { showIdCode && !autoMemo }, set: { showIdCode = $0 }))
+                    .disabled(autoMemo)
+            } footer: {
+                Text(autoMemo
+                     ? "자동메모가 켜져 있어서 쓸 수 없어요. 자동메모를 끄면 쓸 수 있어요."
+                     : "메모가 없는 고닉(로그인 계정)의 메모 자리에 식별코드(아이디)를 보여 줘요. 메모로 저장하지는 않고 보여 주기만 해요. 직접 단 메모가 있으면 그 메모가 보여요. 자동메모와는 같이 쓸 수 없어요.")
+            }
+
             // 자동메모
             Section {
                 Toggle("자동메모", isOn: $autoMemo)
@@ -403,7 +414,11 @@ struct BlockSettingsView: View {
                 Text("글 목록을 불러올 때 메모가 없는 로그인 계정(유동 제외)에 닉네임이 아닌 아이디를 자동으로 메모해요. '갤러리마다'는 본 갤러리에서만 보이는 메모로 달아요. '선택한 갤러리만'은 고른 갤러리에서만 달아요.")
             }
         }
-        .onChange(of: autoMemo) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
+        .onChange(of: autoMemo) { _, on in
+            if on { showIdCode = false }      // 자동메모를 켜면 식별코드 보기는 저절로 꺼짐 (같이 쓸 수 없음)
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+        }
+        .onChange(of: showIdCode) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
         .onChange(of: autoMemoMode) { _, v in
             Profile.defaults.set(v.rawValue, forKey: AutoMemo.modeKey)
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)

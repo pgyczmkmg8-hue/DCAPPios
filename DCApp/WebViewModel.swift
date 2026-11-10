@@ -694,6 +694,25 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// 크기가 바뀐 뒤 웹 화면을 새 크기로 다시 배치 (돌린 뒤 비어 보이는 일 대비)
+    func nudgeLayout() {
+        webView.setNeedsLayout()
+        webView.evaluateJavaScript("window.dispatchEvent(new Event('resize')); true", completionHandler: nil)
+    }
+
+    /// 세로 컨트롤바가 웹 화면 위에 떠서 가리는 폭 (왼쪽/오른쪽) — 글 아래 수정·삭제 버튼 줄을 그만큼 비워 겹치지 않게
+    private var barInsetL: CGFloat = 0
+    private var barInsetR: CGFloat = 0
+    func setBarInset(left: CGFloat, right: CGFloat) {
+        guard left != barInsetL || right != barInsetR else { return }
+        barInsetL = left; barInsetR = right
+        applyBarInset()
+    }
+    func applyBarInset() {
+        let js = "(function(l,r){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty('--dcapp-bar-l',l+'px');s.setProperty('--dcapp-bar-r',r+'px');})(\(Int(barInsetL)),\(Int(barInsetR))); true"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     func applyFilters() {
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
         installUserScript()   // 다음 페이지부터 적용
@@ -1989,6 +2008,7 @@ extension WebViewModel: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
+        if barInsetL > 0 || barInsetR > 0 { applyBarInset() }     // 새 페이지에도 컨트롤바 비움 폭 다시 넣음
         retryIfTooManyRequests()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
         // 로그인 과정에서 다크모드가 풀렸으면(디시가 쿠키를 덮어씀) 다시 맞춤

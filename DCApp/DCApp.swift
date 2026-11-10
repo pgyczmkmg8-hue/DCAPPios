@@ -50,6 +50,9 @@ final class AppRouter: ObservableObject {
     var primaryBrowser: WebViewModel { singleUsesDetail ? detailBrowser : mainBrowser }
     /// 분할 화면 오른쪽(글) 화면의 상단바 높이 — 왼쪽(목록) 상단바를 같은 높이로 맞추는 데 씀
     @Published var splitTopHeight: CGFloat = 0
+    /// 세로 컨트롤바가 화면 위에 떠서 가리는 폭 (분할 화면이면 오른쪽 글 화면이 이 값을 씀) / 컨트롤바가 왼쪽에 있는지
+    @Published var barOverlayWidth: CGFloat = 0
+    @Published var barOverlayLeft = false
 
     init() {
         mainBrowser = WebViewModel(url: DC.home)

@@ -123,6 +123,13 @@ enum ContentScript {
       'html.dcapp-duocol .thum-txtin img,html.dcapp-duocol .thum-txtin video,html.dcapp-duocol .thum-txtin iframe{max-width:calc(100% + env(safe-area-inset-left) + env(safe-area-inset-right))!important}',
       // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
       'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add,html.dcapp-duoflip #dcapp-headbar{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      // 글 아래 목록보기·수정·삭제 버튼 줄: 오른쪽 끝(삭제)이 세로 줄 터치 차단막 밑에 깔려 안 눌림 → 다른 글자칸처럼 줄 밖으로
+      'html.dcapp-duocol .btn-justify-area{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      'html.dcapp-duoflip .btn-justify-area{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      // 세로 컨트롤바가 페이지 위에 떠 있는 화면(일반 폰·아이패드·분할): 수정·삭제 줄을 바 폭만큼 비움 (앱이 --dcapp-bar-l/r 값을 넣어 줌)
+      '.dcapp-btnrow{box-sizing:border-box!important;border-left:var(--dcapp-bar-l,0px) solid transparent!important;border-right:var(--dcapp-bar-r,0px) solid transparent!important}',
+      'html.dcapp-duocol .dcapp-btnrow{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      'html.dcapp-duoflip .dcapp-btnrow{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
       'html.dcapp-duoflip::before{width:env(safe-area-inset-left)!important}',
       // 화면 전체 폭으로 뜨는 창(디시콘 정보 등)은 세로 줄 밑으로 깔려 오른쪽 끝 버튼(사용·X)이 터치 차단막에 막힘 → 창 안쪽을 줄 밖으로 비움
       'html.dcapp-duocol .layer-center-popup.full{box-sizing:border-box!important;padding-left:env(safe-area-inset-left)!important;padding-right:env(safe-area-inset-right)!important}',
@@ -315,6 +322,21 @@ enum ContentScript {
     var bn = document.getElementById('blockNick');          // 디시 '차단 닉네임'에 쓰이는 값도 원래 이름으로
     var cur = bn ? (bn.getAttribute('data-set') || '') : '';
     if (bn && /\.\.$/.test(cur) && full.indexOf(cur.replace(/\.+$/, '')) === 0) bn.setAttribute('data-set', full);
+  }
+  /// 글 아래 수정·삭제·목록보기·글쓰기 버튼이 든 '전체 폭 줄'을 찾아 표시 → 세로 줄(시계 자리) 밖으로 비움
+  /// (줄의 클래스가 글마다 달라서 이름이 아니라 버튼 글자로 찾음)
+  function markViewButtons() {
+    var area = document.querySelector('.gall-thum-btm');
+    if (!area) return;
+    Array.prototype.forEach.call(area.querySelectorAll('button, a'), function (b) {
+      if (!/^(수정|삭제|목록보기|글쓰기)$/.test(txt(b))) return;
+      var br = b.getBoundingClientRect();
+      if (!br.width) return;
+      var row = b.parentElement;
+      while (row && row !== area && row.getBoundingClientRect().width < innerWidth - 2) row = row.parentElement;
+      if (!row || row === area || row.classList.contains('dcapp-btnrow')) return;
+      if (row.getBoundingClientRect().height <= 140 && !row.querySelector('.thum-txt, .thum-txtin')) row.classList.add('dcapp-btnrow');
+    });
   }
   /// 글 목록의 닉네임: 디시가 긴 닉네임을 '가나다..'로 줄여 보냄 → 같은 행의 숨은 정보(blockInfo)에 있는 원래 닉네임으로 되돌려 표시
   function expandListNicks() {
@@ -1082,6 +1104,8 @@ enum ContentScript {
       });
     });
     if (texts.length) m = { t: texts.join(' · ') };
+    // 고닉 식별코드 보기: 메모가 없는 고닉(아이디 있음, 유동 아님)의 메모 자리에 아이디를 '보여주기만' 함 (메모로 저장 안 함, 자동메모와는 같이 못 씀)
+    if (!texts.length && cfg.showIdCode === true && !cfg.autoMemo && idn.id && !idn.ip) m = { t: idn.id };
     // 자동메모: 글 목록의 로그인 계정(아이디 있음, 유동 아님)에 보이는 메모가 하나도 없으면 아이디로 메모
     if (!texts.length && cfg.autoMemo && (u.kind === 'post' || u.kind === 'comment') && idn.id && !idn.ip) {
       var okGallery = cfg.autoMemo === 'all' || (cfg.autoMemo === 'gallery' && gid) ||
@@ -1680,6 +1704,7 @@ enum ContentScript {
     try { markReadRows(); } catch (e) {}
     try { expandListNicks(); } catch (e) {}
     try { expandArticleNick(); } catch (e) {}
+    try { markViewButtons(); } catch (e) {}
     try { listRowLayout(); } catch (e) {}
     try { applyListFilter(); } catch (e) {}
     try { buildPager(); } catch (e) {}
@@ -3647,7 +3672,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v238-duopopup', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v243-barinset', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -3723,6 +3748,31 @@ enum ContentScript {
       out.push('[' + n.t + '] ' + n.kind + ' ' + n.method + ' ' + n.status + ' ' + n.url);
       if (n.body) out.push('    → ' + n.body);
     });
+    // 글 아래 수정·삭제 버튼: 위치, 그 자리 맨 위에 있는 요소, 감싼 칸들의 구조 (세로 줄 터치 차단막·덧씌운 칸에 가려졌는지 확인용)
+    try {
+      var sai = document.getElementById('dcapp-sideprobe');
+      var saiCS = sai ? getComputedStyle(sai) : null;
+      var saiR = saiCS ? (parseFloat(saiCS.paddingRight) || 0) : 0;
+      out.push('--- 글 아래 버튼 ---  html클래스=' + document.documentElement.className.split(/\s+/).filter(function (c) { return /^dcapp-duo/.test(c); }).join(',') +
+               ' 안전영역(좌,우)=' + (saiCS ? saiCS.paddingLeft + ',' + saiCS.paddingRight : '?') + ' 화면폭=' + innerWidth);
+      var barea = document.querySelector('.gall-thum-btm') || document.body;
+      Array.prototype.forEach.call(barea.querySelectorAll('button, a'), function (b) {
+        if (!/^(수정|삭제|목록보기|글쓰기)$/.test(txt(b))) return;
+        var r = b.getBoundingClientRect();
+        var top = r.width ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+        out.push('  [' + txt(b) + '] ' + b.tagName + '.' + clsOf(b).slice(0, 30) + ' 좌=' + Math.round(r.left) + ' 우=' + Math.round(r.right) + ' 폭=' + Math.round(r.width) +
+                 ' 맨위요소=' + (top ? (top.tagName + (top.id ? '#' + top.id : '') + '.' + String(top.className).slice(0, 30)) : '(안 보임)') +
+                 (top && (top === b || b.contains(top)) ? ' (버튼 자신)' : (top ? ' (다른 요소가 덮고 있음)' : '')) +
+                 (r.width && r.right > innerWidth - saiR + 1 ? ' ★세로 줄 안에 걸쳐 있음' : ''));
+        var e = b.parentElement, depth = 0;
+        while (e && e !== barea && depth < 5 && r.width) {
+          var cs = getComputedStyle(e), er = e.getBoundingClientRect();
+          out.push('      ↑ ' + e.tagName + (e.id ? '#' + e.id : '') + '.' + clsOf(e).slice(0, 30) + ' 폭=' + Math.round(er.width) + ' 높이=' + Math.round(er.height) +
+                   ' disp=' + cs.display + ' pos=' + cs.position + ' 오른쪽테두리=' + cs.borderRightWidth + ' 오른쪽안쪽여백=' + cs.paddingRight);
+          e = e.parentElement; depth++;
+        }
+      });
+    } catch (e0) {}
     var bp = document.getElementById('board_pw');      // 글 수정·삭제 비밀번호 확인 페이지
     if (bp) out.push('board_pw: 글자수=' + (bp.value || '').length + ' 직접입력표시=' + (bp.getAttribute('data-dcapp-user') || '0') +
                      ' readonly=' + !!bp.readOnly + ' disabled=' + !!bp.disabled + ' 채우기시도=' + (bp.getAttribute('data-dcapp-anon-tries') || '0'));
