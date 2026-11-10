@@ -124,6 +124,9 @@ enum ContentScript {
       // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
       'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add,html.dcapp-duoflip #dcapp-headbar{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
       'html.dcapp-duoflip::before{width:env(safe-area-inset-left)!important}',
+      // 화면 전체 폭으로 뜨는 창(디시콘 정보 등)은 세로 줄 밑으로 깔려 오른쪽 끝 버튼(사용·X)이 터치 차단막에 막힘 → 창 안쪽을 줄 밖으로 비움
+      'html.dcapp-duocol .layer-center-popup.full{box-sizing:border-box!important;padding-left:env(safe-area-inset-left)!important;padding-right:env(safe-area-inset-right)!important}',
+      'html.dcapp-duoflip .layer-center-popup.full{padding-left:0!important;padding-right:env(safe-area-inset-left)!important}',
       'html.dcapp-duoflip::after{width:0!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
@@ -3644,7 +3647,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v237-cmttext2', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v238-duopopup', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

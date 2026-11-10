@@ -228,6 +228,8 @@ private struct CommentComposer: View {
                 CommentTxtconPanel(model: model)
             }
         }
+        // 내용이 원래 필요한 높이를 재도록 세로는 제안받은 크기에 맞추지 않음 (안 그러면 바깥 높이를 못 박은 상태에서 줄어든 크기만 재서, 글이 늘어도 상자가 안 따라 늘어남)
+        .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in contentH = h }
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
         .frame(maxWidth: .infinity)
