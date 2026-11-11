@@ -348,7 +348,7 @@ struct AutoImageSettingsView: View {
             }
             .environmentObject(favorites)
         }
-        .onChange(of: pickerItems) { _, items in
+        .onChangeCompat(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
             isImporting = true
             Task {

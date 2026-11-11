@@ -90,7 +90,7 @@ struct AboutView: View {
     private var hiddenBox: some View {
         VStack(spacing: 0) {
             Toggle("광고 차단", isOn: $adBlock)
-                .onChange(of: adBlock) { _, _ in
+                .onChangeCompat(of: adBlock) { _, _ in
                     NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                 }
                 .padding(.vertical, 10)

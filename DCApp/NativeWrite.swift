@@ -458,7 +458,7 @@ struct NativeWriteView: View {
         // .current: 사진 앱에 있는 원본 파일 그대로 받음 (HEIC 등은 올리기 전에 JPEG로 바꿈)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 20,
                       matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
-        .onChange(of: photoItems) { _, items in loadPhotos(items) }
+        .onChangeCompat(of: photoItems) { _, items in loadPhotos(items) }
         .sheet(isPresented: $showGridPicker) {
             PhotoGridPicker(maxCount: 20, onPick: loadAssets, onCapture: loadCaptured) {
                 // 사진 접근이 막혀 있으면 iOS 기본 선택기로 (시트가 다 닫힌 뒤에)
@@ -489,7 +489,7 @@ struct NativeWriteView: View {
             }
         }
         // 제목 칸에 커서가 있을 때 본문 칸을 눌러 편집이 시작되면 제목 포커스를 풀어 커서를 본문으로 옮김
-        .onChange(of: session.editingRich) { _, on in
+        .onChangeCompat(of: session.editingRich) { _, on in
             if on, focus == .title {
                 focus = nil
                 // 제목 포커스를 풀 때 SwiftUI가 방금 커서가 들어간 본문까지 내려 버릴 수 있어서, 잠깐 뒤 본문에 커서를 다시 확실히 넣음
@@ -678,7 +678,7 @@ struct NativeWriteView: View {
                     .submitLabel(.next)
                     .onSubmit { focus = nil; session.focusFirstText() }
                     // 하드웨어 키보드 Tab: 제목 → 본문
-                    .onKeyPress(.tab) { focus = nil; session.focusFirstText(); return .handled }
+                    .onTabKeyCompat { focus = nil; session.focusFirstText() }
                     .padding(.horizontal, 14).padding(.vertical, 16)      // 글자 왼쪽을 위쪽 닉네임 칸(14pt)과 맞춤
                 Rectangle().fill(DCTheme.navy.opacity(0.7)).frame(height: 1)
 
@@ -916,7 +916,7 @@ struct NativeWriteView: View {
                         }
                         .padding(20)
                         .frame(width: 300)
-                        .presentationCompactAdaptation(.popover)
+                        .popoverAdaptationCompat()
                     }
                     Menu {
                         ForEach(RichText.colors.indices, id: \.self) { i in

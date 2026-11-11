@@ -696,8 +696,8 @@ struct BrowserView: View {
                 GeometryReader { g in
                     Color.clear
                         .onAppear { viewSize = g.size; updateSideColumn(top: g.frame(in: .global).minY) }
-                        .onChange(of: g.size) { _, sz in viewSize = sz; updateSideColumn(top: g.frame(in: .global).minY) }
-                        .onChange(of: g.frame(in: .global).minY) { _, y in updateSideColumn(top: y) }
+                        .onChangeCompat(of: g.size) { _, sz in viewSize = sz; updateSideColumn(top: g.frame(in: .global).minY) }
+                        .onChangeCompat(of: g.frame(in: .global).minY) { _, y in updateSideColumn(top: y) }
                         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                             updateSideColumn(top: g.frame(in: .global).minY)
                         }
@@ -795,15 +795,15 @@ struct BrowserView: View {
                         GeometryReader { g in
                             Color.clear
                                 .onAppear { bottomBarHeight = g.size.height }
-                                .onChange(of: g.size.height) { _, h in bottomBarHeight = h }
+                                .onChangeCompat(of: g.size.height) { _, h in bottomBarHeight = h }
                         }
                     }
                     .modifier(SplitBottom(listWidth: splitListWidth, totalWidth: viewSize.width))
                     .transition(.opacity)
                 }
             }
-            .onChange(of: bottomBarHeight) { _, _ in updateBottomInset() }
-            .onChange(of: keyboardVisible) { _, _ in updateBottomInset() }
+            .onChangeCompat(of: bottomBarHeight) { _, _ in updateBottomInset() }
+            .onChangeCompat(of: keyboardVisible) { _, _ in updateBottomInset() }
             // 키보드가 정말 화면에 올라와 있는지는 키보드 위치로 판단 (화면을 돌릴 때 오는 알림만 보고 바를 숨기지 않게)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { n in
                 keyboardFrameChanged(n)
@@ -1115,7 +1115,7 @@ struct BrowserView: View {
             .overlay(alignment: .bottom) { CommentComposerHost(model: model, barInset: composerBarInset, barLeft: barMirrored).ignoresSafeArea(.keyboard, edges: .bottom) }   // 앱 댓글 입력창 (키보드가 내려가는 동안 입력창·어두운 막이 키보드 높이만큼 줄어 아래 흰 바탕이 보이지 않게 화면 맨 아래까지 유지)
             .fullScreenCover(item: $model.imageViewer) { item in
                 ImageViewer(item: item)
-                    .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
+                    .presentationBackgroundCompat(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
             }
             .overlay { commentTextPromptButton }
             .sheet(item: $idSearchTarget) { t in
@@ -1129,13 +1129,13 @@ struct BrowserView: View {
                     }
                 }
             }
-            .onChange(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
+            .onChangeCompat(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
             .fullScreenCover(item: $model.commentText) { item in
                 CommentTextViewer(item: item) { url in
                     model.commentText = nil     // 디시 링크는 닫고 앱 안에서 열기
                     model.load(url)
                 }
-                .presentationBackground(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
+                .presentationBackgroundCompat(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
             }
             .sheet(isPresented: Binding(get: { autoImageGallery != nil },
                                         set: { if !$0 { autoImageGallery = nil } })) {
@@ -1188,11 +1188,11 @@ struct BrowserView: View {
         ZStack(alignment: .top) {
             topOverlayItems
         }
-        .onChange(of: Double(barCoverWidth) + (barMirrored ? 1000 : 0)) { _, _ in applyBarInset() }
-        .onChange(of: router.barOverlayWidth) { _, _ in applyBarInset() }
-        .onChange(of: router.barOverlayLeft) { _, _ in applyBarInset() }
-        .onChange(of: router.splitActive) { _, _ in applyBarInset() }
-        .onChange(of: compactRaw) { _, _ in settleCompact() }
+        .onChangeCompat(of: Double(barCoverWidth) + (barMirrored ? 1000 : 0)) { _, _ in applyBarInset() }
+        .onChangeCompat(of: router.barOverlayWidth) { _, _ in applyBarInset() }
+        .onChangeCompat(of: router.barOverlayLeft) { _, _ in applyBarInset() }
+        .onChangeCompat(of: router.splitActive) { _, _ in applyBarInset() }
+        .onChangeCompat(of: compactRaw) { _, _ in settleCompact() }
     }
 
     private var topOverlayItems: some View {

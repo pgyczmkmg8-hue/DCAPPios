@@ -45,7 +45,8 @@ nonisolated enum Profile {
 
     /// 웹(디시 로그인 쿠키 등) 저장소. 첫 프로필은 기본 저장소 그대로 → 로그인 유지
     static let websiteDataStore: WKWebsiteDataStore = {
-        guard activeID != primaryID, let u = UUID(uuidString: activeID) else { return .default() }
+        // 프로필별 웹 저장소는 iOS 17부터 가능 — iOS 16에서는 모든 프로필이 같은 디시 로그인(쿠키)을 씀
+        guard #available(iOS 17.0, *), activeID != primaryID, let u = UUID(uuidString: activeID) else { return .default() }
         return WKWebsiteDataStore(forIdentifier: u)
     }()
 
@@ -91,7 +92,7 @@ nonisolated enum Profile {
         for service in ["DCApp.dcinside.accounts.\(id)", "DCApp.dcinside.anon.\(id)"] {
             SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service] as CFDictionary)
         }
-        if let u = UUID(uuidString: id) { try? await WKWebsiteDataStore.remove(forIdentifier: u) }
+        if #available(iOS 17.0, *), let u = UUID(uuidString: id) { try? await WKWebsiteDataStore.remove(forIdentifier: u) }
     }
 }
 

@@ -83,7 +83,7 @@ struct SavedPostsList: View {
         }
         .overlay {
             if visiblePosts.isEmpty {
-                ContentUnavailableView(
+                EmptyStateView(
                     store.posts.isEmpty ? "보관한 글이 없어요" : "이 폴더에 글이 없어요",
                     systemImage: "bookmark",
                     description: Text(store.posts.isEmpty
@@ -179,7 +179,7 @@ struct SavedPostReader: View {
                FileManager.default.fileExists(atPath: file.path) {
                 ArchiveWebView(fileURL: file, baseURL: post.url)
             } else {
-                ContentUnavailableView("저장된 사본이 없어요", systemImage: "doc",
+                EmptyStateView("저장된 사본이 없어요", systemImage: "doc",
                                        description: Text("오른쪽 위 '원본 열기'로 확인하세요."))
             }
         }
@@ -309,7 +309,7 @@ struct DraftPickerSheet: View {
             .environment(\.editMode, $editMode)
             .overlay {
                 if store.drafts.isEmpty {
-                    ContentUnavailableView("임시저장한 글이 없어요", systemImage: "doc.text")
+                    EmptyStateView("임시저장한 글이 없어요", systemImage: "doc.text")
                 }
             }
             .navigationTitle(editing ? (selection.isEmpty ? "삭제할 글 선택" : "\(selection.count)개 선택됨") : "임시저장 불러오기")

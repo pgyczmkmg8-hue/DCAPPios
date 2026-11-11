@@ -181,11 +181,11 @@ struct DCApp: App {
                 .environmentObject(router)
                 .overlay { LockCover() }                    // 잠겨 있으면 첫 화면부터 가림 (가림막 창이 뜨기 전 깜빡임 방지)
                 .task { await AppLock.shared.startup() }    // 잠금이 켜져 있으면 켜자마자 인증
-        }
-        // 백그라운드로 갈 때 알림 확인 예약 → iOS가 깨우면 디시 알림 확인
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { DCNotify.schedule() }
-            AppLock.shared.scenePhaseChanged(phase)      // 앱 잠금 / 전환 화면 가리기
+                // 백그라운드로 갈 때 알림 확인 예약 → iOS가 깨우면 디시 알림 확인
+                .onChangeCompat(of: scenePhase) { _, phase in
+                    if phase == .background { DCNotify.schedule() }
+                    AppLock.shared.scenePhaseChanged(phase)      // 앱 잠금 / 전환 화면 가리기
+                }
         }
         .backgroundTask(.appRefresh(DCNotify.refreshTaskID)) {
             await DCNotify.backgroundRefresh()
@@ -296,7 +296,7 @@ struct RootView: View {
                         // 위층: 왼쪽(목록) 화면을 창 전체 폭으로 (내비게이션 바 없이 SwiftUI로만) — 목록 폭 밖은 비어 있어 글 화면이 눌리고,
                         // 컨트롤바는 창 오른쪽 끝에서 글 위에 떠 있음
                         BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true, splitListWidth: list)
-                            .safeAreaPadding(.bottom, Self.windowBottomSafe)   // 내비게이션 스택이 없어진 만큼 아래 안전 영역(홈 바)을 되돌려 컨트롤바 높이를 한 화면일 때와 같게
+                            .safeAreaPaddingBottomCompat(Self.windowBottomSafe)   // 내비게이션 스택이 없어진 만큼 아래 안전 영역(홈 바)을 되돌려 컨트롤바 높이를 한 화면일 때와 같게
                             .id(themeRaw)
                             .frame(width: total, height: geo.size.height, alignment: .topLeading)
                     } else {
@@ -353,8 +353,8 @@ struct RootView: View {
             GeometryReader { g in
                 Color.clear
                     .onAppear { windowHeight = g.size.height; windowWidth = g.size.width; scheduleSplit() }
-                    .onChange(of: g.size.height) { _, h in windowHeight = h; scheduleSplit() }
-                    .onChange(of: g.size.width) { _, w in windowWidth = w; scheduleSplit() }
+                    .onChangeCompat(of: g.size.height) { _, h in windowHeight = h; scheduleSplit() }
+                    .onChangeCompat(of: g.size.width) { _, w in windowWidth = w; scheduleSplit() }
             }
             .ignoresSafeArea()
         }
@@ -372,11 +372,11 @@ struct RootView: View {
         .keepsTopStatusBar()
         .animation(.spring(duration: 0.35), value: compactMode)
         .background { HingeProbe().allowsHitTesting(false) }   // 듀오가 접혔는지(바깥 디스플레이) 감지
-        .onChange(of: router.sheet) { _, new in
+        .onChangeCompat(of: router.sheet) { _, new in
             // 웹 화면의 키보드가 열려 있는 채로 시트가 올라오면 키보드 내려가는 동작과 시트 전환이 겹쳐 느려지므로, 시트를 띄울 때 먼저 키보드를 내림
             if new != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
         }
-        .onChange(of: splitSetting) { _, _ in scheduleSplit() }
+        .onChangeCompat(of: splitSetting) { _, _ in scheduleSplit() }
         // (높이 조절은 손가락을 바로 따라오도록 애니메이션 없이)
         .onAppear {
             StatusBarStyler.applySoon()   // 상태바(시계·배터리) 글씨: 유색 상단바면 흰색
@@ -398,15 +398,15 @@ struct RootView: View {
             }
         }
         .animation(.spring(duration: 0.35), value: alarms.incoming?.item.id)
-        .onChange(of: themeRaw) { _, _ in StatusBarStyler.applySoon() }          // 테마를 바꾸면 상태바 글씨 색도
-        .onChange(of: systemScheme) { _, v in
+        .onChangeCompat(of: themeRaw) { _, _ in StatusBarStyler.applySoon() }          // 테마를 바꾸면 상태바 글씨 색도
+        .onChangeCompat(of: systemScheme) { _, v in
             DarkMode.systemChanged(dark: v == .dark)
             StatusBarStyler.applySoon()
         }      // 다크 모드 전환 (테마 색이 바뀔 수 있음)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             StatusBarStyler.apply()
         }
-        .onChange(of: alarms.incoming?.item.id) { _, newID in
+        .onChangeCompat(of: alarms.incoming?.item.id) { _, newID in
             // 4초 뒤 자동으로 닫힘
             bannerTask?.cancel()
             guard newID != nil else { return }

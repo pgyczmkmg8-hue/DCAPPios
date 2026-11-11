@@ -51,13 +51,13 @@ struct SettingsView: View {
                         Label("테마", systemImage: "paintpalette")
                     }
                     .pickerStyle(.navigationLink)
-                    .onChange(of: themeRaw) { _, _ in
+                    .onChangeCompat(of: themeRaw) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 웹페이지 색도 다시 칠하기
                     }
                     Toggle(isOn: $darkFollowSystem) {
                         Label("다크모드를 시스템에 맞추기", systemImage: "circle.lefthalf.filled")
                     }
-                    .onChange(of: darkFollowSystem) { _, _ in DarkMode.followChanged() }
+                    .onChangeCompat(of: darkFollowSystem) { _, _ in DarkMode.followChanged() }
                     NavigationLink { ControlBarOrderView() } label: {
                         Label("컨트롤바 버튼", systemImage: "arrow.up.arrow.down")
                     }
@@ -89,7 +89,7 @@ struct SettingsView: View {
                 if DCNotify.featureAvailable {
                 Section {
                     Toggle("디시 알림 받기", isOn: $notifyEnabled)
-                        .onChange(of: notifyEnabled) { _, on in
+                        .onChangeCompat(of: notifyEnabled) { _, on in
                             guard on else { DCNotify.schedule(); notifyResult = nil; return }
                             Task {
                                 if await DCNotify.requestPermission() {
@@ -125,7 +125,7 @@ struct SettingsView: View {
                 // 보안: 앱 잠금 / 전환 화면 가리기
                 Section {
                     Toggle("\(AppLock.biometryName)로 앱 잠금", isOn: $appLock)
-                        .onChange(of: appLock) { _, on in
+                        .onChangeCompat(of: appLock) { _, on in
                             guard on else { lockMessage = nil; return }
                             Task {
                                 // 켤 때 한 번 인증해서 되는지 확인
@@ -362,6 +362,8 @@ struct BlockSettingsView: View {
     @AppStorage(AutoMemo.enabledKey, store: Profile.defaults) private var autoMemo = false
     @AppStorage(IdCode.key, store: Profile.defaults) private var showIdCode = false
     @State private var autoMemoMode = AutoMemo.mode
+    @ObservedObject private var memoStore = MemoStore.shared
+    @State private var confirmDeleteIDMemos = false
 
     var body: some View {
         Form {
@@ -399,6 +401,22 @@ struct BlockSettingsView: View {
                      : "메모가 없는 고닉(로그인 계정)의 메모 자리에 식별코드(아이디)를 보여 줘요. 메모로 저장하지는 않고 보여 주기만 해요. 직접 단 메모가 있으면 그 메모가 보여요. 자동메모와는 같이 쓸 수 없어요.")
             }
 
+            // 식별코드 메모 일괄 삭제 (자동메모가 달아 둔 '내용 = 식별코드' 메모)
+            Section {
+                Button(role: .destructive) { confirmDeleteIDMemos = true } label: {
+                    Text("식별코드와 같은 메모 일괄 삭제 (\(memoStore.idSameAsTextMemos.count)개)")
+                }
+                .disabled(memoStore.idSameAsTextMemos.isEmpty)
+            } footer: {
+                Text("고닉(아이디) 메모 중 내용이 식별코드와 똑같은 것만 지워요. 자동메모가 달아 둔 메모예요. 직접 다른 내용으로 쓴 메모와 닉네임·IP 메모는 그대로 둬요.")
+            }
+            .confirmationDialog("식별코드와 같은 메모 \(memoStore.idSameAsTextMemos.count)개를 지울까요?", isPresented: $confirmDeleteIDMemos, titleVisibility: .visible) {
+                Button("삭제", role: .destructive) { memoStore.removeIDSameAsText() }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("되돌릴 수 없어요. 자동메모가 켜져 있으면 목록을 불러올 때 다시 달릴 수 있어요.")
+            }
+
             // 자동메모
             Section {
                 Toggle("자동메모", isOn: $autoMemo)
@@ -414,12 +432,12 @@ struct BlockSettingsView: View {
                 Text("글 목록을 불러올 때 메모가 없는 로그인 계정(유동 제외)에 닉네임이 아닌 아이디를 자동으로 메모해요. '갤러리마다'는 본 갤러리에서만 보이는 메모로 달아요. '선택한 갤러리만'은 고른 갤러리에서만 달아요.")
             }
         }
-        .onChange(of: autoMemo) { _, on in
+        .onChangeCompat(of: autoMemo) { _, on in
             if on { showIdCode = false }      // 자동메모를 켜면 식별코드 보기는 저절로 꺼짐 (같이 쓸 수 없음)
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
-        .onChange(of: showIdCode) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
-        .onChange(of: autoMemoMode) { _, v in
+        .onChangeCompat(of: showIdCode) { _, _ in NotificationCenter.default.post(name: DC.filtersChanged, object: nil) }
+        .onChangeCompat(of: autoMemoMode) { _, v in
             Profile.defaults.set(v.rawValue, forKey: AutoMemo.modeKey)
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
@@ -456,7 +474,7 @@ struct DetailSettingsView: View {
             // 앱 아이콘 / 제스처
             Section("앱") {
                 Toggle("화면을 오른쪽으로 쓸어 뒤로가기", isOn: $fullSwipeBack)
-                    .onChange(of: fullSwipeBack) { _, _ in
+                    .onChangeCompat(of: fullSwipeBack) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
                 if fullSwipeBack {
@@ -476,15 +494,15 @@ struct DetailSettingsView: View {
                     }
                 }
                 Toggle("사이트 상단 메뉴 숨기기", isOn: $hideSiteHeader)
-                    .onChange(of: hideSiteHeader) { _, _ in
+                    .onChangeCompat(of: hideSiteHeader) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
                 Toggle("홈 화면 대신 실북갤 순위 보기", isOn: $homeRankOnly)
-                    .onChange(of: homeRankOnly) { _, _ in
+                    .onChangeCompat(of: homeRankOnly) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
                 Toggle("댓글돌이 댓글 숨기기", isOn: $hideDory)
-                    .onChange(of: hideDory) { _, _ in
+                    .onChangeCompat(of: hideDory) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
             }
@@ -979,11 +997,11 @@ struct ToolsSettingsView: View {
             // 댓글
             Section {
                 Toggle("앱 댓글 입력창", isOn: $nativeComment)
-                    .onChange(of: nativeComment) { _, _ in
+                    .onChangeCompat(of: nativeComment) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
                 Toggle("댓글창을 키보드 위에 붙이기", isOn: $dockComment)
-                    .onChange(of: dockComment) { _, _ in
+                    .onChangeCompat(of: dockComment) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
             } header: {
@@ -1053,7 +1071,7 @@ private struct FontSizeRow: View {
         Stepper(value: Binding(get: { current }, set: { stored = $0 == base ? 0 : $0 }), in: 10...28) {
             LabeledContent(title, value: "\(current)pt")
         }
-        .onChange(of: stored) { _, _ in
+        .onChangeCompat(of: stored) { _, _ in
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
     }

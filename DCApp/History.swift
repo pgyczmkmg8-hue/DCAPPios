@@ -284,7 +284,7 @@ struct ReadPostsList: View {
         }
         .overlay {
             if store.items.isEmpty {
-                ContentUnavailableView("읽은 글이 없어요", systemImage: "book",
+                EmptyStateView("읽은 글이 없어요", systemImage: "book",
                                        description: Text("글을 열면 여기에 기록되고, 글 목록에서 보라색으로 표시돼요."))
             }
         }
@@ -360,7 +360,7 @@ struct WrittenList: View {
         }
         .overlay {
             if list.isEmpty {
-                ContentUnavailableView(kind == .post ? "작성한 글이 없어요" : "댓글 단 글이 없어요",
+                EmptyStateView(kind == .post ? "작성한 글이 없어요" : "댓글 단 글이 없어요",
                                        systemImage: kind == .post ? "square.and.pencil" : "text.bubble",
                                        description: Text("이 앱에서 쓴 \(kind == .post ? "글" : "댓글")이 여기에 기록돼요."))
             }

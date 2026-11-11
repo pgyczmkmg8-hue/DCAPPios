@@ -80,7 +80,7 @@ struct CommentComposerHost: View {
                     .background {
                         GeometryReader { g in
                             Color.clear
-                                .onChange(of: g.frame(in: .global).maxY) { _, y in realign(composerBottom: y) }
+                                .onChangeCompat(of: g.frame(in: .global).maxY) { _, y in realign(composerBottom: y) }
                                 .onAppear { realign(composerBottom: g.frame(in: .global).maxY) }
                         }
                     }
@@ -430,7 +430,7 @@ private struct CommentTxtconPanel: View {
                                     .lineLimit(1...3)
                                     .focused($focused)
                                     .submitLabel(.done)
-                                    .onChange(of: text) { _, v in
+                                    .onChangeCompat(of: text) { _, v in
                                         Task {
                                             let kept = await model.txtconSetText(v)
                                             if kept != v { text = kept }      // 디시가 못 쓰는 글자·글자수는 되돌림

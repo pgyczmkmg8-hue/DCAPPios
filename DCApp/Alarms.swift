@@ -162,7 +162,7 @@ struct AlarmsList: View {
         }
         .overlay {
             if store.items.isEmpty {
-                ContentUnavailableView("받은 알림이 없어요", systemImage: "bell",
+                EmptyStateView("받은 알림이 없어요", systemImage: "bell",
                                        description: Text("로그인한 상태로 디시를 보는 동안 내 글·댓글에 달린 새 댓글 알림이 여기에 쌓여요."))
             }
         }

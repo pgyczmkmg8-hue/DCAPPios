@@ -194,8 +194,8 @@ struct ImageViewer: View {
     }
 
     private var magnifyGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { v in scale = min(5, max(1, baseScale * v.magnification)) }
+        MagnificationGesture()      // iOS 16에서도 되는 확대 제스처
+            .onChanged { v in scale = min(5, max(1, baseScale * v)) }
             .onEnded { _ in
                 baseScale = scale
                 if !zoomed { resetZoom(animated: true) }

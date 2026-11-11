@@ -315,7 +315,7 @@ struct CoverSettingsView: View {
         }
         .navigationTitle("가림막 꾸미기")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: photoItem) { _, item in
+        .onChangeCompat(of: photoItem) { _, item in
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self) {

@@ -124,6 +124,24 @@ final class MemoStore: ObservableObject {
         if !added.isEmpty { memos.append(contentsOf: added) }
     }
 
+    /// 아이디 메모 중 내용이 식별코드(아이디) 그대로인 것 — 자동메모가 달아 둔 메모 (직접 쓴 다른 내용의 메모는 해당 없음)
+    var idSameAsTextMemos: [UserMemo] {
+        memos.filter { m in
+            guard m.kind == .id else { return false }
+            let t = m.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !t.isEmpty && t.caseInsensitiveCompare(m.value.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+        }
+    }
+
+    /// 내용이 식별코드와 같은 아이디 메모를 한꺼번에 삭제 → 지운 개수
+    @discardableResult
+    func removeIDSameAsText() -> Int {
+        let ids = Set(idSameAsTextMemos.map(\.id))
+        guard !ids.isEmpty else { return 0 }
+        memos.removeAll { ids.contains($0.id) }
+        return ids.count
+    }
+
     /// 백업 복원용
     func replaceAll(_ list: [UserMemo]) { memos = Self.withUIDs(list) }
 }
@@ -155,7 +173,7 @@ struct MemoListView: View {
         }
         .overlay {
             if store.memos.isEmpty {
-                ContentUnavailableView("메모한 유저가 없어요", systemImage: "note.text",
+                EmptyStateView("메모한 유저가 없어요", systemImage: "note.text",
                                        description: Text("글 목록이나 댓글을 길게 누르고 '메모'를 고르세요."))
             }
         }

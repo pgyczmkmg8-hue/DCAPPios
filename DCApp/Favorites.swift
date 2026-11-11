@@ -269,7 +269,7 @@ struct VisitedGalleriesList: View {
         }
         .overlay {
             if store.items.isEmpty {
-                ContentUnavailableView("방문한 갤러리가 없어요", systemImage: "clock",
+                EmptyStateView("방문한 갤러리가 없어요", systemImage: "clock",
                                        description: Text("갤러리에 들어가면 여기에 자동으로 기록돼요."))
             }
         }
@@ -416,7 +416,7 @@ struct FavoritesView: View {
         }
         .overlay {
             if favorites.items.isEmpty {
-                ContentUnavailableView(
+                EmptyStateView(
                     "즐겨찾는 갤러리가 없어요",
                     systemImage: "star",
                     description: Text("갤러리를 보다가 아래 ☆ 버튼을 누르면 바로 추가돼요.\n길게 누르면 이름을 바꿀 수 있어요.")

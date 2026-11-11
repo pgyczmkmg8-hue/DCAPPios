@@ -121,7 +121,7 @@ struct PhotoGridPicker: View {
         .sheetUnderBlueBar()
         .task { await model.start() }
         .onDisappear { model.stop() }
-        .onChange(of: model.album) { _, _ in model.reload() }
+        .onChangeCompat(of: model.album) { _, _ in model.reload() }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { img in
                 onCapture(img)
@@ -201,7 +201,7 @@ struct PhotoGridPicker: View {
         case .notDetermined:
             ProgressView()
         default:
-            ContentUnavailableView {
+            EmptyStateView {
                 Label("사진에 접근할 수 없어요", systemImage: "photo.on.rectangle")
             } description: {
                 Text("설정에서 사진 접근을 허용하거나, iOS 기본 선택기로 골라 주세요.")
@@ -267,7 +267,7 @@ struct PhotoGridPicker: View {
         }
         .overlay {
             if model.assets.count == 0 {
-                ContentUnavailableView("사진이 없어요", systemImage: "photo")
+                EmptyStateView("사진이 없어요", systemImage: "photo")
             }
         }
     }
