@@ -1121,6 +1121,14 @@ struct BrowserView: View {
             .sheet(item: $idSearchTarget) { t in
                 IdPostSearchSheet(gallery: t.gallery, code: t.code) { url in model.load(url) }
             }
+            .overlay(alignment: .top) {
+                // 뒤에서 작성글을 찾는 중이거나 끝났을 때 알림 칸 (누르면 결과 창)
+                if idSearchTarget == nil, !model.isDetailPane {
+                    IdSearchPill {
+                        if let g = IdPostSearcher.shared.gallery { idSearchTarget = IdSearchTarget(gallery: g, code: "") }
+                    }
+                }
+            }
             .onChange(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
             .fullScreenCover(item: $model.commentText) { item in
                 CommentTextViewer(item: item) { url in
