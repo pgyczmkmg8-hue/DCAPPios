@@ -1221,10 +1221,11 @@ struct DcconThumb: View {
 
     var body: some View {
         Group {
-            if let moving { AnimatedImageView(image: moving) }
+            if let moving { AnimatedImageView(image: moving).allowsHitTesting(false) }   // 움짤 그림이 버튼 터치를 가로채지 않게
             else if let img { Image(uiImage: img).resizable().scaledToFit() }
             else { Color(uiColor: .secondarySystemBackground).overlay { ProgressView().controlSize(.small) } }
         }
+        .contentShape(Rectangle())
         .task(id: url) {
             guard let url else { return }
             moving = animated ? DcconImageCache.shared.movingCached(url) : nil
