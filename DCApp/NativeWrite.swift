@@ -3,6 +3,7 @@ import PhotosUI
 import Photos
 import UniformTypeIdentifiers
 import Combine
+import ImageIO
 
 // MARK: - 앱 글쓰기 화면 (공식 앱 스타일)
 // 화면은 앱이 그리고, 등록은 뒤에 열린 디시 글쓰기 양식에 채워서 디시가 처리하게 함
@@ -690,7 +691,7 @@ struct NativeWriteView: View {
                             imageBlock(img, blockID: block.id)
                         } else {
                             RichTextView(blockID: block.id, session: session,
-                                         minLines: block.id == session.blocks.last?.id ? 8 : 1)   // 맨 끝 칸은 넉넉하게
+                                         minLines: block.id == session.blocks.last?.id ? (dropTarget != nil ? 2 : 8) : 1)   // 맨 끝 칸은 넉넉하게 (사진을 끄는 중엔 맨 끝에 놓기 쉽게 줄임)
                                 .padding(.horizontal, 9)      // 본문 글자 왼쪽도 닉네임 칸·제목과 맞춤
                                 .overlay(alignment: .topLeading) {
                                     if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
@@ -710,7 +711,7 @@ struct NativeWriteView: View {
                 }
 
                 // 맨 끝에 놓기
-                Color.clear.frame(height: 80)
+                Color.clear.frame(height: dropTarget != nil ? 56 : 80)
                     .overlay(alignment: .top) { dropLine(active: dropTarget == endDropID) }
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -758,10 +759,10 @@ struct NativeWriteView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(DCTheme.accent, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             )
-            .frame(height: active ? 64 : 0)
+            .frame(height: active ? 44 : 0)
             .opacity(active ? 1 : 0)
             .padding(.horizontal, 16)
-            .padding(.vertical, active ? 6 : 0)
+            .padding(.vertical, active ? 4 : 0)
             .animation(.easeOut(duration: 0.15), value: active)
     }
 
@@ -852,6 +853,8 @@ struct NativeWriteView: View {
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 8)
+            // 왼쪽으로 밀면 삭제
+            .modifier(SwipeToDelete { withAnimation { session.removeBlock(blockID) } })
             // 길게 눌러 끌면 위치 이동
             .draggable(WriteBlockDrag(id: blockID)) {
                 imagePicture(img)
@@ -1151,6 +1154,7 @@ final class DcconImageCache {
     static let shared = DcconImageCache()
     private let datas = NSCache<NSURL, NSData>()
     private let stills = NSCache<NSURL, UIImage>()
+    private let moving = NSCache<NSURL, UIImage>()      // 목록용 작은 움직이는 그림
 
     func still(_ url: URL) -> UIImage? { stills.object(forKey: url as NSURL) }
 
@@ -1159,6 +1163,38 @@ final class DcconImageCache {
         guard let data = await data(url), let img = UIImage(data: data) else { return nil }   // 목록은 첫 장만 (가볍게)
         stills.setObject(img, forKey: url as NSURL)
         return img
+    }
+
+    func movingCached(_ url: URL) -> UIImage? { moving.object(forKey: url as NSURL) }
+
+    /// 목록 썸네일: 움직이는 디시콘은 작게 줄인 프레임으로 움직이게 (움직이지 않는 그림이면 nil)
+    func thumbAnimated(_ url: URL) async -> UIImage? {
+        if let m = moving.object(forKey: url as NSURL) { return m }
+        guard let data = await data(url) else { return nil }
+        let img = await Task.detached { Self.decodeSmall(data) }.value
+        if let img { moving.setObject(img, forKey: url as NSURL) }
+        return img
+    }
+
+    nonisolated private static func decodeSmall(_ data: Data) -> UIImage? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let n = CGImageSourceGetCount(src)
+        if n <= 1 { return nil }
+        let opts: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                                     kCGImageSourceCreateThumbnailWithTransform: true,
+                                     kCGImageSourceThumbnailMaxPixelSize: 200]
+        var frames: [UIImage] = []
+        var total = 0.0
+        for i in 0..<min(n, 80) {
+            guard let cg = CGImageSourceCreateThumbnailAtIndex(src, i, opts as CFDictionary) else { continue }
+            frames.append(UIImage(cgImage: cg))
+            let props = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any]
+            let gif = props?[kCGImagePropertyGIFDictionary] as? [CFString: Any]
+            let d = (gif?[kCGImagePropertyGIFUnclampedDelayTime] as? Double)
+                ?? (gif?[kCGImagePropertyGIFDelayTime] as? Double) ?? 0.1
+            total += d < 0.02 ? 0.1 : d
+        }
+        return frames.count > 1 ? UIImage.animatedImage(with: frames, duration: total) : nil
     }
 
     /// 글에 넣을 때 미리보기: 움직이는 디시콘은 움직이게
@@ -1179,17 +1215,22 @@ final class DcconImageCache {
 
 struct DcconThumb: View {
     let url: URL?
+    var animated = false      // 디시콘 목록 칸에서만 움직이게 (탭 아이콘은 정지)
     @State private var img: UIImage?
+    @State private var moving: UIImage?
 
     var body: some View {
         Group {
-            if let img { Image(uiImage: img).resizable().scaledToFit() }
+            if let moving { AnimatedImageView(image: moving) }
+            else if let img { Image(uiImage: img).resizable().scaledToFit() }
             else { Color(uiColor: .secondarySystemBackground).overlay { ProgressView().controlSize(.small) } }
         }
         .task(id: url) {
             guard let url else { return }
+            moving = animated ? DcconImageCache.shared.movingCached(url) : nil
             img = DcconImageCache.shared.still(url)
             if img == nil { img = await DcconImageCache.shared.load(url) }
+            if animated, moving == nil { moving = await DcconImageCache.shared.thumbAnimated(url) }
         }
     }
 }
@@ -1239,7 +1280,7 @@ struct DcconPickerSheet: View {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 10)], spacing: 10) {
                             ForEach(items) { it in
                                 Button { pick(it) } label: {
-                                    DcconThumb(url: it.src)
+                                    DcconThumb(url: it.src, animated: true)
                                         .frame(width: 72, height: 72)
                                         .overlay { if inserting == it.id { ProgressView() } }
                                 }
@@ -1314,5 +1355,51 @@ private struct NativeWriteToast: View {
         }
         .animation(.spring(duration: 0.3), value: model.toast)
         .allowsHitTesting(false)
+    }
+}
+
+
+/// 사진 칸을 왼쪽으로 밀면 삭제 (끝까지 밀거나 충분히 밀고 놓으면 지워짐, 덜 밀면 제자리로)
+private struct SwipeToDelete: ViewModifier {
+    let onDelete: () -> Void
+    @State private var dx: CGFloat = 0
+    @State private var active = false
+    private let threshold: CGFloat = 90
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: dx)
+            .background(alignment: .trailing) {
+                if dx < -4 {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxHeight: .infinity)
+                        .frame(width: max(-dx, 0))
+                        .background(Color.red.opacity(min(1, -dx / threshold) * 0.9), in: RoundedRectangle(cornerRadius: 10))
+                        .padding(.vertical, 8)
+                        .padding(.trailing, 8)
+                        .clipped()
+                }
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 18)
+                    .onChanged { v in
+                        let h = v.translation.width, vt = v.translation.height
+                        if !active { guard h < 0, abs(h) > abs(vt) * 1.6 else { return }; active = true }
+                        dx = min(0, h)
+                    }
+                    .onEnded { v in
+                        defer { active = false }
+                        guard active else { return }
+                        if v.translation.width < -threshold || v.predictedEndTranslation.width < -220 {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            withAnimation(.easeOut(duration: 0.15)) { dx = -400 }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { onDelete() }
+                        } else {
+                            withAnimation(.spring(duration: 0.25)) { dx = 0 }
+                        }
+                    }
+            )
     }
 }

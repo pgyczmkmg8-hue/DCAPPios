@@ -135,6 +135,8 @@ struct GallerySearchSheet: View {
     let gallery: Gallery
     var heads: [HeadTab] = []
     let onSearch: (URL) -> Void
+    /// 식별코드(IP)로 작성글 찾기 창 열기 (입력해 둔 검색어를 넘김)
+    var onIdSearch: ((String) -> Void)? = nil
     @State private var head: HeadTab?
     @Environment(\.dismiss) private var dismiss
     @AppStorage("gallerySearchType", store: Profile.defaults) private var typeRaw = GallerySearchType.subjectMemo.rawValue
@@ -168,6 +170,20 @@ struct GallerySearchSheet: View {
                     Toggle("개념글에서만 검색", isOn: $recommendOnly)
                 } header: {
                     Text("\(gallery.name)에서 검색")
+                }
+
+                if let onIdSearch {
+                    Section {
+                        Button {
+                            let k = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                            dismiss()
+                            onIdSearch(k)
+                        } label: {
+                            Label("식별코드·IP로 작성글 찾기", systemImage: "person.text.rectangle")
+                        }
+                    } footer: {
+                        Text("디시는 식별코드 검색이 없어서, 목록을 여러 쪽 받아 같은 식별코드의 글만 모아요. 위 검색창에 식별코드를 적고 누르면 그대로 넘어가요.")
+                    }
                 }
 
                 if !recent.isEmpty {
@@ -297,6 +313,7 @@ struct BrowserView: View {
 
     // 키워드 차단 입력
     @State private var showKeywordPrompt = false
+    @State private var idSearchTarget: IdSearchTarget?
     @State private var keywordInput = ""
 
     // 구조 진단
@@ -390,6 +407,11 @@ struct BrowserView: View {
         guard usesSideBar, !barCollapsed, !(fillsTrailing && Self.hasSideColumnOnly) else { return 0 }
         return 64 + barEdge + 8
     }
+    /// 앱 댓글 입력창(디시콘 목록 등)이 세로 컨트롤바에 겹치지 않게 비울 폭 (듀오 옆 세로 줄 안의 막대는 줄 폭만큼)
+    private var composerBarInset: CGFloat {
+        guard usesSideBar, !barCollapsed else { return 0 }
+        return barCoverWidth     // 옆 세로 줄 안의 막대는 0 (줄 자리는 디시콘·글자콘 목록이 따로 비움)
+    }
     /// 글 아래 수정·삭제 버튼 줄이 컨트롤바에 겹치지 않게 웹 화면에 비울 폭을 알림
     private func applyBarInset() {
         if showsMenuButton && !model.isDetailPane {
@@ -418,7 +440,7 @@ struct BrowserView: View {
     }
 
     /// 앱 화면이 그려지는 일반 창에서 읽음 (앱 잠금·가림 화면 같은 덧씌운 창은 제외 — 그쪽이 키 창이면 0이 나올 수 있음)
-    private static var windowTrailingInset: CGFloat {
+    static var windowTrailingInset: CGFloat {
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
@@ -1061,7 +1083,13 @@ struct BrowserView: View {
         AnyView(layer5)
             .sheet(isPresented: $showGallerySearch) {
                 if let g = gallery {
-                    GallerySearchSheet(gallery: g, heads: galleryHeads) { url in model.load(url) }
+                    GallerySearchSheet(gallery: g, heads: galleryHeads, onSearch: { url in model.load(url) }, onIdSearch: { code in
+                        // 검색 창이 닫힌 뒤에 다음 창을 띄움 (바로 띄우면 무시될 때가 있음)
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(450))
+                            idSearchTarget = IdSearchTarget(gallery: g, code: code)
+                        }
+                    })
                 }
             }
             .sheet(isPresented: $showListFilter) {
@@ -1084,12 +1112,15 @@ struct BrowserView: View {
     private var layer7: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer6)
-            .overlay(alignment: .bottom) { CommentComposerHost(model: model).ignoresSafeArea(.keyboard, edges: .bottom) }   // 앱 댓글 입력창 (키보드가 내려가는 동안 입력창·어두운 막이 키보드 높이만큼 줄어 아래 흰 바탕이 보이지 않게 화면 맨 아래까지 유지)
+            .overlay(alignment: .bottom) { CommentComposerHost(model: model, barInset: composerBarInset, barLeft: barMirrored).ignoresSafeArea(.keyboard, edges: .bottom) }   // 앱 댓글 입력창 (키보드가 내려가는 동안 입력창·어두운 막이 키보드 높이만큼 줄어 아래 흰 바탕이 보이지 않게 화면 맨 아래까지 유지)
             .fullScreenCover(item: $model.imageViewer) { item in
                 ImageViewer(item: item)
                     .presentationBackground(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
             }
             .overlay { commentTextPromptButton }
+            .sheet(item: $idSearchTarget) { t in
+                IdPostSearchSheet(gallery: t.gallery, code: t.code) { url in model.load(url) }
+            }
             .onChange(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
             .fullScreenCover(item: $model.commentText) { item in
                 CommentTextViewer(item: item) { url in
@@ -2294,6 +2325,15 @@ struct BrowserView: View {
     private func searchPostsButton(_ req: BlockRequest) -> some View {
         if let g = gallery, !req.nick.isEmpty {
             Button("작성글 검색: \(req.nick)") { model.load(g.searchURL(req.nick, type: .name)) }
+        }
+        // 디시는 식별코드 검색이 없어서, 앱이 목록 여러 쪽을 받아 같은 식별코드(유동은 IP 앞자리)의 글만 모아 줌
+        if let g = gallery {
+            let key = !req.userID.isEmpty ? req.userID : req.ip
+            if !key.isEmpty {
+                Button((!req.userID.isEmpty ? "식별코드로 작성글 찾기 (" : "IP로 작성글 찾기 (") + key + ")") {
+                    idSearchTarget = IdSearchTarget(gallery: g, code: key)
+                }
+            }
         }
     }
 

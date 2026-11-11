@@ -637,6 +637,7 @@ enum ContentScript {
     return r;
   }
 
+
   // ---------- 디시콘 ----------
   function mediaSrc(m) {
     var s = m.getAttribute('data-original') || m.getAttribute('data-src') || m.getAttribute('src') || '';
@@ -2621,8 +2622,18 @@ enum ContentScript {
   });
   function tsNeedsCheck() {
     try {
-      return typeof dcTs !== 'undefined' && dcTs && dcTs.state === 'interactive' &&
-        !(typeof turnstile !== 'undefined' && dcTs.id !== null && turnstile.getResponse(dcTs.id));
+      if (typeof dcTs === 'undefined' || !dcTs) return false;
+      if (typeof turnstile !== 'undefined' && dcTs.id !== null && turnstile.getResponse(dcTs.id)) return false;   // 이미 통과
+      if (dcTs.state === 'interactive') return true;
+      // 상태 이름이 달라도 체크박스가 화면에 실제로 떠 있으면(통과 상태가 아니면) 체크가 필요한 것으로 봄
+      if (/^ok/.test(dcTs.state || '')) return false;
+      var h = dcTs.host;
+      if (h && h.isConnected) {
+        var fr = h.querySelector ? h.querySelector('iframe') : null;
+        var r = (fr || h).getBoundingClientRect();
+        if (r.width > 20 && r.height > 20 && getComputedStyle(h).visibility !== 'hidden') return true;
+      }
+      return false;
     } catch (e) { return false; }
   }
   function retryCommentOnce() {
@@ -3672,7 +3683,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v243-barinset', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v244-tscheck', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

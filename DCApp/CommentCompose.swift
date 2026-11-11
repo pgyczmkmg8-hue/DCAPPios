@@ -59,6 +59,9 @@ final class CommentComposeSession: ObservableObject, Identifiable {
 /// 브라우저 화면 맨 아래에 뜨는 앱 댓글 입력창 (키보드 위)
 struct CommentComposerHost: View {
     @ObservedObject var model: WebViewModel
+    /// 세로 컨트롤바가 가리는 폭과 그 위치(왼쪽이면 true) — 입력창 내용이 막대와 겹치지 않게 비움
+    var barInset: CGFloat = 0
+    var barLeft = false
     /// 키보드 윗변의 화면 y (키보드가 없으면 nil) / 키보드가 화면 아래를 가린 높이
     /// SwiftUI의 키보드 안전 영역 값은 글자를 칠 때(추천 줄이 바뀔 때) 실제 키보드와 10pt쯤 어긋나
     /// 입력창과 키보드 사이에 틈이 남음 → 입력창의 실제 아래 끝 위치를 재서 키보드 윗변에 맞게 보정
@@ -72,7 +75,7 @@ struct CommentComposerHost: View {
                 Color.black.opacity(0.22)
                     .ignoresSafeArea()
                     .onTapGesture { model.closeCommentCompose(sync: true) }
-                CommentComposer(session: s, model: model)
+                CommentComposer(session: s, model: model, barInset: barInset, barLeft: barLeft)
                     .ignoresSafeArea(.container, edges: .trailing)   // 듀오 옆 세로 줄 자리까지 입력창을 채움 (줄은 맨 위 시계 자리라 아래쪽은 비어 있음)
                     .background {
                         GeometryReader { g in
@@ -121,6 +124,8 @@ struct CommentComposerHost: View {
 private struct CommentComposer: View {
     @ObservedObject var session: CommentComposeSession
     let model: WebViewModel
+    var barInset: CGFloat = 0
+    var barLeft = false
     private enum Field: Hashable { case text, nick, pw, code }
     @FocusState private var focus: Field?
     private enum Panel { case dccon, txtcon }
@@ -221,17 +226,24 @@ private struct CommentComposer: View {
                 .disabled(session.sending)
             }
             .buttonStyle(.plain)
-            if panel == .dccon {
-                CommentDcconPanel(model: model)
-                    .frame(height: 280)
-            } else if panel == .txtcon {
-                CommentTxtconPanel(model: model)
+            if panel != nil {
+                // 디시콘·글자콘 목록은 듀오 옆 세로 줄(시계·세로 막대 자리)과 겹치지 않게 비움
+                Group {
+                    if panel == .dccon {
+                        CommentDcconPanel(model: model)
+                            .frame(height: 280)
+                    } else {
+                        CommentTxtconPanel(model: model)
+                    }
+                }
+                .padding(.leading, BrowserView.hasSideColumnOnly && BrowserView.windowLeftColumn ? BrowserView.windowTrailingInset : 0)
+                .padding(.trailing, BrowserView.hasSideColumnOnly && !BrowserView.windowLeftColumn ? BrowserView.windowTrailingInset : 0)
             }
         }
         // 내용이 원래 필요한 높이를 재도록 세로는 제안받은 크기에 맞추지 않음 (안 그러면 바깥 높이를 못 박은 상태에서 줄어든 크기만 재서, 글이 늘어도 상자가 안 따라 늘어남)
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { h in contentH = h }
-        .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 10)
+        .padding(.leading, 14 + (barLeft ? barInset : 0)).padding(.trailing, 14 + (barLeft ? 0 : barInset)).padding(.top, 12).padding(.bottom, 10)
         .frame(maxWidth: .infinity)
         // 글자를 칠 때 시스템이 바깥에서 주는 높이가 131↔150pt로 번갈아 바뀌어(아래 끝은 키보드에 붙은 채 위쪽만 움직임)
         // 입력창이 위로 뜨던 것 → 내용 높이를 직접 재서 입력창 높이를 못 박음
@@ -290,7 +302,7 @@ private struct CommentDcconPanel: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], spacing: 8) {
                         ForEach(items) { it in
                             Button { pick(it) } label: {
-                                DcconThumb(url: it.src)
+                                DcconThumb(url: it.src, animated: true)
                                     .frame(width: 64, height: 64)
                                     .overlay { if picking == it.id { ProgressView() } }
                             }
