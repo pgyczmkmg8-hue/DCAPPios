@@ -40,14 +40,67 @@ enum BlockDisplay: String, Codable, CaseIterable, Identifiable {
     var label: String { self == .collapse ? "차단됨 표시" : "완전히 숨김" }
 }
 
+/// 적용 범위: nil/빈 문자열 = 모든 갤러리, 아니면 갤러리 ID를 쉼표로 이은 문자열 (예: "dcbest,baseball_new")
+enum GalleryScope {
+    nonisolated static func ids(_ scope: String?) -> [String] {
+        (scope ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+    nonisolated static func join(_ ids: [String]) -> String? { ids.isEmpty ? nil : ids.joined(separator: ",") }
+    /// 이 범위가 gid 갤러리에 적용되는지
+    nonisolated static func applies(_ scope: String?, _ gid: String?) -> Bool {
+        let list = ids(scope)
+        if list.isEmpty { return true }
+        guard let gid else { return false }
+        return list.contains(gid)
+    }
+}
+
+/// 차단 키워드 (gallery가 있으면 그 갤러리에서만). 예전 저장값(문자열)도 읽을 수 있음
+struct BlockedKeyword: Codable, Hashable, Identifiable {
+    var word: String
+    var gallery: String? = nil
+    var id: String { "\(word.lowercased())@\(gallery ?? "*")" }
+
+    init(word: String, gallery: String? = nil) { self.word = word; self.gallery = gallery }
+    init(from decoder: Decoder) throws {
+        if let one = try? decoder.singleValueContainer().decode(String.self) { word = one; gallery = nil; return }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        word = try c.decode(String.self, forKey: .word)
+        gallery = try c.decodeIfPresent(String.self, forKey: .gallery)
+    }
+}
+
+/// 고급 차단: 특정 작성자(IP·식별코드·닉네임)가 특정 단어를 말할 때만 가림
+struct AdvancedBlockRule: Codable, Hashable, Identifiable {
+    var id = UUID()
+    var kind: BlockedUser.Kind
+    var value: String
+    var keywords: [String]
+    var gallery: String? = nil   // 이 갤러리에서만 (nil = 모든 갤러리)
+}
+
 struct FilterSettings: Codable {
     var enabled = true
     var display: BlockDisplay = .collapse
     var users: [BlockedUser] = []
     var dccons: [BlockedDccon] = []
-    var keywords: [String] = []
+    var keywords: [BlockedKeyword] = []
     var hiddenElements: [HiddenElement] = []
     var hideBestNotice = true
+    var advancedRules: [AdvancedBlockRule] = []
+
+    init() {}
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        display = try c.decodeIfPresent(BlockDisplay.self, forKey: .display) ?? .collapse
+        users = try c.decodeIfPresent([BlockedUser].self, forKey: .users) ?? []
+        dccons = try c.decodeIfPresent([BlockedDccon].self, forKey: .dccons) ?? []
+        keywords = try c.decodeIfPresent([BlockedKeyword].self, forKey: .keywords) ?? []
+        hiddenElements = try c.decodeIfPresent([HiddenElement].self, forKey: .hiddenElements) ?? []
+        hideBestNotice = try c.decodeIfPresent(Bool.self, forKey: .hideBestNotice) ?? true
+        advancedRules = try c.decodeIfPresent([AdvancedBlockRule].self, forKey: .advancedRules) ?? []
+    }
 }
 
 // MARK: - 저장소
@@ -102,7 +155,7 @@ final class FilterStore: ObservableObject {
     /// gallery: 지금 보고 있는 갤러리 (그 갤러리 전용 차단 + 모든 갤러리 차단이 해당)
     func blockedUsers(id: String, ip: String, nick: String, gallery: String?) -> [BlockedUser] {
         settings.users.filter { u in
-            guard u.gallery == nil || u.gallery == gallery else { return false }
+            guard GalleryScope.applies(u.gallery, gallery) else { return false }
             switch u.kind {
             case .id: return !id.isEmpty && u.value == id
             case .ip: return !ip.isEmpty && u.value == ip
@@ -112,10 +165,10 @@ final class FilterStore: ObservableObject {
     }
 
     /// 이 내용에 걸리는 차단 키워드들
-    func blockedKeywords(in text: String) -> [String] {
+    func blockedKeywords(in text: String, gallery: String?) -> [BlockedKeyword] {
         let t = text.lowercased()
         guard !t.isEmpty else { return [] }
-        return settings.keywords.filter { t.contains($0.lowercased()) }
+        return settings.keywords.filter { GalleryScope.applies($0.gallery, gallery) && t.contains($0.word.lowercased()) }
     }
 
     func isDcconBlocked(_ key: String) -> Bool {
@@ -130,14 +183,17 @@ final class FilterStore: ObservableObject {
         settings.dccons.removeAll { $0.key == key }
     }
 
-    func removeKeyword(_ word: String) {
-        settings.keywords.removeAll { $0.lowercased() == word.lowercased() }
+    func removeKeyword(_ k: BlockedKeyword) {
+        settings.keywords.removeAll { $0.id == k.id }
     }
 
-    func addKeyword(_ word: String) {
+    /// gallery가 있으면 그 갤러리에서만, nil이면 모든 갤러리에서 차단
+    func addKeyword(_ word: String, gallery: String? = nil) {
         let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !w.isEmpty, !settings.keywords.contains(where: { $0.lowercased() == w.lowercased() }) else { return }
-        settings.keywords.append(w)
+        let g = (gallery?.isEmpty ?? true) ? nil : gallery
+        let k = BlockedKeyword(word: w, gallery: g)
+        guard !w.isEmpty, !settings.keywords.contains(where: { $0.id == k.id }) else { return }
+        settings.keywords.append(k)
     }
 
     func addHidden(selector: String, memo: String) {
@@ -151,7 +207,7 @@ final class FilterStore: ObservableObject {
         let s = settings
         guard s.enabled else { return false }
         return s.users.contains { b in
-            if let g = b.gallery, !g.isEmpty, g != gallery { return false }
+            if !GalleryScope.applies(b.gallery, gallery) { return false }
             switch b.kind {
             case .id: return !id.isEmpty && id == b.value
             case .ip: return !ip.isEmpty && ip == b.value
@@ -169,7 +225,8 @@ final class FilterStore: ObservableObject {
             "mode": s.display.rawValue,
             "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value, "g": $0.gallery ?? ""] },
             "dccons": s.dccons.map(\.key),
-            "keywords": s.keywords.map { $0.lowercased() },
+            "keywords": s.keywords.map { ["w": $0.word.lowercased(), "g": $0.gallery ?? ""] },
+            "advRules": s.advancedRules.map { ["k": $0.kind.rawValue, "v": $0.value, "w": $0.keywords.map { $0.lowercased() }, "g": $0.gallery ?? ""] as [String: Any] },
             "selectors": s.hiddenElements.map(\.selector),
             "hideBest": s.hideBestNotice,
             "dockComment": Profile.defaults.object(forKey: "dockComment") as? Bool ?? true,

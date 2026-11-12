@@ -382,6 +382,9 @@ struct BlockSettingsView: View {
                 NavigationLink { KeywordsView() } label: {
                     LabeledContent("차단 키워드", value: "\(filters.settings.keywords.count)")
                 }
+                NavigationLink { AdvancedBlockView() } label: {
+                    LabeledContent("고급 차단 (유저+키워드)", value: "\(filters.settings.advancedRules.count)")
+                }
                 NavigationLink { MemoListView() } label: {
                     LabeledContent("유저 메모", value: "\(MemoStore.shared.memos.count)")
                 }
@@ -639,11 +642,21 @@ struct BlockedUsersView: View {
                 if filters.settings.users.isEmpty {
                     Text("차단한 유저가 없어요").foregroundStyle(.secondary)
                 }
-                ForEach(filters.settings.users) { u in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(u.memo.isEmpty ? u.value : u.memo)
-                        Text("\(u.kind.label) · \(u.value) · \(u.gallery.map { "\($0) 갤러리만" } ?? "모든 갤러리")")
-                            .font(.caption).foregroundStyle(.secondary)
+                ForEach(filters.settings.users.indices, id: \.self) { i in
+                    let u = filters.settings.users[i]
+                    NavigationLink {
+                        BlockScopeDetail(title: u.memo.isEmpty ? u.value : u.memo,
+                                         detail: "\(u.kind.label) · \(u.value)",
+                                         gallery: Binding(
+                                            get: { i < filters.settings.users.count ? filters.settings.users[i].gallery ?? "" : "" },
+                                            set: { if i < filters.settings.users.count { filters.settings.users[i].gallery = $0.isEmpty ? nil : $0 } }),
+                                         onRemove: { if i < filters.settings.users.count { filters.settings.users.remove(at: i) } })
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(u.memo.isEmpty ? u.value : u.memo)
+                            Text("\(u.kind.label) · \(u.value) · \(GalleryScopeLabel.text(u.gallery))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .onDelete { filters.settings.users.remove(atOffsets: $0) }
@@ -698,6 +711,7 @@ struct BlockedDcconsView: View {
 struct KeywordsView: View {
     @ObservedObject private var filters = FilterStore.shared
     @State private var input = ""
+    @State private var galleryID = ""
 
     var body: some View {
         List {
@@ -710,14 +724,30 @@ struct KeywordsView: View {
                     Button("추가", action: add)
                         .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                GalleryScopeRow(galleryID: $galleryID)
             } footer: {
-                Text("제목·본문·댓글·닉네임에 이 단어가 들어가면 가려져요. 대소문자는 구분하지 않아요.")
+                Text("제목·본문·댓글·닉네임에 이 단어가 들어가면 가려져요. 대소문자는 구분하지 않아요. 적용 범위에서 갤러리를 고르면 그 갤러리에서만 가려요. 즐겨찾기·방문한 갤러리에서 이름으로 찾을 수 있어요.")
             }
             Section("키워드 목록") {
                 if filters.settings.keywords.isEmpty {
                     Text("차단 키워드가 없어요").foregroundStyle(.secondary)
                 }
-                ForEach(filters.settings.keywords, id: \.self) { Text($0) }
+                ForEach(filters.settings.keywords.indices, id: \.self) { i in
+                    let k = filters.settings.keywords[i]
+                    NavigationLink {
+                        BlockScopeDetail(title: k.word, detail: "차단 키워드",
+                                         gallery: Binding(
+                                            get: { i < filters.settings.keywords.count ? filters.settings.keywords[i].gallery ?? "" : "" },
+                                            set: { if i < filters.settings.keywords.count { filters.settings.keywords[i].gallery = $0.isEmpty ? nil : $0 } }),
+                                         onRemove: { if i < filters.settings.keywords.count { filters.settings.keywords.remove(at: i) } })
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(k.word)
+                            Text(GalleryScopeLabel.text(k.gallery))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                     .onDelete { filters.settings.keywords.remove(atOffsets: $0) }
             }
         }
@@ -726,8 +756,228 @@ struct KeywordsView: View {
     }
 
     private func add() {
-        filters.addKeyword(input)
+        filters.addKeyword(input, gallery: galleryID.trimmingCharacters(in: .whitespaces))
         input = ""
+    }
+}
+
+// MARK: - 차단 항목 상세 (적용 범위 바꾸기)
+
+/// 차단 목록의 항목을 눌렀을 때: 모든 갤러리 / 고른 갤러리로 바꾸기, 차단 해제
+struct BlockScopeDetail: View {
+    let title: String
+    let detail: String
+    @Binding var gallery: String
+    let onRemove: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        List {
+            Section {
+                Text(title)
+                Text(detail).font(.footnote).foregroundStyle(.secondary)
+            }
+            Section {
+                GalleryScopeRow(galleryID: $gallery)
+            } footer: {
+                Text("'모든 갤러리'면 어디서든 차단하고, 갤러리를 고르면 그 갤러리들에서만 차단해요. 여러 개를 고를 수 있어요.")
+            }
+            Section {
+                Button("차단 해제", role: .destructive) { onRemove(); dismiss() }
+            }
+        }
+        .navigationTitle("차단 항목")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - 갤러리 범위 고르기 (차단 키워드·고급 차단)
+
+enum GalleryScopeLabel {
+    /// "모든 갤러리" / "○○ 갤러리만" / "○○ 외 2개 갤러리만"
+    @MainActor static func text(_ scope: String?) -> String {
+        let ids = GalleryScope.ids(scope)
+        if ids.isEmpty { return "모든 갤러리" }
+        let first = GalleryNames.name(ids[0])
+        return ids.count == 1 ? "\(first) 갤러리만" : "\(first) 외 \(ids.count - 1)개 갤러리만"
+    }
+}
+
+/// "적용 범위: 모든 갤러리 / 고른 갤러리(여러 개 가능)" 한 줄 — 누르면 즐겨찾기·방문한 갤러리에서 찾아 고름
+struct GalleryScopeRow: View {
+    @Binding var galleryID: String
+    @EnvironmentObject private var favorites: FavoritesStore
+    @ObservedObject private var visited = VisitedStore.shared
+    @State private var showing = false
+
+    private var all: [Gallery] {
+        var seen = Set<String>()
+        return (favorites.items + visited.items.map(\.gallery)).filter { seen.insert($0.galleryID).inserted }
+    }
+
+    var body: some View {
+        Button { showing = true } label: {
+            HStack {
+                Text("적용 범위").foregroundStyle(.primary)
+                Spacer()
+                Text(GalleryScopeLabel.text(galleryID).replacingOccurrences(of: " 갤러리만", with: "")).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .sheet(isPresented: $showing) {
+            GalleryScopeSheet(galleryID: $galleryID, galleries: all)
+        }
+    }
+}
+
+private struct GalleryScopeSheet: View {
+    @Binding var galleryID: String
+    let galleries: [Gallery]
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var selected: [String] { GalleryScope.ids(galleryID) }
+    private var q: String { query.trimmingCharacters(in: .whitespaces) }
+    private var matches: [Gallery] {
+        guard !q.isEmpty else { return galleries }
+        let k = q.lowercased()
+        return galleries.filter { $0.name.lowercased().contains(k) || $0.galleryID.lowercased().contains(k) }
+    }
+    /// 목록에 없는 (직접 입력한) 선택 갤러리
+    private var extras: [String] { selected.filter { id in !galleries.contains { $0.galleryID == id } } }
+
+    private func toggle(_ id: String) {
+        var cur = selected
+        if let i = cur.firstIndex(of: id) { cur.remove(at: i) } else { cur.append(id) }
+        galleryID = GalleryScope.join(cur) ?? ""
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button {
+                    galleryID = ""
+                } label: {
+                    HStack {
+                        Text("모든 갤러리").foregroundStyle(.primary)
+                        Spacer()
+                        if selected.isEmpty { Image(systemName: "checkmark") }
+                    }
+                }
+                if !extras.isEmpty {
+                    Section("직접 입력한 갤러리") {
+                        ForEach(extras, id: \.self) { id in
+                            Button { toggle(id) } label: {
+                                HStack {
+                                    Text(id).foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+                Section {
+                    if matches.isEmpty { Text("찾는 갤러리가 없어요").foregroundStyle(.secondary) }
+                    ForEach(matches) { g in
+                        Button { toggle(g.galleryID) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(g.name).foregroundStyle(.primary)
+                                    Text("\(g.kind.label) · \(g.galleryID)").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if selected.contains(g.galleryID) { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("즐겨찾기 · 방문한 갤러리")
+                } footer: {
+                    Text("여러 갤러리를 고를 수 있어요. 아무것도 고르지 않으면 모든 갤러리예요.")
+                }
+                if !q.isEmpty, q.range(of: "^[A-Za-z0-9_$]+$", options: .regularExpression) != nil,
+                   !galleries.contains(where: { $0.galleryID == q }), !selected.contains(q) {
+                    Section("직접 입력") {
+                        Button("'\(q)' 갤러리 ID 추가") { toggle(q); query = "" }
+                    }
+                }
+            }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "갤러리 이름이나 ID로 찾기")
+            .navigationTitle("적용 범위")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("완료") { dismiss() } } }
+        }
+    }
+}
+
+// MARK: - 고급 차단 (특정 유저가 특정 단어를 말할 때만)
+
+struct AdvancedBlockView: View {
+    @ObservedObject private var filters = FilterStore.shared
+    @State private var kind: BlockedUser.Kind = .ip
+    @State private var value = ""
+    @State private var words = ""
+    @State private var galleryID = ""
+
+    private var wordList: [String] {
+        words.split(whereSeparator: { $0 == "," || $0 == "\n" })
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("대상", selection: $kind) {
+                    ForEach(BlockedUser.Kind.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                TextField(kind == .ip ? "IP 앞 두 자리 (예: 117.111)" : kind == .id ? "아이디(식별코드)" : "닉네임", text: $value)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("단어 (쉼표로 여러 개)", text: $words)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                GalleryScopeRow(galleryID: $galleryID)
+                Button("추가") {
+                    let v = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !v.isEmpty, !wordList.isEmpty else { return }
+                    let g = galleryID.trimmingCharacters(in: .whitespaces)
+                    filters.settings.advancedRules.append(AdvancedBlockRule(kind: kind, value: v, keywords: wordList, gallery: g.isEmpty ? nil : g))
+                    value = ""; words = ""; galleryID = ""
+                }
+                .disabled(value.trimmingCharacters(in: .whitespaces).isEmpty || wordList.isEmpty)
+            } header: {
+                Text("새 규칙")
+            } footer: {
+                Text("통신사 IP처럼 여러 사람이 같이 쓰는 대상 중 특정인만 가리고 싶을 때 써요. 그 대상이 쓴 글·댓글에 입력한 단어 중 하나라도 들어 있을 때만 가려져요. 단어는 대소문자를 구분하지 않아요.")
+            }
+            Section("규칙 목록") {
+                if filters.settings.advancedRules.isEmpty {
+                    Text("고급 차단 규칙이 없어요").foregroundStyle(.secondary)
+                }
+                ForEach(filters.settings.advancedRules.indices, id: \.self) { i in
+                    let r = filters.settings.advancedRules[i]
+                    NavigationLink {
+                        BlockScopeDetail(title: "\(r.kind.label) \(r.value)",
+                                         detail: "단어: " + r.keywords.joined(separator: ", "),
+                                         gallery: Binding(
+                                            get: { i < filters.settings.advancedRules.count ? filters.settings.advancedRules[i].gallery ?? "" : "" },
+                                            set: { if i < filters.settings.advancedRules.count { filters.settings.advancedRules[i].gallery = $0.isEmpty ? nil : $0 } }),
+                                         onRemove: { if i < filters.settings.advancedRules.count { filters.settings.advancedRules.remove(at: i) } })
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(r.kind.label) \(r.value)")
+                            Text("단어: " + r.keywords.joined(separator: ", ") + " · " + GalleryScopeLabel.text(r.gallery))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .onDelete { filters.settings.advancedRules.remove(atOffsets: $0) }
+            }
+        }
+        .navigationTitle("고급 차단")
+        .toolbar { EditButton() }
     }
 }
 

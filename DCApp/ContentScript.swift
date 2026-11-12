@@ -682,10 +682,30 @@ enum ContentScript {
     var users = cfg.users || [], gid = currentGalleryId();
     for (var i = 0; i < users.length; i++) {
       var b = users[i];
-      if (b.g && b.g !== gid) continue;                  // 다른 갤러리 전용 차단
+      if (b.g && (',' + b.g + ',').indexOf(',' + gid + ',') < 0) continue;                  // 다른 갤러리 전용 차단 (b.g는 쉼표로 이은 여러 갤러리)
       if ((b.k === 'id' && idn.id && idn.id === b.v) ||
           (b.k === 'ip' && idn.ip && idn.ip === b.v) ||
           (b.k === 'nick' && idn.nick && idn.nick === b.v)) return '차단한 유저';
+    }
+    // 고급 차단: 작성자가 맞고 + 글·댓글에 그 규칙의 단어가 있을 때만
+    var adv = cfg.advRules || [];
+    if (adv.length) {
+      var at = null;
+      for (var ai = 0; ai < adv.length; ai++) {
+        var ar = adv[ai];
+        if (ar.g && (',' + ar.g + ',').indexOf(',' + gid + ',') < 0) continue;
+        if (!((ar.k === 'id' && idn.id && idn.id === ar.v) ||
+              (ar.k === 'ip' && idn.ip && idn.ip === ar.v) ||
+              (ar.k === 'nick' && idn.nick && idn.nick === ar.v))) continue;
+        if (at === null) {
+          at = txt(u.el);
+          if (u.kind === 'article') at += ' ' + txt(articleBody());
+          at = at.toLowerCase();
+        }
+        for (var aw = 0; aw < (ar.w || []).length; aw++) {
+          if (ar.w[aw] && at.indexOf(ar.w[aw]) >= 0) return '고급 차단';
+        }
+      }
     }
     var kws = cfg.keywords || [];
     if (kws.length) {
@@ -693,7 +713,9 @@ enum ContentScript {
       if (u.kind === 'article') t += ' ' + txt(articleBody());
       t = t.toLowerCase();
       for (var j = 0; j < kws.length; j++) {
-        if (kws[j] && t.indexOf(kws[j]) >= 0) return '차단 키워드';
+        var kj = kws[j];
+        if (!kj || !kj.w || (kj.g && (',' + kj.g + ',').indexOf(',' + gid + ',') < 0)) continue;   // 다른 갤러리 전용 키워드
+        if (t.indexOf(kj.w) >= 0) return '차단 키워드';
       }
     }
     if (u.kind === 'comment' && dset.size) {
@@ -3695,7 +3717,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v245-listbtn', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v248-multigall', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

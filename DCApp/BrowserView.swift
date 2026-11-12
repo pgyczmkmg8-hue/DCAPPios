@@ -906,10 +906,18 @@ struct BrowserView: View {
             .alert("키워드 차단", isPresented: $showKeywordPrompt) {
                 TextField("차단할 단어", text: $keywordInput)
                 Button("취소", role: .cancel) {}
-                Button("추가") {
+                if let g = currentGallery?.id {
+                    Button("이 갤러리에서만") {
+                        filters.addKeyword(keywordInput, gallery: g)
+                        if !keywordInput.trimmingCharacters(in: .whitespaces).isEmpty {
+                            model.showToast("'\(keywordInput)' 키워드 차단 (이 갤러리)")
+                        }
+                    }
+                }
+                Button("모든 갤러리") {
                     filters.addKeyword(keywordInput)
                     if !keywordInput.trimmingCharacters(in: .whitespaces).isEmpty {
-                        model.showToast("'\(keywordInput)' 키워드 차단")
+                        model.showToast("'\(keywordInput)' 키워드 차단 (모든 갤러리)")
                     }
                 }
             } message: {
@@ -2254,7 +2262,7 @@ struct BrowserView: View {
     private func isAlreadyBlocked(_ req: BlockRequest) -> Bool {
         !filters.blockedUsers(id: req.userID, ip: req.ip, nick: req.nick, gallery: currentGallery?.id).isEmpty
             || filters.isDcconBlocked(req.dcconKey)
-            || !filters.blockedKeywords(in: req.snippet).isEmpty
+            || !filters.blockedKeywords(in: req.snippet, gallery: currentGallery?.id).isEmpty
     }
 
     @ViewBuilder
@@ -2281,10 +2289,10 @@ struct BrowserView: View {
                 model.showToast("디시콘 차단을 풀었어요")
             }
         }
-        ForEach(filters.blockedKeywords(in: req.snippet), id: \.self) { w in
-            Button("키워드 차단 해제: \(w)") {
-                filters.removeKeyword(w)
-                model.showToast("'\(w)' 키워드 차단을 풀었어요")
+        ForEach(filters.blockedKeywords(in: req.snippet, gallery: currentGallery?.id)) { k in
+            Button("키워드 차단 해제: \(k.word)\(k.gallery == nil ? " · 전체" : " · 이 갤러리")") {
+                filters.removeKeyword(k)
+                model.showToast("'\(k.word)' 키워드 차단을 풀었어요")
             }
         }
         searchPostsButton(req)
