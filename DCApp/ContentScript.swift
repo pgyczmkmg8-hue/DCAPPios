@@ -228,7 +228,8 @@ enum ContentScript {
       '.dcapp-vote{display:grid!important;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 12px!important}',
       '.dcapp-vicons{display:flex;gap:0;margin:0!important;flex:none}',
       '.dcapp-vote{padding:0 12px}',
-      '.dcapp-postact{display:flex;gap:4px;grid-row:2;grid-column:1 / -1;justify-self:end;margin:16px 0 0!important;padding:0!important;flex:none}',
+      '.dcapp-postact{display:flex;gap:4px;grid-row:2;grid-column:1 / -1;justify-self:stretch;justify-content:space-between;margin:16px 0 0!important;padding:0!important;flex:none}',
+      '.dcapp-postact .grp{display:flex;gap:4px;margin-left:auto}',
       '.dcapp-postact button{width:69px;height:26px;padding:0;border:1px solid #c9c9cf;border-radius:5px;background:none;color:#3b4890;font-size:13px;font-weight:600}',
       '.dcapp-postact button.del{color:#e53935;border-color:#e8b4b1}',
       'html.darkmode .dcapp-postact button{border-color:#55565c;color:#9db0ff}',
@@ -1562,7 +1563,15 @@ enum ContentScript {
     }
   }
 
+  // 디시가 글 아래에 두는 '목록보기' 버튼
+  function listButton() {
+    var area = document.querySelector('.gall-thum-btm') || document;
+    var c = area.querySelectorAll('button, a');
+    for (var i = 0; i < c.length; i++) if (txt(c[i]) === '목록보기') return c[i];
+    return null;
+  }
   function postAction(kind) {
+    if (kind === 'list') { var lb = listButton(); if (!lb) return false; lb.click(); return true; }
     var b = postActionButton(kind);
     if (!b) return false;
     b.click();
@@ -1674,14 +1683,17 @@ enum ContentScript {
     }
     // 수정·삭제: 본인 글 / 유동 글에서만 (오른쪽 끝)
     var editable = !!(postActionButton('modify') && postActionButton('delete'));
+    var hasList = !!listButton();
     var pa = v.querySelector('.dcapp-postact');
-    if (editable && !pa) {
+    var want = (editable ? 'e' : '') + (hasList ? 'l' : '');
+    if (pa && pa.getAttribute('data-k') !== want) { pa.parentNode.removeChild(pa); pa = null; }
+    if (want && !pa) {
       pa = document.createElement('div');
       pa.className = 'dcapp-postact';
-      pa.innerHTML = '<button type="button" data-p="modify">수정</button><button type="button" data-p="delete" class="del">삭제</button>';
+      pa.setAttribute('data-k', want);
+      pa.innerHTML = (hasList ? '<button type="button" data-p="list">글목록</button>' : '') +
+        (editable ? '<span class="grp"><button type="button" data-p="modify">수정</button><button type="button" data-p="delete" class="del">삭제</button></span>' : '');
       v.appendChild(pa);
-    } else if (!editable && pa) {
-      pa.parentNode.removeChild(pa);
     }
     function setText(el, t) { if (el && el.textContent !== t) el.textContent = t; }
     setText(v.querySelector('.up .dcapp-vnum'), textOf('#recomm_btn') || '0');
@@ -3683,7 +3695,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v244-tscheck', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v245-listbtn', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
