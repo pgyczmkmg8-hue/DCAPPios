@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// 새 버전 알림창 (그림 128×128: 깃헙 계정 프로필 사진, 그 아래 글과 버튼)
+/// 새 버전 알림창 (그림 128×128: 깃랩 계정 프로필 사진, 그 아래 글과 버튼)
 struct UpdateCard: View {
     let release: AppRelease
     let onClose: () -> Void
 
-    /// 프로필 사진 주소 (저장소 주인의 깃헙 계정)
-    private static let avatarURL = URL(string: "https://github.com/pgyczmkmg8-hue.png")
+    /// 프로필 사진 주소 (저장소 주인의 깃랩 계정)
+    private static let avatarURL = URL(string: "https://gitlab.com/Yami_Q_Ray.png")
 
     private var notesText: String {
         let notes = release.notes.trimmingCharacters(in: .whitespacesAndNewlines)
