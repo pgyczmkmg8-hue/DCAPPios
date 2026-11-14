@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// GitHub Releases에 올라온 최신 버전 정보
+/// GitLab·GitHub Releases에 올라온 최신 버전 정보
 nonisolated struct AppRelease: Identifiable, Sendable {
     let version: String      // "0.5.6" (태그는 버전 그대로, v가 붙어 있어도 뗌)
     let name: String
@@ -12,12 +12,13 @@ nonisolated struct AppRelease: Identifiable, Sendable {
     var requiredUpTo: String? { UpdateChecker.requiredUpTo(notes) }
 }
 
-/// 앱을 열 때(백그라운드에서 돌아올 때 포함) GitHub Releases의 최신 버전을 확인해서,
+/// 앱을 열 때(백그라운드에서 돌아올 때 포함) GitLab과 GitHub Releases의 최신 버전을 확인해서,
 /// 버전(0.9.0 → 0.9.1)이 올라갔을 때만 알려 줌 — 빌드 번호만 바뀐 건(0.9.0.14 → 0.9.0.15) 조용히
-/// (저장소: github.com/pgyczmkmg8-hue/DCAPPios — 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
+/// (저장소: gitlab.com/Yami_Q_Ray/DCAPPios 와 github.com/pgyczmkmg8-hue/DCAPPios 둘 다 확인해서 더 새 것을 씀 — GitHub 계정 정지로 2026-11-14 GitLab으로 이전, GitHub는 복구될 때를 대비해 유지. 태그는 0.5.6처럼 버전 그대로, 릴리스에 ipa 첨부)
 /// 버전 정보/업데이트 확인 화면에서 자동 확인 끄기 / 수동 확인 가능
 enum UpdateChecker {
-    nonisolated static let repo = "pgyczmkmg8-hue/DCAPPios"
+    nonisolated static let repo = "Yami_Q_Ray/DCAPPios"          // GitLab
+    nonisolated static let githubRepo = "pgyczmkmg8-hue/DCAPPios"   // GitHub (정지됨 — 복구되면 다시 쓰임)
     private static let skippedKey = "updateSkippedVersion"
     static let autoCheckKey = "updateAutoCheck"
     private static let lastCheckKey = "updateLastCheck"
@@ -85,8 +86,18 @@ enum UpdateChecker {
         Profile.defaults.set(version, forKey: skippedKey)
     }
 
+    /// GitLab과 GitHub를 같이 확인해서 더 새 릴리스를 돌려줌 (한쪽이 막혀 있으면 되는 쪽만, 같으면 GitLab)
     nonisolated static func fetchLatest() async -> AppRelease? {
-        guard let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else { return nil }
+        async let gl = fetchGitLab()
+        async let gh = fetchGitHub()
+        let (a, b) = await (gl, gh)
+        guard let a else { return b }
+        guard let b else { return a }
+        return isNewer(b.version, than: a.version) ? b : a
+    }
+
+    nonisolated static func fetchGitHub() async -> AppRelease? {
+        guard let url = URL(string: "https://api.github.com/repos/\(githubRepo)/releases/latest") else { return nil }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         guard let res = try? await URLSession.shared.data(for: req),
@@ -102,6 +113,31 @@ enum UpdateChecker {
         return AppRelease(version: version,
                           name: obj["name"] as? String ?? tag,
                           notes: obj["body"] as? String ?? "",
+                          pageURL: page,
+                          ipaURL: ipa)
+    }
+
+    nonisolated static func fetchGitLab() async -> AppRelease? {
+        // GitLab: 가장 최근에 올린 릴리스 1개 (released_at 내림차순)
+        let path = repo.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? repo
+        guard let url = URL(string: "https://gitlab.com/api/v4/projects/\(path)/releases?per_page=1") else { return nil }
+        let req = URLRequest(url: url, timeoutInterval: 15)
+        guard let res = try? await URLSession.shared.data(for: req),
+              (res.1 as? HTTPURLResponse)?.statusCode == 200,
+              let list = try? JSONSerialization.jsonObject(with: res.0) as? [[String: Any]],
+              let obj = list.first,
+              let tag = obj["tag_name"] as? String else { return nil }
+        let links = obj["_links"] as? [String: Any]
+        let page = (links?["self"] as? String).flatMap(URL.init(string:))
+            ?? URL(string: "https://gitlab.com/\(repo)/-/releases/\(tag)")!
+        let version = tag.hasPrefix("v") || tag.hasPrefix("V") ? String(tag.dropFirst()) : tag
+        let assetLinks = (obj["assets"] as? [String: Any])?["links"] as? [[String: Any]] ?? []
+        let ipa = assetLinks.compactMap { ($0["direct_asset_url"] as? String) ?? ($0["url"] as? String) }
+            .first { $0.lowercased().hasSuffix(".ipa") }
+            .flatMap(URL.init(string:))
+        return AppRelease(version: version,
+                          name: obj["name"] as? String ?? tag,
+                          notes: obj["description"] as? String ?? "",
                           pageURL: page,
                           ipaURL: ipa)
     }
