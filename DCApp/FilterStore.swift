@@ -218,9 +218,13 @@ final class FilterStore: ObservableObject {
 
     // MARK: 웹페이지로 넘길 설정(JSON)
 
-    var scriptConfigJSON: String {
+    var scriptConfigJSON: String { scriptConfig(detailPane: false) }
+
+    /// detailPane: 분할 화면의 오른쪽(글) 화면 — 왼쪽에 목록이 이미 있어서 글목록 버튼을 숨김
+    func scriptConfig(detailPane: Bool) -> String {
         let s = settings
         let dict: [String: Any] = [
+            "splitDetail": detailPane,
             "enabled": s.enabled,
             "mode": s.display.rawValue,
             "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value, "g": $0.gallery ?? ""] },

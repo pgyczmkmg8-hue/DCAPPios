@@ -1593,6 +1593,7 @@ enum ContentScript {
     return null;
   }
   function postAction(kind) {
+    if (kind === 'list' && cfg.splitDetail) { post('gotolist', {}); return true; }   // 분할 화면 오른쪽: 이 화면이 아니라 왼쪽 목록을 이 갤러리 목록으로
     if (kind === 'list') { var lb = listButton(); if (!lb) return false; lb.click(); return true; }
     var b = postActionButton(kind);
     if (!b) return false;
@@ -3717,7 +3718,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v248-multigall', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v250-splitlist', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

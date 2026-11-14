@@ -497,9 +497,18 @@ final class WebViewModel: NSObject, ObservableObject {
     var openWrittenPost: ((URL) -> Bool)?
     /// 분할 화면에서 접어 오른쪽 글 화면을 한 화면으로 쓰는 중, 글에서 뒤로 가면 (글끼리 거슬러 가지 않고) 목록 화면으로 — true면 처리함
     var backToListHandler: (() -> Bool)?
+    /// 분할 화면 오른쪽(글) 화면의 '글목록' 버튼: 왼쪽 목록 화면을 이 글의 갤러리 목록으로 (url = 그 갤러리 목록 주소)
+    var showListInMain: ((URL) -> Void)?
     static let postReadNotification = Notification.Name("DCPostRead")
     /// 분할 화면의 오른쪽(글) 화면인지 — 뒤로 갈 곳이 없어도 글 목록으로 가지 않음
-    var isDetailPane = false
+    var isDetailPane = false {
+        didSet {
+            guard oldValue != isDetailPane else { return }
+            installUserScript()   // 다음 페이지부터
+            webView.evaluateJavaScript("window.__dcapp && window.__dcapp.setConfig(\(scriptConfigJSON)); true", completionHandler: nil)
+        }
+    }
+    private var scriptConfigJSON: String { FilterStore.shared.scriptConfig(detailPane: isDetailPane) }
 
     /// 지금 화면이 갤러리 글 목록인지 (글 보기·글쓰기 화면은 아님)
     var isGalleryListPage: Bool {
@@ -664,7 +673,7 @@ final class WebViewModel: NSObject, ObservableObject {
     private func installUserScript() {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
-        let source = "window.__DCAPP_CONFIG__ = \(FilterStore.shared.scriptConfigJSON);\n" + ContentScript.source
+        let source = "window.__DCAPP_CONFIG__ = \(scriptConfigJSON);\n" + ContentScript.source
         // 알림 주소 찾기용 네트워크 기록 (페이지 맨 처음에 넣어야 처음부터 기록됨)
         controller.addUserScript(WKUserScript(source: ContentScript.netLog, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -716,7 +725,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func applyFilters() {
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
         installUserScript()   // 다음 페이지부터 적용
-        let js = "window.__dcapp && window.__dcapp.setConfig(\(FilterStore.shared.scriptConfigJSON)); true"
+        let js = "window.__dcapp && window.__dcapp.setConfig(\(scriptConfigJSON)); true"
         webView.evaluateJavaScript(js, completionHandler: nil)   // 지금 페이지에 즉시 적용
     }
 
@@ -1789,6 +1798,10 @@ extension WebViewModel: WKScriptMessageHandler {
                 imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url,
                                            filenos: (body["filenos"] as? [NSNumber])?.map(\.intValue))
             }
+        case "gotolist":   // 분할 화면 오른쪽 글 화면의 '글목록' 버튼
+            if let u = webView.url, let g = Gallery.parse(u) {
+                showListInMain?(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+            }
         case "automemo":   // 자동메모: 글 목록에서 메모 없는 로그인 계정을 아이디로 메모
             MemoStore.shared.addAuto(body["items"] as? [[String: Any]] ?? [])
         case "anon":   // 유동 닉네임/비밀번호를 입력하면 기억 (다음에 빈 칸이면 채움)
@@ -1935,7 +1948,7 @@ extension WebViewModel: WKNavigationDelegate {
         // 뒤로·앞으로 간 페이지는 예전에 연 화면이라 메모 설정이 옛날 것일 수 있음 → 열린 뒤 설정을 다시 넣음
         if navigationAction.navigationType == .backForward {
             // 캐시에서 되살아난 페이지는 didFinish가 안 올 수 있어서, 잠깐 뒤에 설정을 넣음
-            let js = "window.__dcapp && window.__dcapp.setConfig(\(FilterStore.shared.scriptConfigJSON)); true"
+            let js = "window.__dcapp && window.__dcapp.setConfig(\(scriptConfigJSON)); true"
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(400))
                 _ = try? await webView.evaluateJavaScript(js)

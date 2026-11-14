@@ -58,6 +58,13 @@ final class AppRouter: ObservableObject {
         mainBrowser = WebViewModel(url: DC.home)
         detailBrowser = WebViewModel(url: URL(string: "about:blank")!)
         detailBrowser.isDetailPane = true
+        // 오른쪽 글 화면의 '글목록' 버튼 → 왼쪽 목록을 그 갤러리 목록으로 (이미 그 갤러리 목록이면 그대로 둠)
+        detailBrowser.showListInMain = { [weak self] url in
+            guard let self else { return }
+            if self.mainBrowser.isGalleryListPage, let cur = self.mainBrowser.url,
+               Gallery.parse(cur)?.id == Gallery.parse(url)?.id { return }
+            self.mainBrowser.load(url)
+        }
         // 갤러리 목록에서 스와이프 → 하단 바 "갤러리" 버튼과 같은 효과
         mainBrowser.onGallerySwipe = { [weak self] in self?.sheet = .library }
         detailBrowser.onGallerySwipe = { [weak self] in self?.sheet = .library }
