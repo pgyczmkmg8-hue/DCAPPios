@@ -93,6 +93,8 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 글 읽으며 아래로 스크롤하는 중이면 true (상단바 숨김용). 위로 올리거나 맨 위 근처면 false
     @Published var navHiddenByScroll = false
     private var lastScrollY: CGFloat = 0
+    private var scrollAnchorY: CGFloat = 0
+    private var scrollDirDown = true
     private var navToggleAt = Date.distantPast
     private var scrollStopTask: Task<Void, Never>?
     var pendingDraft: Draft?
@@ -247,13 +249,17 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     private func updateNavHidden(_ sv: UIScrollView) {
-        let y = sv.contentOffset.y + sv.adjustedContentInset.top
-        defer { lastScrollY = sv.contentOffset.y }
-        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { return }   // 상단바가 바뀌며 생기는 흔들림은 무시
-        let dy = sv.contentOffset.y - lastScrollY
+        let off = sv.contentOffset.y
+        let y = off + sv.adjustedContentInset.top
+        defer { lastScrollY = off }
+        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { scrollAnchorY = off; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
+        let dy = off - lastScrollY
+        if dy == 0 { return }
+        if (dy > 0) != (scrollDirDown) { scrollDirDown = dy > 0; scrollAnchorY = lastScrollY }   // 방향이 바뀌면 기준점 새로
+        let moved = off - scrollAnchorY      // 같은 방향으로 움직인 누적 거리
         if y < 40 { if navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }; return }
-        if dy > 14, y > 120, !navHiddenByScroll { navHiddenByScroll = true; navToggleAt = Date() }
-        else if dy < -14, navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }
+        if moved > 30, y > 100, !navHiddenByScroll { navHiddenByScroll = true; navToggleAt = Date() }
+        else if moved < -30, navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }
     }
 
     private func scrollMoved() {
