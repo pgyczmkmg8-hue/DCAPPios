@@ -252,6 +252,7 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
     /// 듀오: 시계가 옆 세로 줄로 가서 비어 있는 위쪽 띠 안에 상단바(제목·버튼)를 그려 파란 영역을 줄임 (시스템 상단바는 숨김 → 스크롤해도 밀려 올라가지 않음)
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBarSetting = true
+    @AppStorage("hideNavOnScroll", store: Profile.defaults) private var hideNavOnScroll = false
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -774,7 +775,7 @@ struct BrowserView: View {
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
-            .toolbar(compactTopBar ? .hidden : .automatic, for: .navigationBar)      // 듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림
+            .toolbar(compactTopBar || (hideNavOnScroll && isPostPage && model.navHiddenByScroll) ? .hidden : .automatic, for: .navigationBar)      // 듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)

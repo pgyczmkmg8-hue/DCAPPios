@@ -1131,6 +1131,7 @@ struct ControlBarOrderView: View {
     @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var raw = ""
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBar = true
+    @AppStorage("hideNavOnScroll", store: Profile.defaults) private var hideNavOnScroll = false
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     @AppStorage("sideBarOffsetY", store: Profile.defaults) private var sideBarOffsetY = 0.0
@@ -1176,6 +1177,11 @@ struct ControlBarOrderView: View {
                 Text("배치")
             } footer: {
                 Text("가로: 화면 아래쪽에 가로로. 세로: 화면 오른쪽 가운데에 세로로.\n휴대폰을 가로로 쓸 때 세로 막대는 아이콘만 보여요.")
+            }
+            Section {
+                Toggle("글 읽을 때 상단바 숨기기", isOn: $hideNavOnScroll)
+            } footer: {
+                Text("글을 읽으며 아래로 스크롤하면 위쪽 파란 상단바(갤러리 이름)를 숨기고, 위로 올리면 다시 보여요.")
             }
             Section {
                 Toggle("상단바 줄이기 (듀오)", isOn: $compactTopBar)

@@ -90,6 +90,10 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var writeToolbarHeight: CGFloat = 0
     /// 페이지를 스크롤하는 동안 true → 컨트롤바를 화면 밖으로 넣음, 멈추면 다시 false
     @Published var isScrolling = false
+    /// 글 읽으며 아래로 스크롤하는 중이면 true (상단바 숨김용). 위로 올리거나 맨 위 근처면 false
+    @Published var navHiddenByScroll = false
+    private var lastScrollY: CGFloat = 0
+    private var navToggleAt = Date.distantPast
     private var scrollStopTask: Task<Void, Never>?
     var pendingDraft: Draft?
     /// 하단 바 '글쓰기'로 들어왔으면, 글쓰기 화면이 열린 뒤 제목 칸에 커서+키보드
@@ -242,9 +246,20 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: url))
     }
 
+    private func updateNavHidden(_ sv: UIScrollView) {
+        let y = sv.contentOffset.y + sv.adjustedContentInset.top
+        defer { lastScrollY = sv.contentOffset.y }
+        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { return }   // 상단바가 바뀌며 생기는 흔들림은 무시
+        let dy = sv.contentOffset.y - lastScrollY
+        if y < 40 { if navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }; return }
+        if dy > 14, y > 120, !navHiddenByScroll { navHiddenByScroll = true; navToggleAt = Date() }
+        else if dy < -14, navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }
+    }
+
     private func scrollMoved() {
         let sv = webView.scrollView
-        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { return }
+        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { lastScrollY = sv.contentOffset.y; return }
+        updateNavHidden(sv)
         if !isScrolling { isScrolling = true }
         scrollStopTask?.cancel()
         scrollStopTask = Task { @MainActor [weak self] in
