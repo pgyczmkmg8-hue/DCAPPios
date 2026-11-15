@@ -252,7 +252,6 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
     /// 듀오: 시계가 옆 세로 줄로 가서 비어 있는 위쪽 띠 안에 상단바(제목·버튼)를 그려 파란 영역을 줄임 (시스템 상단바는 숨김 → 스크롤해도 밀려 올라가지 않음)
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBarSetting = true
-    @AppStorage("hideNavOnScroll", store: Profile.defaults) private var hideNavOnScroll = false
     @State private var navTopMax: CGFloat = 0
     @State private var navCollapsed = false
 
@@ -782,7 +781,7 @@ struct BrowserView: View {
             .toolbar(compactTopBar || navScrollHidden ? .hidden : .automatic, for: .navigationBar)      // 듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(stripHidden ? .hidden : .visible, for: .navigationBar)   // 상단바가 접힐 때 상태바 자리에 남는 남색 배경도 같이 걷어냄
             .toolbarColorScheme(.dark, for: .navigationBar)
             // 하단 바: 페이지를 잘라내지 않고 그 위에 띄움 (리퀴드 글래스 너머로 페이지가 비침)
             .overlay(alignment: .bottom) {
@@ -1607,7 +1606,7 @@ struct BrowserView: View {
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }
     /// 글 읽으며 스크롤 중이라 상단바(와 그 위 남색 띠)를 걷어낸 상태
     private var stripHidden: Bool { (navScrollHidden || (navCollapsed && !compactTopBar && splitListWidth == nil)) }
-    private var navScrollHidden: Bool { hideNavOnScroll && isPostPage && model.navHiddenByScroll }
+    private var navScrollHidden: Bool { isPostPage && !compactTopBar && splitListWidth == nil && model.navHiddenByScroll }
 
     /// 갤러리 글 목록 화면인지 (model.url을 읽어 주소가 바뀌면 다시 그림)
     private var isListPage: Bool {
