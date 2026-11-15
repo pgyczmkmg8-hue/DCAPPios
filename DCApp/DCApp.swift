@@ -462,6 +462,10 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: DCNotify.openURL)) { note in
             if let url = note.object as? URL { DCNotify.pendingURL = nil; router.open(url) }
         }
+        .onOpenURL { url in
+            // dcappios://open?url=<디시 주소>  또는  dcappios://board/ipad/123 (= m.dcinside.com/board/ipad/123)
+            if let target = Self.dcURL(fromScheme: url) { router.open(target) }
+        }
         .sheet(item: $router.sheet) { sheet in
             Group {
                 switch sheet {
@@ -551,5 +555,30 @@ private struct DetailPlaceholder: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(uiColor: .dcPage))   // 다크모드에서 페이지(#272729)와 같은 색 (순검정이 튀지 않게)
         }
+    }
+}
+
+extension RootView {
+    /// dcappios:// 주소를 디시 주소로 바꿈. 디시 주소가 아니면 nil (다른 사이트는 열지 않음)
+    /// - dcappios://open?url=https%3A%2F%2Fm.dcinside.com%2Fboard%2Fipad%2F123
+    /// - dcappios://board/ipad/123  →  https://m.dcinside.com/board/ipad/123
+    nonisolated static func dcURL(fromScheme url: URL) -> URL? {
+        guard url.scheme?.lowercased() == "dcappios",
+              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        func isDC(_ u: URL) -> Bool {
+            guard ["http", "https"].contains(u.scheme?.lowercased() ?? ""), let h = u.host?.lowercased() else { return false }
+            return h == "dcinside.com" || h.hasSuffix(".dcinside.com")
+        }
+        if comps.host?.lowercased() == "open" {
+            guard let raw = comps.queryItems?.first(where: { $0.name == "url" })?.value, let u = URL(string: raw), isDC(u) else { return nil }
+            return u
+        }
+        var out = URLComponents()
+        out.scheme = "https"
+        out.host = "m.dcinside.com"
+        out.path = "/" + [comps.host, comps.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))]
+            .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "/")
+        out.percentEncodedQuery = comps.percentEncodedQuery
+        return out.url
     }
 }
