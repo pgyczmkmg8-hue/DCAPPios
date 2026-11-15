@@ -253,6 +253,8 @@ struct BrowserView: View {
     /// 듀오: 시계가 옆 세로 줄로 가서 비어 있는 위쪽 띠 안에 상단바(제목·버튼)를 그려 파란 영역을 줄임 (시스템 상단바는 숨김 → 스크롤해도 밀려 올라가지 않음)
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBarSetting = true
     @AppStorage("hideNavOnScroll", store: Profile.defaults) private var hideNavOnScroll = false
+    @State private var navTopMax: CGFloat = 0
+    @State private var navCollapsed = false
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -667,7 +669,7 @@ struct BrowserView: View {
         WebView(model: model)
             .modifier(SplitPane(width: splitListWidth))
             .safeAreaInset(edge: .top, spacing: 0) { if compactTopBar { compactTopBarView } else if splitListWidth != nil { splitTopBar } }   // 듀오: 낮은 상단바 / 분할 화면의 목록: 시스템 내비게이션 바 대신
-            .ignoresSafeArea(.container, edges: navScrollHidden ? .top : [])   // 상단바 숨김 중엔 웹페이지가 화면 맨 위까지 (남색 띠가 남지 않게)
+            .ignoresSafeArea(.container, edges: stripHidden ? .top : [])   // 상단바 숨김 중엔 웹페이지가 화면 맨 위까지 (남색 띠가 남지 않게)
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
@@ -681,7 +683,7 @@ struct BrowserView: View {
                 GeometryReader { g in
                     let top = g.safeAreaInsets.top
                     DCTheme.navy
-                        .opacity(navScrollHidden ? 0 : 1)
+                        .opacity(stripHidden ? 0 : 1)
                         .frame(width: g.size.width + g.safeAreaInsets.leading + g.safeAreaInsets.trailing, height: top + 1)   // 듀오 옆 세로 줄 위쪽까지
                         .offset(x: -g.safeAreaInsets.leading, y: -top)
                 }
@@ -690,7 +692,7 @@ struct BrowserView: View {
                 // 예비: 웹페이지 폭만큼은 화면 맨 위까지 (위 방법이 안 먹히는 경우 대비)
                 // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
                 if splitListWidth == nil {
-                    DCTheme.navy.opacity(navScrollHidden ? 0 : 1).ignoresSafeArea(.container, edges: [.top, .trailing])
+                    DCTheme.navy.opacity(stripHidden ? 0 : 1).ignoresSafeArea(.container, edges: [.top, .trailing])
                 }
             }
             .overlay(alignment: .top) { topOverlay }
@@ -846,6 +848,21 @@ struct BrowserView: View {
     private var layer2: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer1)
+            .background {
+                // 시스템이 스크롤로 상단바를 접으면 위쪽 안전 영역이 줄어듦 → 그걸 감지해 남색 띠도 같이 걷어냄
+                // (웹뷰 안쪽이 아니라 바깥에서 재야, 웹뷰가 맨 위까지 확장돼도 값이 0으로 바뀌지 않음)
+                GeometryReader { g in
+                    let top = g.safeAreaInsets.top
+                    Color.clear
+                        .onAppear { navTopMax = top }
+                        .onChangeCompat(of: g.size) { _, _ in navTopMax = top; navCollapsed = false }
+                        .onChangeCompat(of: top) { _, t in
+                            if t > navTopMax { navTopMax = t }
+                            let c = navTopMax - t > 8 && t > 0
+                            if c != navCollapsed { navCollapsed = c }
+                        }
+                }
+            }
             .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제/메모/갤로그" : "차단/메모/갤로그",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
@@ -1589,6 +1606,7 @@ struct BrowserView: View {
 
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }
     /// 글 읽으며 스크롤 중이라 상단바(와 그 위 남색 띠)를 걷어낸 상태
+    private var stripHidden: Bool { (navScrollHidden || (navCollapsed && !compactTopBar && splitListWidth == nil)) }
     private var navScrollHidden: Bool { hideNavOnScroll && isPostPage && model.navHiddenByScroll }
 
     /// 갤러리 글 목록 화면인지 (model.url을 읽어 주소가 바뀌면 다시 그림)
