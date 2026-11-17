@@ -1054,6 +1054,13 @@ final class WebViewModel: NSObject, ObservableObject {
     private func startNativeWrite(_ gid: String) {
         let (s, restored) = beginNativeWrite(gid)
         finishNativeWriteStart(s, gid, restored: restored)
+        // 글쓰기 양식이 끝내 안 열리면(차단된 IP로 글쓰기 페이지가 막힌 경우 등) 무한 로딩 대신 닫고 안내
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard let self, self.nativeWrite === s, !s.loaded, !s.submitting, self.retrySession == nil else { return }
+            self.forceCloseNativeWrite(quiet: true)
+            self.showToast("글쓰기 화면을 불러오지 못했어요. 차단된 IP이거나 연결 문제일 수 있어요")
+        }
     }
 
     /// 페이지 로딩이 끝난 뒤: 디시 양식 읽기 → 자짤·글 수정 불러오기
@@ -2244,15 +2251,19 @@ extension WebViewModel: WKUIDelegate {
         nativeWrite?.submitting = false      // 디시가 안내창을 띄우면(입력 누락 등) 앱 글쓰기 '등록 중' 풀기
         commentCompose?.sending = false
         // 글·댓글을 쓰는 중에 차단 안내가 오면 → 디시 문구를 그대로 보여 주고, 쓰던 화면은 닫고 이전 화면으로 (막지는 않음)
-        if (nativeWrite != nil || commentCompose != nil) && Self.looksLikeBan(message) {
-            commentCompose = nil
-            if nativeWrite != nil { forceCloseNativeWrite(quiet: true) }
-        }
+        // 앱 글쓰기가 양식을 불러오는 중(아직 입력 전)에 디시가 안내창을 띄우면 문구에 상관없이 글쓰기를 막는 안내(차단 등)로 봄
+        let opening = nativeWrite.map { !$0.loaded && !$0.submitting } ?? false
+        let closeAfter = (nativeWrite != nil || commentCompose != nil) && (Self.looksLikeBan(message) || opening)
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let once = PanelOnce()
             let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in once.run { cont.resume() } })
             presentPanel(alert) { once.run { cont.resume() } }
+        }
+        // 안내를 확인한 뒤에 글쓰기 화면을 닫음 (먼저 닫으면 안내창이 같이 사라져 문구가 안 보임)
+        if closeAfter {
+            commentCompose = nil
+            if nativeWrite != nil { forceCloseNativeWrite(quiet: true) }
         }
     }
 

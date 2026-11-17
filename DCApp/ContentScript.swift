@@ -141,6 +141,11 @@ enum ContentScript {
       // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
       '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
+      // 스포일러 글: 경고 칸(#spoiler)을 누르기 전까지 그 아래 본문을 흐리게 (.dcapp-spo-blur = 경고 칸 뒤의 본문을 감싼 칸, spoilerGuard가 만듦)
+      '.thum-txtin > .dcapp-spo-blur{display:block!important;padding:0!important;margin:0!important;filter:blur(22px)!important;-webkit-filter:blur(22px)!important;clip-path:inset(0)!important;pointer-events:none!important;-webkit-user-select:none!important;user-select:none!important}',
+      '.thum-txtin #spoiler{cursor:pointer}',
+      // 경고 칸 아래쪽 안내 (디시 사진에는 '스크롤 해주세요'라고만 적혀 있어서, 눌러야 풀린다는 걸 알려 줌)
+      '.thum-txtin #spoiler > .spoiler-wrap::after{content:"누르면 스포일러가 보여요";position:absolute;left:50%;bottom:14px;transform:translateX(-50%);white-space:nowrap;font-size:13px;line-height:1;letter-spacing:0;font-weight:600;color:#333;padding:8px 14px;border:1px solid #888;border-radius:16px;pointer-events:none}',
       '.gall-thum-btm{padding-top:14px!important}',
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
@@ -558,6 +563,68 @@ enum ContentScript {
 
   function articleHead() { return document.querySelector('.gallview-tit-box, [class^="gallview-tit-box"]'); }
   function articleBody() { return document.querySelector('.thum-txtin'); }
+
+  // ---------- 스포일러 글 ----------
+  // 디시는 스포일러 글(스포일러 말머리, 또는 제목에 '스포)')의 본문 맨 위에 경고 칸(#spoiler: '스포일러 주의' 사진)을 넣음.
+  // 그 칸을 누르면 공식 앱처럼 칸을 치우고, 누르기 전까지는 그 아래 본문을 흐리게 함.
+  // 경고 칸은 본문 칸(.thum-txtin) 안에 있어야 디시 다크모드(본문 칸 통째로 색 반전)에서도 제대로 보임 → 그대로 두고, 그 뒤의 본문만 흐림 칸 하나로 감쌈
+  // (디시 설정에서 '본문에서 경고'를 끄면 경고 칸이 아예 없음 → 흐리게 하지도 않음. '노스포)'처럼 디시가 스포일러로 안 보는 글도 마찬가지)
+  function spoilerBox() {
+    var s = document.getElementById('spoiler'), body = articleBody();
+    return s && body && body.contains(s) ? s : null;
+  }
+  function spoilerKey() { return 'dcapp-spo:' + location.pathname; }
+  function pageNavType() {
+    try { var n = performance.getEntriesByType('navigation')[0]; if (n && n.type) return n.type; } catch (e) {}
+    try { var t = performance.navigation.type; return t === 2 ? 'back_forward' : (t === 1 ? 'reload' : 'navigate'); } catch (e2) {}
+    return 'navigate';
+  }
+  function moveNode(parent, node, before) {
+    // moveBefore가 있으면 옮겨도 동영상·iframe이 다시 로드되지 않음 (없는 버전은 insertBefore)
+    try { if (parent.moveBefore) { parent.moveBefore(node, before); return; } } catch (e) {}
+    parent.insertBefore(node, before);
+  }
+  function spoilerUnblur() {
+    var body = articleBody(), w = body ? body.querySelector('.dcapp-spo-blur') : null;
+    if (!w || !w.parentNode) return;
+    while (w.firstChild) moveNode(w.parentNode, w.firstChild, w);   // 감쌌던 본문을 원래 자리로
+    w.parentNode.removeChild(w);
+  }
+  function revealSpoiler() {
+    var s = spoilerBox();
+    if (s) s.style.display = 'none';
+    try { sessionStorage.setItem(spoilerKey(), '1'); } catch (e) {}
+    spoilerUnblur();
+  }
+  var spoilerChecked = false;
+  function spoilerGuard() {
+    var s = spoilerBox();
+    if (!s || getComputedStyle(s).display === 'none') { spoilerUnblur(); return; }   // 경고 칸이 없거나 닫힘
+    // 푼 글로 '뒤로'·새로고침으로 돌아온 경우는 푼 채로 (글을 새로 열면 다시 경고부터)
+    var seen = false;
+    try {
+      if (!spoilerChecked) {
+        spoilerChecked = true;
+        if (pageNavType() === 'navigate') sessionStorage.removeItem(spoilerKey());
+      }
+      seen = sessionStorage.getItem(spoilerKey()) === '1';
+    } catch (e) {}
+    if (seen) { revealSpoiler(); return; }
+    if (!s.__dcappSpo) {
+      s.__dcappSpo = true;
+      s.addEventListener('click', function () {});   // iOS는 '누를 수 있는 요소'가 아니면 click을 안 보냄 → 칸 어디를 눌러도 click이 오게 (처리는 아래 문서 click에서)
+    }
+    var body = articleBody(), top = s;
+    while (top.parentNode && top.parentNode !== body) top = top.parentNode;
+    var w = body.querySelector('.dcapp-spo-blur');
+    if (!w) {
+      if (!top.nextSibling) return;
+      w = document.createElement('div');
+      w.className = 'dcapp-spo-blur';
+      body.insertBefore(w, top.nextSibling);
+    }
+    while (w.nextSibling) moveNode(w, w.nextSibling, null);   // 경고 칸 뒤의 본문(나중에 붙은 것 포함)을 흐림 칸 안으로
+  }
 
   function findUnits() {
     var list = [];
@@ -1729,6 +1796,7 @@ enum ContentScript {
   function apply() {
     try { if (typeof watchIpPopup === 'function') watchIpPopup(); } catch (e) {}
     ensureStyle();
+    try { spoilerGuard(); } catch (e) {}
     try { buildArticleHead(); buildVote(); } catch (e) {}
     try { homeRankTwoUp(); } catch (e) {}
     try { homeRankRemeasure(); } catch (e) {}
@@ -1991,6 +2059,16 @@ enum ContentScript {
       apply();
       return;
     }
+    // 스포일러 경고 칸(그 안의 '스포일러 주의' 사진 포함)을 누르면 → 사진 보기가 아니라 경고 칸을 치우고 본문 흐림을 풂 (칸 안의 '설정' 링크는 그대로 동작)
+    var spo = target && target.closest ? target.closest('#spoiler') : null;
+    if (spo && spo === spoilerBox()) {
+      var spoLink = target.closest('a[href]');
+      if (!(spoLink && spo.contains(spoLink))) {
+        e.preventDefault(); e.stopPropagation();
+        revealSpoiler();
+        return;
+      }
+    }
     // (닉네임 탭은 디시 원래 동작(답글 등) 그대로 — 앱 차단·메모 메뉴는 길게 누르기로만)
     // 글 속 사진 탭 → 앱 사진 보기 (아래로 쓸어 닫기 / 확대 / 넘기기)
     // (움짤은 사진 자리에 <video class="dc_mv">가 들어와서 디시 웹 확대창이 뜸 → 같이 앱 사진 보기로)
@@ -1998,7 +2076,8 @@ enum ContentScript {
     var abody = tapped ? articleBody() : null;
     if (abody && abody.contains(tapped) && !dcconKey(tapped)) {
       var shots = Array.prototype.filter.call(abody.querySelectorAll('img, video.dc_mv'), function (x) {
-        return !dcconKey(x) && galleryMediaURL(x) && (x.tagName === 'VIDEO' || (x.naturalWidth || x.width) > 40 || x === tapped);
+        // 스포일러 경고 칸의 사진(닫아도 문서에는 남아 있음)은 사진 보기 목록에서 뺌
+        return !dcconKey(x) && !x.closest('#spoiler') && galleryMediaURL(x) && (x.tagName === 'VIDEO' || (x.naturalWidth || x.width) > 40 || x === tapped);
       });
       var at = shots.indexOf(tapped);
       if (at >= 0) {
@@ -3718,7 +3797,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v250-splitlist', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v251-spoiler', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
