@@ -2637,7 +2637,7 @@ enum ContentScript {
       if (b) b.click();
     }, 200);
   });
-  // ---------- 댓글 등록이 429로 막히면 → 등록될 때까지 0.1초마다 등록 버튼 다시 누르기 ----------
+  // ---------- 댓글 등록이 429로 막히면 → 등록될 때까지 '댓글 새로고침 → 등록 버튼 다시 누르기' 반복 ----------
   var cmtRetry = { form: null, memo: '', tries: 0, on: false, url: '', timer: null, watchdog: null };
   function commentFormOf(el) {
     var f = el && el.closest ? el.closest('form') : null;
@@ -2655,7 +2655,7 @@ enum ContentScript {
     if (!cmtRetry.on && e.isTrusted && commentFormOf(e.target)) cmtRetry.form = e.target;
   }, true);
   function stopCmtRetry() {
-    cmtRetry.on = false; cmtRetry.tries = 0;
+    cmtRetry.on = false; cmtRetry.tries = 0; cmtRetry.refreshed = false;
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
   }
@@ -2771,6 +2771,15 @@ enum ContentScript {
       return;
     }
     cmtRetry.askedCheck = false;
+    // 다시 누르기 전에 댓글 목록을 먼저 새로 받음 → 0.8초 뒤 등록 (답글 양식은 목록 안에 있어 새로 받으면 사라지므로 그대로 누름)
+    if (!cmtRetry.refreshed && !f.closest('.all-comment-lst, [id^="comment_addDiv"]')) {
+      cmtRetry.refreshed = true;
+      try { refreshComments(); } catch (e) {}
+      clearTimeout(cmtRetry.watchdog);
+      cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 800);
+      return;
+    }
+    cmtRetry.refreshed = false;
     var btn = f.querySelector('button.btn-comment-write, button[type="submit"], input[type="submit"]');
     cmtRetry.tries++;
     if (btn) btn.click();
@@ -3797,7 +3806,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v251-spoiler', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v252-cmtrefresh', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
