@@ -3265,13 +3265,15 @@ enum ContentScript {
     return !!box;
   }
 
-  // ---------- 댓글 영역에 닿았는지 앱에 알림 (컨트롤바 '내리면 숨기기'에서 댓글에 가면 다시 보이게) ----------
-  // 댓글 영역 윗부분이 화면 아래쪽 끝에서 60px 안으로 들어오면 on, 그 위로 돌아가면 off. 바뀔 때만 보냄
+  // ---------- 댓글 영역이 화면에 걸쳐 있는지 앱에 알림 (컨트롤바 '내리면 숨기기'에서 댓글을 볼 땐 다시 보이게) ----------
+  // 댓글 영역 윗부분이 화면 아래쪽 끝에서 60px 안으로 들어와 있고, 아랫부분이 아직 화면 위로 다 지나가지 않았을 때만 on.
+  // 댓글 영역을 지나쳐 더 내려가거나(아래 글 목록 등) 그 위로 돌아가면 off. 안 보이게 숨겨졌거나 높이가 0이면 off. 바뀔 때만 보냄
   var cmtViewOn = false, cmtViewTick = false;
   function checkCmtView() {
     cmtViewTick = false;
     var box = document.getElementById('comment_box');
-    var on = !!box && box.getBoundingClientRect().top < window.innerHeight - 60;
+    var r = box ? box.getBoundingClientRect() : null;
+    var on = !!r && r.height > 0 && r.top < window.innerHeight - 60 && r.bottom > 0;
     if (on !== cmtViewOn) { cmtViewOn = on; post('cmtview', { on: on }); }
   }
   window.addEventListener('scroll', function () {
@@ -3824,7 +3826,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v254-imgcmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v255-cmtview', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

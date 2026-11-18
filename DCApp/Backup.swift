@@ -96,6 +96,14 @@ enum BackupManager {
         return try decoder.decode(BackupFile.self, from: data)
     }
 
+    /// 백업 파일에 적힌 파일 이름을 폴더 안의 이름 하나로만 받음 ("../x"처럼 경로가 섞인 이름으로 폴더 밖에 쓰거나 지우는 것 방지).
+    /// 앱이 만든 이름(UUID.확장자)은 그대로 통과하고, 비었거나 "."·".." 같은 쓸 수 없는 이름은 nil
+    nonisolated static func safeFileName(_ name: String) -> String? {
+        let last = (name as NSString).lastPathComponent
+        guard !last.isEmpty, last != ".", last != "..", last != "/", !last.contains("\0") else { return nil }
+        return last
+    }
+
     /// 백업 내용으로 지금 데이터를 바꿈 (계정 목록은 건드리지 않음)
     static func restore(_ b: BackupFile, favorites: FavoritesStore) {
         favorites.replaceAll(b.favorites)
@@ -104,20 +112,35 @@ enum BackupManager {
         let posts = SavedPostStore.shared
         if let archives = b.archives {
             for (name, data) in archives {
-                try? data.write(to: posts.archiveDir.appendingPathComponent(name))
+                guard let safe = safeFileName(name) else { continue }
+                try? data.write(to: posts.archiveDir.appendingPathComponent(safe))
             }
         }
-        posts.replaceAll(posts: b.savedPosts, folders: b.folders)
+        // 글 목록에 적힌 사본 파일 이름도 같은 규칙으로 (나중에 읽거나 지울 때 폴더 밖을 가리키지 않게)
+        let restoredPosts = b.savedPosts.map { p -> SavedPost in
+            var p = p
+            p.archiveFile = p.archiveFile.flatMap(safeFileName)
+            return p
+        }
+        posts.replaceAll(posts: restoredPosts, folders: b.folders)
 
         DraftStore.shared.replaceAll(b.drafts)
 
         let auto = AutoImageStore.shared
         if let files = b.autoImageFiles {
             for (name, data) in files {
-                try? data.write(to: auto.folder.appendingPathComponent(name))
+                guard let safe = safeFileName(name) else { continue }
+                try? data.write(to: auto.folder.appendingPathComponent(safe))
             }
         }
-        auto.settings = b.autoImages
+        var autoSettings = b.autoImages
+        autoSettings.images = autoSettings.images.compactMap { img in
+            guard let safe = safeFileName(img.filename) else { return nil }
+            var img = img
+            img.filename = safe
+            return img
+        }
+        auto.settings = autoSettings
 
         for (k, v) in b.prefs { Profile.defaults.set(v, forKey: k) }
         for (k, v) in b.stringPrefs ?? [:] { Profile.defaults.set(v, forKey: k) }

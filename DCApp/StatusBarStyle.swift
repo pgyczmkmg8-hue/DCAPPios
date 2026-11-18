@@ -26,7 +26,7 @@ enum StatusBarStyler {
 
     private static var observing = false
 
-    /// 모든 창의 맨 아래 화면에 적용 (이미 적용됐으면 색만 다시 계산)
+    /// 앱 창과 그 위 보조 창의 맨 아래 화면에 적용 (이미 적용됐으면 색만 다시 계산) — 대상은 shouldPatch 참고
     /// iOS가 앱 창 위에 따로 띄우는 창(UITrackingElementWindowController 등)도 상태바 색을 가져가서 같이 바꿈
     static func apply() {
         if !observing {
@@ -37,8 +37,15 @@ enum StatusBarStyler {
             }
         }
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
-            for w in scene.windows { patch(w.rootViewController) }
+            for w in scene.windows where shouldPatch(w) { patch(w.rootViewController) }
         }
+    }
+
+    /// 상태바 색 결정에 끼어드는 창만 바꿈: 앱 창(normal)과 iOS가 그 위에 붙이는 텍스트 보조 창(UITextEffectsWindow, 레벨 1·10)
+    /// - 진단 기록에서 이 보조 창이 상태바 색을 가져가는 게 확인돼 있어서, normal 하나로만 거르면 그 수정이 풀림 → 상태바 창(1000) 아래 레벨은 모두 대상
+    /// - 상태바 창 이상 레벨의 시스템 창(경고창·키보드 등)과 앱 잠금 가림막(alert+1)은 건드리지 않음 (가림막의 LightStatusBarHost가 같은 색을 직접 정함)
+    private static func shouldPatch(_ w: UIWindow) -> Bool {
+        w.windowLevel.rawValue < UIWindow.Level.statusBar.rawValue
     }
 
     /// 앱이 켜진 직후엔 창이 늦게 생길 수 있어서 몇 번 나눠서

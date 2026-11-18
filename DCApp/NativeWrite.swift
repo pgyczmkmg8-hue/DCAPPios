@@ -92,6 +92,8 @@ final class NativeWriteSession: ObservableObject {
     @Published var loaded = false
     /// 디시 글쓰기 양식(유동 여부·닉네임·말머리·코드칸)을 읽기 시작했는지 — 화면은 페이지 로딩 전에 먼저 뜨고, 양식은 로딩이 끝난 뒤 읽음
     var infoRequested = false
+    /// 처음 열 때 하는 일(양식 읽기·자짤·글 수정 불러오기)을 끝냈는지 — 웹 프로세스가 그 도중에 종료됐는지 가르는 데 씀
+    var startDone = false
     /// 임시저장·이어쓰기로 채워서 시작했는지 (자짤 자동 첨부를 건너뜀)
     var restoredFromDraft = false
     /// 글 수정 화면이면 수정하는 글의 주소 (분할 화면에서 수정이 끝나면 그 글을 다시 보여 주기 위해)

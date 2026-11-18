@@ -233,9 +233,27 @@ struct GallerySearchSheet: View {
     private func saveRecent() { Profile.defaults.set(recent, forKey: "gallerySearchRecent") }
 }
 
+/// 자기 브라우저를 직접 만들어 쓰는 화면(설정의 디시콘 샵·로그인 페이지 직접 열기)
+/// 모델을 여기서 @StateObject로 한 번만 만들고, BrowserView에는 넘겨서 보여 줌 (화면이 다시 그려져도 웹뷰가 새로 만들어지지 않음)
+struct StandaloneBrowserView: View {
+    @StateObject private var model: WebViewModel
+    private let fallbackTitle: String
+
+    init(startURL: URL, fallbackTitle: String) {
+        _model = StateObject(wrappedValue: WebViewModel(url: startURL))
+        self.fallbackTitle = fallbackTitle
+    }
+
+    var body: some View {
+        BrowserView(model: model, fallbackTitle: fallbackTitle)
+    }
+}
+
 /// 웹뷰 + 남색 상단바 + 공식 앱 스타일 하단 바. NavigationStack 안에 넣어서 사용하세요.
 struct BrowserView: View {
-    @StateObject private var model: WebViewModel
+    /// 밖(AppRouter 등)에서 만들어 넘겨받은 브라우저라 @ObservedObject — @StateObject로 받으면 같은 자리에서 넘겨받는 모델이 바뀌어도(primaryBrowser: main ↔ detail) 처음 받은 모델을 계속 붙들고 있음
+    /// 스스로 브라우저를 만들어야 하는 화면은 StandaloneBrowserView가 @StateObject로 소유
+    @ObservedObject private var model: WebViewModel
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var autoImages = AutoImageStore.shared
@@ -373,7 +391,7 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     @AppStorage(ControlBarItem.autoHideStyleKey, store: Profile.defaults) private var autoHideStyle = ControlBarItem.autoHideStyleScrolling
-    /// 컨트롤바를 화면 밖으로 넣었는지 — 방식 1: 스크롤하는 동안만 / 방식 2: 내리면 숨기고 올리면 표시(댓글 영역에 닿으면 다시 표시)
+    /// 컨트롤바를 화면 밖으로 넣었는지 — 방식 1: 스크롤하는 동안만 / 방식 2: 내리면 숨기고 올리면 표시(댓글 영역이 화면에 걸쳐 있는 동안은 다시 표시)
     private var barTucked: Bool {
         guard autoHideBar else { return false }
         if autoHideStyle == ControlBarItem.autoHideStyleDirection { return model.barHiddenByDirection && !model.commentsInView }
@@ -459,14 +477,9 @@ struct BrowserView: View {
         return r
     }
 
-    init(startURL: URL, fallbackTitle: String) {
-        _model = StateObject(wrappedValue: WebViewModel(url: startURL))
-        self.fallbackTitle = fallbackTitle
-    }
-
     /// 이미 만들어진 브라우저(홈 탭의 메인 브라우저 등)를 화면에 붙일 때
     init(model: WebViewModel, fallbackTitle: String, showsMenuButton: Bool = false, splitListWidth: CGFloat? = nil) {
-        _model = StateObject(wrappedValue: model)
+        _model = ObservedObject(wrappedValue: model)
         self.fallbackTitle = fallbackTitle
         self.showsMenuButton = showsMenuButton
         self.splitListWidth = splitListWidth

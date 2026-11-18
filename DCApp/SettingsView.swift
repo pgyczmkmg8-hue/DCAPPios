@@ -172,7 +172,7 @@ struct SettingsView: View {
                 // 디시콘
                 Section("디시콘") {
                     NavigationLink {
-                        BrowserView(startURL: DC.dccon, fallbackTitle: "디시콘 샵")
+                        StandaloneBrowserView(startURL: DC.dccon, fallbackTitle: "디시콘 샵")
                     } label: {
                         Label("디시콘 샵", systemImage: "face.smiling")
                     }
@@ -279,7 +279,7 @@ struct AccountSettingsView: View {
                     Label("유동 닉네임·비밀번호", systemImage: "person.fill.questionmark")
                 }
                 NavigationLink {
-                    BrowserView(startURL: DC.login, fallbackTitle: "로그인")
+                    StandaloneBrowserView(startURL: DC.login, fallbackTitle: "로그인")
                 } label: {
                     Label("로그인 페이지 직접 열기", systemImage: "person.badge.key")
                 }

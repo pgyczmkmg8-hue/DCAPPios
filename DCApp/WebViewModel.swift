@@ -94,7 +94,7 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var navHiddenByScroll = false
     /// 컨트롤바 '내리면 숨기기' 방식: 아래로 스크롤하면 true(멈춰도 유지), 위로 올리거나 맨 위 근처면 false
     @Published var barHiddenByDirection = false
-    /// 댓글 영역이 화면에 닿았는지 (페이지 스크립트가 알려줌). 닿으면 컨트롤바를 다시 보여 줌
+    /// 댓글 영역이 화면에 걸쳐 있는지 (페이지 스크립트가 알려줌). 걸쳐 있는 동안 컨트롤바를 다시 보여 줌 (지나쳐 내려가면 다시 숨김)
     @Published var commentsInView = false
     private var barLastY: CGFloat = 0
     private var barAnchorY: CGFloat = 0
@@ -911,18 +911,80 @@ final class WebViewModel: NSObject, ObservableObject {
     private var nativeWriteNeedsReread = false
     /// 마지막으로 본 글쓰기 페이지 주소 (웹 프로세스가 종료돼 url이 비었을 때 복구용)
     private var lastWriteURL: URL?
+    /// 웹 프로세스가 종료돼 글쓰기 페이지를 다시 여는 중 (이 화면·주소). 페이지가 다시 열리면 양식만 다시 읽고,
+    /// 로그인 만료 등으로 글쓰기 페이지가 아닌 곳이 열리면 쓰던 글을 남겨 둠
+    private var nativeRecovery: (session: NativeWriteSession, url: URL)?
+    /// 앱 글쓰기 양식이 끝내 안 열릴 때 화면을 닫는 타이머 (다시 불러올 때 취소하고 새로 맞춤)
+    private var nativeLoadTimeout: Task<Void, Never>?
+
+    /// 앱 글쓰기 화면의 쓰던 내용을 자동 임시저장 (쓴 게 없으면 아무것도 안 함). 저장한 칸 목록을 돌려줌
+    @discardableResult
+    private func autosaveNativeWrite(_ s: NativeWriteSession, writeURL: URL?) -> [DraftPart]? {
+        guard s.hasText || s.hasUserImages else { return nil }
+        let parts = s.draftParts()
+        DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                   preview: String(s.body.prefix(200)), isHTML: false, writeURL: writeURL, parts: parts)
+        return parts
+    }
+
+    /// 자동 임시저장 + 다시 열린 글쓰기 화면에 채울 수 있게 잡아 둠 (로그인·로그아웃 등으로 글쓰기 화면을 떠날 때)
+    private func keepNativeWrite(_ s: NativeWriteSession, writeURL: URL?) {
+        guard let parts = autosaveNativeWrite(s, writeURL: writeURL) else { return }
+        keptWrite = (Draft(id: UUID(), galleryID: s.galleryID, title: s.title, body: s.body,
+                           preview: String(s.body.prefix(200)), isHTML: false, isAuto: true,
+                           updatedAt: Date(), writeURL: writeURL, parts: parts), Date())
+    }
+
+    /// 앱 글쓰기 양식이 끝내 안 열리면 닫고 안내하는 타이머. 새로 열 때·웹 프로세스 종료로 다시 불러올 때마다
+    /// 이전 타이머를 취소하고 새로 맞춤 (옛 타이머가 남아 있다가 다시 불러오는 중에 화면을 닫지 않게)
+    /// keepWritten: 쓰던 글이 있으면 닫지 않고 안내만 (다시 불러오는 경우 — 내용은 임시저장돼 있고 페이지가 늦게라도 열리면 이어서 됨)
+    private func armNativeLoadTimeout(for s: NativeWriteSession, seconds: Int = 20, keepWritten: Bool = false) {
+        nativeLoadTimeout?.cancel()
+        nativeLoadTimeout = Task { @MainActor [weak self] in
+            // 앱이 화면에 떠 있던 시간만 1초씩 셈 — 백그라운드에 있다 돌아오는 순간 밀린 타이머가 한꺼번에 끝나, 페이지가 열리기도 전에 화면이 닫히지 않게
+            var waited = 0
+            while waited < seconds {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                if UIApplication.shared.applicationState == .active { waited += 1 }
+            }
+            guard let self, self.nativeWrite === s, !s.loaded, !s.submitting, self.retrySession == nil else { return }
+            if keepWritten, s.hasText || s.hasUserImages {
+                self.showToast("글쓰기 페이지를 아직 못 불러왔어요. 쓰던 글은 임시저장에 있어요")
+                return
+            }
+            self.forceCloseNativeWrite(quiet: true)
+            self.showToast("글쓰기 화면을 불러오지 못했어요. 차단된 IP이거나 연결 문제일 수 있어요")
+        }
+    }
+
+    /// 웹 프로세스 종료 뒤 글쓰기 페이지가 다시 열림: 앱 글쓰기 화면·내용은 그대로 두고 디시 양식(유동 닉·말머리·코드칸)만 다시 읽음
+    /// 페이지 스크립트·양식이 준비되기 전에 읽으면 실패로 보고 화면이 닫히므로 준비될 때까지 기다림 (끝내 안 되면 화면은 두고 타이머가 안내)
+    private func rereadNativeWrite(_ s: NativeWriteSession) {
+        Task {
+            var ready = false
+            for _ in 0..<40 {
+                guard nativeWrite === s else { return }
+                ready = (await call("return !!(window.__dcapp && document.getElementById('subject'));") as? Bool) == true
+                if ready { break }
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            guard nativeWrite === s, ready else { return }
+            // 새 양식은 닉네임·비밀번호를 저장된 값으로 채우므로, 쓰던 화면에서 고쳐 둔 값은 다시 넣음
+            let wasAnon = s.isAnon, nick = s.nick, pw = s.pw
+            guard await readWriteInfo(s) != nil, nativeWrite === s else { return }
+            if wasAnon, s.isAnon {
+                if !s.nickLocked, !nick.isEmpty { s.nick = nick }
+                if !pw.isEmpty { s.pw = pw }
+            }
+            s.loaded = true
+            nativeLoadTimeout?.cancel()
+        }
+    }
 
     private func keepWriteBeforeReload() async {
         if let s = nativeWrite {
-            if s.hasText || s.hasUserImages {
-                let parts = s.draftParts()
-                // 다시 열린 화면에 채울 것 + 혹시 몰라 자동 임시저장에도 (사진 파일이 지워지지 않게)
-                DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
-                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url, parts: parts)
-                keptWrite = (Draft(id: UUID(), galleryID: s.galleryID, title: s.title, body: s.body,
-                                   preview: String(s.body.prefix(200)), isHTML: false, isAuto: true,
-                                   updatedAt: Date(), writeURL: webView.url, parts: parts), Date())
-            }
+            keepNativeWrite(s, writeURL: webView.url)
             return
         }
         guard let gid = currentWriteGalleryID,
@@ -1080,12 +1142,7 @@ final class WebViewModel: NSObject, ObservableObject {
         let (s, restored) = beginNativeWrite(gid)
         finishNativeWriteStart(s, gid, restored: restored)
         // 글쓰기 양식이 끝내 안 열리면(차단된 IP로 글쓰기 페이지가 막힌 경우 등) 무한 로딩 대신 닫고 안내
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(20))
-            guard let self, self.nativeWrite === s, !s.loaded, !s.submitting, self.retrySession == nil else { return }
-            self.forceCloseNativeWrite(quiet: true)
-            self.showToast("글쓰기 화면을 불러오지 못했어요. 차단된 IP이거나 연결 문제일 수 있어요")
-        }
+        armNativeLoadTimeout(for: s)
     }
 
     /// 페이지 로딩이 끝난 뒤: 디시 양식 읽기 → 자짤·글 수정 불러오기
@@ -1119,6 +1176,7 @@ final class WebViewModel: NSObject, ObservableObject {
                 }
             }
             s.loaded = true
+            s.startDone = true
             runNativeAutosave(s)
         }
     }
@@ -1135,6 +1193,8 @@ final class WebViewModel: NSObject, ObservableObject {
                 showBanAlert(message: info["msg"] as? String ?? "")
                 return nil
             }
+            // 웹 프로세스가 종료돼 읽기가 끊긴 경우는 화면을 닫지 않음 (복구로 글쓰기 페이지가 다시 열리면 그때 다시 읽음)
+            if let rec = nativeRecovery, rec.session === s { return nil }
             nativeWrite = nil
             showToast("글쓰기 양식을 못 읽어서 디시 화면으로 쓸게요")
             return nil
@@ -2152,6 +2212,21 @@ extension WebViewModel: WKNavigationDelegate {
             if let s = retrySession, nativeWrite === s {
                 retrySession = nil
                 continueRetry(s)           // 재시도: 같은 화면·내용을 유지한 채 다시 등록
+            } else if let rec = nativeRecovery, nativeWrite === rec.session, rec.session.galleryID == gid, rec.session.infoRequested {
+                // 웹 프로세스가 종료돼 다시 연 글쓰기 페이지 → 앱 글쓰기 화면·내용은 그대로 두고 양식만 다시 읽음
+                // 처음 양식을 읽는 도중에 끊겼던 화면(startDone 아님)만 처음 시작 과정(자짤·글 수정 불러오기 포함)을 마저 함
+                // (화면이 먼저 뜨고 페이지가 아직 안 열린 채 끊긴 경우는 아래 기존 시작 경로가 맡음)
+                if rec.session.startDone { rereadNativeWrite(rec.session) }
+                else { finishNativeWriteStart(rec.session, gid, restored: rec.session.restoredFromDraft) }
+            } else if let s = nativeWrite, s.galleryID == gid, s.submitting, s.hasText || s.hasUserImages {
+                // 등록 중이던 화면(쓴 내용 있음)이 있는데 같은 글쓰기 페이지가 새로 열림 → 빈 화면으로 덮어쓰지 않고 같은 화면·내용에서 양식만 다시 읽음
+                // 등록이 됐는지 알 수 없으니 자동으로 다시 등록하지는 않음 (끊긴 등록 호출의 결과는 버림)
+                s.submitToken = UUID()
+                s.submitting = false
+                s.loaded = false
+                showToast("등록 중에 페이지가 다시 열렸어요. 글이 올라갔는지 확인한 뒤 필요하면 다시 등록해 주세요")
+                armNativeLoadTimeout(for: s, keepWritten: true)
+                rereadNativeWrite(s)
             } else if nativeWrite?.galleryID != gid || nativeWrite?.submitting == true {
                 startNativeWrite(gid)
             } else if let s = nativeWrite, !s.infoRequested {
@@ -2160,12 +2235,24 @@ extension WebViewModel: WKNavigationDelegate {
                 Task { _ = await readWriteInfo(s) }
             }
             nativeWriteNeedsReread = false
+            nativeRecovery = nil
             focusTitleOnWrite = false
             nativeHandled = true      // 자짤·이어쓰기·자동 저장은 앱 화면에서 처리
         }
         if writeGID == nil { nativeSkipURL = nil }
         if writeGID == nil, let s = nativeWrite {
-            if s.submitting {
+            if let rec = nativeRecovery, rec.session === s {
+                // 웹 프로세스 종료 뒤 글쓰기 페이지를 다시 열었는데 다른 곳(로그인 만료 등)으로 보내짐 → 조용히 닫지 않고, 쓰던 글을 임시저장해 두고
+                // 로그인 뒤 글쓰기 페이지로 돌아오면(또는 로그인 완료 뒤 이 글쓰기 주소를 다시 열면) 다시 채워지게 함
+                nativeRecovery = nil
+                if s.hasText || s.hasUserImages {
+                    keepNativeWrite(s, writeURL: rec.url)
+                    loginRestoreDeadline = Date().addingTimeInterval(1800)
+                    showToast("글쓰기 페이지로 돌아가지 못했어요. 쓰던 글은 로그인 뒤 다시 채워지고, 임시저장에도 있어요")
+                } else {
+                    showToast("글쓰기 페이지로 돌아가지 못했어요")
+                }
+            } else if s.submitting {
                 DraftStore.shared.removeAuto(galleryID: s.galleryID)   // 등록됨 → 자동 저장본 지움
                 if s.modifyPostURL == nil, openWrittenPost != nil { openWrittenPostFromList(title: s.title) }   // 분할 화면: 방금 쓴 글을 오른쪽에
             }
@@ -2237,14 +2324,22 @@ extension WebViewModel: WKNavigationDelegate {
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         // 앱 글쓰기 중 웹 프로세스가 (백그라운드에서) 종료됐으면: 화면·내용은 그대로 두고 쓰던 글을 임시저장, 글쓰기 페이지만 다시 열어 양식을 다시 읽음
-        if let s = nativeWrite, !s.submitting, let u = webView.url ?? lastWriteURL {
-            if s.hasText || s.hasUserImages {
-                DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
-                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: u,
-                                           parts: s.draftParts())
+        if let s = nativeWrite,
+           let u = [webView.url, lastWriteURL].compactMap({ $0 }).first(where: { AutoImageStore.writeGalleryID(from: $0) == s.galleryID }) {
+            if s.submitting {
+                // 등록 도중에 끊겼다면 글이 올라갔는지 알 수 없음 → 자동으로 다시 등록하지 않고(글이 두 번 올라갈 수 있음) '등록 중'만 풀어 직접 확인하게 함
+                // 토큰을 바꿔 끊긴 등록 호출이 오류로 돌아와도 결과를 버림. (페이지만 reload하면 didFinish가 이 화면을 빈 화면으로 덮어쓰던 경로이기도 했음)
+                s.submitToken = UUID()
+                s.submitting = false
+                showToast("등록 중에 화면이 다시 시작됐어요. 글이 올라갔는지 확인한 뒤 필요하면 다시 등록해 주세요")
             }
-            nativeWriteNeedsReread = true
+            autosaveNativeWrite(s, writeURL: u)
+            s.loaded = false              // 양식을 다시 읽기 전에는 등록하지 못하게
+            nativeRecovery = (s, u)
+            nativeWriteNeedsReread = false      // 다시 읽기는 nativeRecovery가 맡음 (didFinish에서 양식이 준비되길 기다린 뒤 읽음)
             nativeSkipURL = nil
+            retrySession = nil                  // 끊긴 재시도는 이어가지 않음 (화면·내용은 위에서 그대로 유지)
+            armNativeLoadTimeout(for: s, keepWritten: true)     // 이전 타이머는 취소하고 지금부터 새로 맞춤
             webView.load(URLRequest(url: u))
             return
         }
