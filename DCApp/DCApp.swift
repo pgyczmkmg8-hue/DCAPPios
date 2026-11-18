@@ -302,7 +302,7 @@ struct RootView: View {
                         .frame(width: total, height: geo.size.height, alignment: .leading)
                         // 위층: 왼쪽(목록) 화면을 창 전체 폭으로 (내비게이션 바 없이 SwiftUI로만) — 목록 폭 밖은 비어 있어 글 화면이 눌리고,
                         // 컨트롤바는 창 오른쪽 끝에서 글 위에 떠 있음
-                        BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true, splitListWidth: list)
+                        BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true, splitListWidth: list, detailPane: router.detailBrowser)
                             .safeAreaPaddingBottomCompat(Self.windowBottomSafe)   // 내비게이션 스택이 없어진 만큼 아래 안전 영역(홈 바)을 되돌려 컨트롤바 높이를 한 화면일 때와 같게
                             .id(themeRaw)
                             .frame(width: total, height: geo.size.height, alignment: .topLeading)

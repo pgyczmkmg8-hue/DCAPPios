@@ -96,13 +96,37 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var barHiddenByDirection = false
     /// 댓글 영역이 화면에 걸쳐 있는지 (페이지 스크립트가 알려줌). 걸쳐 있는 동안 컨트롤바를 다시 보여 줌 (지나쳐 내려가면 다시 숨김)
     @Published var commentsInView = false
-    private var barLastY: CGFloat = 0
-    private var barAnchorY: CGFloat = 0
-    private var barDirDown = true
+    /// 컨트롤바 방향 숨김의 기준 위치: 보이는 동안은 '가장 위로 올라간 곳', 숨은 동안은 '가장 아래로 내려간 곳'.
+    /// 여기서 24pt 이상 반대로 움직여야 바뀜 → 손가락 떨림이나 한두 샘플의 어긋남이 있어도 누적 거리가 0으로 돌아가지 않음
+    private var barRefY: CGFloat = 0
+    /// 댓글 영역에 닿아 컨트롤바를 꺼낸 직후 이 시각까지는 다시 숨기지 않음 (관성으로 곧바로 숨어 깜빡이는 것 방지)
+    private var barHoldUntil = Date.distantPast
     private var lastScrollY: CGFloat = 0
     private var scrollAnchorY: CGFloat = 0
     private var scrollDirDown = true
+    /// 앱이 상단바를 켜고 끈 시각 — 그 직후 0.5초는 상단바 변화로 생기는 흔들림이라 방향을 세지 않음
     private var navToggleAt = Date.distantPast
+    /// 직전 화면 폭 (회전으로 폭이 바뀌었는지 보려고)
+    private var lastViewWidth: CGFloat = -1
+    /// 마지막으로 손가락·관성 스크롤 샘플이 온 시각 (그 직후 0.3초 안의 '손가락 아님' 샘플은 깃발이 잠깐 꺼진 것으로 보고 이어서 셈)
+    private var lastUserSampleAt = Date.distantPast
+    /// 진단용: 컨트롤바 숨김 판정이 샘플을 어떻게 처리했는지 셈
+    private struct BarStats {
+        var user = 0, flap = 0, idle = 0, windowSkip = 0, widthChanges = 0, navResets = 0
+        var hide = 0, show = 0, cmtShow = 0
+        var lastToggle = "-"
+        var lastToggleAt = Date.distantPast
+    }
+    private var barStats = BarStats()
+    /// 진단용: 화면(BrowserView)이 컨트롤바를 숨겨야 한다고 본 상태·횟수 — 판정은 바뀌는데 화면이 안 따라가는지 가르는 데 씀
+    private var viewTucked = false
+    private var viewTuckCount = 0
+    private var viewTuckChangedAt = Date.distantPast
+    func noteViewTucked(_ v: Bool) {
+        viewTucked = v
+        if v { viewTuckCount += 1 }
+        viewTuckChangedAt = Date()
+    }
     private var scrollStopTask: Task<Void, Never>?
     var pendingDraft: Draft?
     /// 하단 바 '글쓰기'로 들어왔으면, 글쓰기 화면이 열린 뒤 제목 칸에 커서+키보드
@@ -264,29 +288,71 @@ final class WebViewModel: NSObject, ObservableObject {
         if dy == 0 { return }
         if (dy > 0) != (scrollDirDown) { scrollDirDown = dy > 0; scrollAnchorY = lastScrollY }   // 방향이 바뀌면 기준점 새로
         let moved = off - scrollAnchorY      // 같은 방향으로 움직인 누적 거리
-        if y < 40 { if navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }; return }
-        if moved > 30, y > 100, !navHiddenByScroll { navHiddenByScroll = true; navToggleAt = Date() }
-        else if moved < -30, navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }
+        if y < 40 { if navHiddenByScroll { setNavHidden(false) }; return }
+        if moved > 30, y > 100, !navHiddenByScroll { setNavHidden(true) }
+        else if moved < -30, navHiddenByScroll { setNavHidden(false) }
     }
 
-    /// 아래로 일정 거리 스크롤하면 컨트롤바를 숨기고, 위로 일정 거리 올리면 다시 보임 (멈춰도 그대로)
+    /// 상단바(와 그 위 남색 띠)를 접고 펴기: 애니메이션 트랜잭션 안에서 바꿔야 시스템 상단바·웹뷰 안전 영역·남색 띠가 휙 바뀌지 않고 같은 곡선으로 움직임
+    /// (전환 중 생기는 오프셋 흔들림은 navToggleAt의 0.5초 무시 구간이 덮음)
+    private func setNavHidden(_ hidden: Bool) {
+        navToggleAt = Date()
+        withAnimation(.easeInOut(duration: 0.25)) { navHiddenByScroll = hidden }
+    }
+
+    /// 아래로 24pt 스크롤하면 컨트롤바를 숨기고, 위로 24pt 올리면 다시 보임 (멈춰도 그대로)
+    /// 방향이 바뀔 때마다 기준점을 새로 잡던 방식은 손가락 떨림(−1pt 한 번)에도 누적이 0으로 돌아가 숨김이 안 먹혔음
+    /// → 보이는 동안은 가장 위로 올라간 곳(barRefY)을, 숨은 동안은 가장 아래로 내려간 곳을 기준으로 삼아 거기서 24pt 되돌아와야 바뀜
     private func updateBarHiddenByDirection(_ sv: UIScrollView) {
         let off = sv.contentOffset.y
-        defer { barLastY = off }
-        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { barAnchorY = off; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
-        let dy = off - barLastY
-        if dy == 0 { return }
-        if (dy > 0) != barDirDown { barDirDown = dy > 0; barAnchorY = barLastY }   // 방향이 바뀌면 기준점 새로
-        let moved = off - barAnchorY
+        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { barRefY = off; barStats.windowSkip += 1; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
         let y = off + sv.adjustedContentInset.top
-        if y < 40 { if barHiddenByDirection { barHiddenByDirection = false }; return }
-        if moved > 24, y > 100, !barHiddenByDirection { barHiddenByDirection = true }
-        else if moved < -24, barHiddenByDirection { barHiddenByDirection = false }
+        if y < 40 {      // 맨 위 근처는 늘 보임
+            if barHiddenByDirection { setBarHidden(false, at: off) }
+            barRefY = off
+            return
+        }
+        if barHiddenByDirection {
+            barRefY = max(barRefY, off)
+            if barRefY - off > 24 { setBarHidden(false, at: off) }
+        } else {
+            if Date() < barHoldUntil { barRefY = off; return }     // 댓글에 닿아 꺼낸 직후
+            barRefY = min(barRefY, off)
+            if off - barRefY > 24, y > 100 { setBarHidden(true, at: off) }
+        }
+    }
+
+    private func setBarHidden(_ hidden: Bool, at off: CGFloat) {
+        barHiddenByDirection = hidden
+        barRefY = off
+        if hidden { barStats.hide += 1 } else { barStats.show += 1 }
+        barStats.lastToggle = "\(hidden ? "hide" : "show")@\(Int(off))"
+        barStats.lastToggleAt = Date()
     }
 
     private func scrollMoved() {
         let sv = webView.scrollView
-        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { lastScrollY = sv.contentOffset.y; barLastY = sv.contentOffset.y; return }
+        let off = sv.contentOffset.y
+        let now = Date()
+        // 화면 폭이 바뀐 순간(회전 등)은 움직임으로 세지 않고, 기준점을 지금 위치로 다시 잡고, 컨트롤바는 다시 보임
+        let widthChanged = abs(sv.bounds.width - lastViewWidth) > 0.5
+        lastViewWidth = sv.bounds.width
+        if widthChanged {
+            barStats.widthChanges += 1
+            lastScrollY = off; scrollAnchorY = off; barRefY = off
+            if barHiddenByDirection { setBarHidden(false, at: off) }
+            return
+        }
+        let userDriven = sv.isTracking || sv.isDragging || sv.isDecelerating
+        // 손가락 깃발이 꺼진 샘플이라도 직전 0.3초 안에 손가락 샘플이 있었으면 스크롤이 이어지는 중으로 보고 셈 (샘플마다 깃발이 깜빡여도 누적이 끊기지 않게)
+        let recentUser = now.timeIntervalSince(lastUserSampleAt) < 0.3
+        guard userDriven || recentUser else {
+            // 손가락과 상관없는 움직임(회전 뒤 자리 맞춤·로딩·키보드·페이지가 스스로 옮김): 세지 않고 기준점만 지금 위치로
+            barStats.idle += 1
+            lastScrollY = off; barRefY = off
+            return
+        }
+        if userDriven { lastUserSampleAt = now; barStats.user += 1 } else { barStats.flap += 1 }
         updateBarHiddenByDirection(sv)
         updateNavHidden(sv)
         if !isScrolling { isScrolling = true }
@@ -1809,7 +1875,28 @@ final class WebViewModel: NSObject, ObservableObject {
     func diagnose() async -> String {
         let page = (await call("return window.__dcapp ? window.__dcapp.diagnose() : '스크립트가 로드되지 않았어요: ' + location.href;") as? String)
             ?? "진단 정보를 가져오지 못했어요."
-        return StatusBarStyler.diagnostics() + "\n" + page
+        return StatusBarStyler.diagnostics() + "\n" + barHideDiagnostics() + "\n" + page
+    }
+
+    /// 컨트롤바 숨김 판정에 쓰는 값 (실기기에서 숨김이 안 먹힐 때 이 줄들로 원인을 좁힘)
+    /// samples: user=손가락·관성 / flap=깃발만 꺼진(직전 0.3초 안에 손가락 있었음) / idle=손가락과 무관 / windowSkip=상단바 변화 직후 0.5초 건너뜀 / widthChg=화면 폭 변화
+    /// toggles: hide·show 횟수와 마지막 전환 (hide가 0이면 판정이 안 걸린 것, 0이 아닌데 안 숨으면 화면 쪽 문제)
+    private func barHideDiagnostics() -> String {
+        let sv = webView.scrollView
+        let style = Profile.defaults.string(forKey: ControlBarItem.autoHideStyleKey) ?? ControlBarItem.autoHideStyleScrolling
+        let autoHide = Profile.defaults.object(forKey: ControlBarItem.autoHideKey) as? Bool ?? true
+        let st = barStats
+        let ago = st.lastToggleAt == .distantPast ? "-" : String(format: "%.0fs", Date().timeIntervalSince(st.lastToggleAt))
+        return [
+            "--- 컨트롤바 숨김 ---",
+            "autoHideBar=\(autoHide) autoHideStyle=\(style)",
+            "barHiddenByDirection=\(barHiddenByDirection) commentsInView=\(commentsInView) isScrolling=\(isScrolling) navHiddenByScroll=\(navHiddenByScroll)",
+            "off=\(Int(sv.contentOffset.y)) insetTop=\(Int(sv.adjustedContentInset.top)) bounds=\(Int(sv.bounds.width))x\(Int(sv.bounds.height)) barRefY=\(Int(barRefY))",
+            "samples: user=\(st.user) flap=\(st.flap) idle=\(st.idle) windowSkip=\(st.windowSkip) widthChg=\(st.widthChanges)",
+            "toggles: hide=\(st.hide) show=\(st.show) cmtShow=\(st.cmtShow) last=\(st.lastToggle) \(ago) ago | navReset=\(st.navResets) | navToggleAgo=\(String(format: "%.0f", Date().timeIntervalSince(navToggleAt)))s",
+            "view: tucked=\(viewTucked) tuckCount=\(viewTuckCount) changedAgo=\(viewTuckChangedAt == .distantPast ? "-" : String(format: "%.0fs", Date().timeIntervalSince(viewTuckChangedAt)))",
+            "tracking=\(sv.isTracking) dragging=\(sv.isDragging) decelerating=\(sv.isDecelerating)",
+        ].joined(separator: "\n")
     }
 
     // MARK: - 캡처
@@ -1955,9 +2042,17 @@ extension WebViewModel: WKScriptMessageHandler {
         case "cmtmissing":   // 댓글은 등록됐는데 목록에 안 보임 → 글을 다시 불러와 댓글 위치로 (나갔다 들어온 것과 같게)
             scrollToCommentsAfterLoad = true
             reload()
-        case "cmtview":   // 댓글 영역이 화면에 닿음/벗어남 → 컨트롤바 '내리면 숨기기'에서 댓글에 닿으면 다시 보임
+        case "cmtview":   // 댓글 영역이 화면에 닿음/벗어남 → 컨트롤바 '내리면 숨기기'에서 댓글에 새로 닿으면 한 번 다시 꺼내 줌
             let on = (body["on"] as? Bool) ?? false
-            if commentsInView != on { commentsInView = on }
+            if commentsInView != on {
+                commentsInView = on
+                if on, barHiddenByDirection {
+                    // 닿은 순간 한 번만 꺼냄 (그 뒤 아래로 더 내리면 다시 숨음). 같은 스크롤의 관성으로 바로 다시 숨어 깜빡이지 않게 잠깐 유지
+                    setBarHidden(false, at: webView.scrollView.contentOffset.y)
+                    barHoldUntil = Date().addingTimeInterval(1.0)
+                    barStats.cmtShow += 1
+                }
+            }
         case "tdock":
             let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
             if writeToolbarHeight != h { writeToolbarHeight = h }
@@ -2132,6 +2227,8 @@ extension WebViewModel: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
         barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임
+        barRefY = webView.scrollView.contentOffset.y
+        barStats.navResets += 1
         commentsInView = false
         if AdBlock.paused {
             adResumeTask?.cancel()

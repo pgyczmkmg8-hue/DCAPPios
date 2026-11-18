@@ -254,6 +254,8 @@ struct BrowserView: View {
     /// 밖(AppRouter 등)에서 만들어 넘겨받은 브라우저라 @ObservedObject — @StateObject로 받으면 같은 자리에서 넘겨받는 모델이 바뀌어도(primaryBrowser: main ↔ detail) 처음 받은 모델을 계속 붙들고 있음
     /// 스스로 브라우저를 만들어야 하는 화면은 StandaloneBrowserView가 @StateObject로 소유
     @ObservedObject private var model: WebViewModel
+    /// 분할 화면의 글 화면 (컨트롤바가 오른쪽에 있을 때 숨김 기준) — 단일 화면이면 model과 같음
+    @ObservedObject private var detailPane: WebViewModel
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var autoImages = AutoImageStore.shared
@@ -391,12 +393,18 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     @AppStorage(ControlBarItem.autoHideStyleKey, store: Profile.defaults) private var autoHideStyle = ControlBarItem.autoHideStyleScrolling
-    /// 컨트롤바를 화면 밖으로 넣었는지 — 방식 1: 스크롤하는 동안만 / 방식 2: 내리면 숨기고 올리면 표시(댓글 영역이 화면에 걸쳐 있는 동안은 다시 표시)
+    /// 컨트롤바를 화면 밖으로 넣었는지 — 방식 1: 스크롤하는 동안만 / 방식 2: 내리면 숨기고 올리면 표시
+    /// 방식 2에서 댓글 영역에 닿으면 다시 나오는 건 '한 번 꺼내 주는' 동작(WebViewModel cmtview)이지 숨김 잠금이 아님
+    /// (예전엔 댓글이 화면에 걸쳐 있는 동안 숨김을 통째로 막아서, 큰 화면·짧은 글에서는 영영 안 숨었음)
     private var barTucked: Bool {
         guard autoHideBar else { return false }
-        if autoHideStyle == ControlBarItem.autoHideStyleDirection { return model.barHiddenByDirection && !model.commentsInView }
-        return model.isScrolling
+        let src = barScrollModel
+        if autoHideStyle == ControlBarItem.autoHideStyleDirection { return src.barHiddenByDirection }
+        return src.isScrolling
     }
+    /// 숨길 때 화면 밖으로 빼는 거리: 막대가 화면 밖으로 완전히 나가도록 화면 폭(세로 막대)·바 높이(가로 막대)를 넘게
+    private var sideTuckDistance: CGFloat { max(220, viewSize.width + 80) }
+    private var bottomTuckDistance: CGFloat { max(160, bottomBarHeight + 80) }
     @AppStorage(ControlBarItem.verticalPortraitKey, store: Profile.defaults) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
     /// 화면(이 브라우저 영역) 크기 — 가로로 쓰는지 판단
     @State private var viewSize: CGSize = .zero
@@ -478,12 +486,17 @@ struct BrowserView: View {
     }
 
     /// 이미 만들어진 브라우저(홈 탭의 메인 브라우저 등)를 화면에 붙일 때
-    init(model: WebViewModel, fallbackTitle: String, showsMenuButton: Bool = false, splitListWidth: CGFloat? = nil) {
+    /// detailPane: 분할 화면의 오른쪽 글 화면 — 컨트롤바가 오른쪽에 있을 때 그 스크롤에 따라 숨김 (목록 화면에서 함께 구독해야 다시 그려짐)
+    init(model: WebViewModel, fallbackTitle: String, showsMenuButton: Bool = false, splitListWidth: CGFloat? = nil, detailPane: WebViewModel? = nil) {
         _model = ObservedObject(wrappedValue: model)
+        _detailPane = ObservedObject(wrappedValue: detailPane ?? model)
         self.fallbackTitle = fallbackTitle
         self.showsMenuButton = showsMenuButton
         self.splitListWidth = splitListWidth
     }
+
+    /// 컨트롤바 숨김을 따르는 웹 화면: 분할 화면에서 컨트롤바가 오른쪽(글 쪽)에 있으면 글 화면, 왼쪽(목록 쪽, 좌우반전)이면 목록
+    private var barScrollModel: WebViewModel { (splitListWidth != nil && !barMirrored) ? detailPane : model }
 
     private var filters: FilterStore { FilterStore.shared }
 
@@ -778,6 +791,8 @@ struct BrowserView: View {
                         if !keyboardVisible {
                             if barCollapsed {
                                 collapsedSideButton
+                                // 접힌 동안에도 펼친 막대의 높이를 재 둠 — 처음부터 접혀 있거나 회전 직후 높이를 모르면 접은 버튼이 아래 구석으로 떨어짐
+                                sideBar.opacity(0).allowsHitTesting(false).accessibilityHidden(true)
                             } else { sideBar }
                         }
                     } else if collapsedInColumn && !keyboardVisible {
@@ -786,9 +801,11 @@ struct BrowserView: View {
                         refreshButtonPlaced        // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침
                     }
                 }
-                // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴
-                .offset(x: barTucked ? (barMirrored ? -220 : 220) : 0)
+                // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴 (숨겨진 동안은 터치도 받지 않음)
+                .offset(x: barTucked ? (barMirrored ? -sideTuckDistance : sideTuckDistance) : 0)
+                .opacity(barTucked ? 0 : 1)      // 화면 밖으로 다 못 나가는 경우(접힌 버튼·유리 그림자 등)에도 확실히 안 보이게
                 .animation(.easeOut(duration: 0.2), value: barTucked)
+                .allowsHitTesting(!barTucked)
                 .ignoresSafeArea(.container, edges: (UIDevice.current.userInterfaceIdiom == .phone && !Self.hasSideColumnOnly) ? [.leading, .trailing]   // 일반 폰은 가로여도 컨트롤바를 화면 가장자리 기준으로
                                                 : (fillsTrailing && Self.hasSideColumnOnly && !barMirrored ? .trailing : []))   // 듀오: 컨트롤바를 옆 세로 줄 자리로
             }
@@ -808,9 +825,11 @@ struct BrowserView: View {
                         modeBanner
                         if showsMenuButton && !usesSideBar {
                             Group { if barCollapsed { if !collapsedInColumn { collapsedBarButton } } else { galleryBar } }
-                                // 스크롤하는 동안 화면 아래로 들어갔다가 멈추면 다시 나옴
-                                .offset(y: barTucked ? 160 : 0)
+                                // 스크롤하는 동안 화면 아래로 들어갔다가 멈추면 다시 나옴 (바 높이를 재서 그만큼 내림)
+                                .offset(y: barTucked ? bottomTuckDistance : 0)
+                                .opacity(barTucked ? 0 : 1)
                                 .animation(.easeOut(duration: 0.2), value: barTucked)
+                                .allowsHitTesting(!barTucked)
                         }
                     }
                     .background {
@@ -820,7 +839,7 @@ struct BrowserView: View {
                                 .onChangeCompat(of: g.size.height) { _, h in bottomBarHeight = h }
                         }
                     }
-                    .modifier(SplitBottom(listWidth: splitListWidth, totalWidth: viewSize.width))
+                    .modifier(SplitBottom(listWidth: splitListWidth, totalWidth: viewSize.width, mirrored: barMirrored))
                     .transition(.opacity)
                 }
             }
@@ -940,6 +959,11 @@ struct BrowserView: View {
                 }
             }
             .animation(.spring(duration: 0.3), value: model.toast)
+            // 진단용: 화면이 컨트롤바를 숨겨야 한다고 본 순간을 모델에 남김 (페이지 구조 진단의 '컨트롤바 숨김' 줄)
+            .onChangeCompat(of: barTucked) { _, v in
+                model.noteViewTucked(v)
+                if barScrollModel !== model { barScrollModel.noteViewTucked(v) }
+            }
             .alert("키워드 차단", isPresented: $showKeywordPrompt) {
                 TextField("차단할 단어", text: $keywordInput)
                 Button("취소", role: .cancel) {}
@@ -2739,11 +2763,17 @@ private struct SplitPane: ViewModifier {
 private struct SplitBottom: ViewModifier {
     let listWidth: CGFloat?
     let totalWidth: CGFloat
+    /// 컨트롤바가 왼쪽(좌우반전)이면 목록 아래, 아니면 글 화면 아래 (세로 막대와 같은 쪽)
+    var mirrored = false
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if let l = listWidth {
-            content.frame(width: max(totalWidth - l, 200)).frame(maxWidth: .infinity, alignment: .trailing)
+            if mirrored {
+                content.frame(width: max(l, 200)).frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                content.frame(width: max(totalWidth - l, 200)).frame(maxWidth: .infinity, alignment: .trailing)
+            }
         } else {
             content
         }
