@@ -886,6 +886,8 @@ final class WebViewModel: NSObject, ObservableObject {
     private var loginRestoreDeadline: Date?
     /// 로그아웃으로 글쓰기 페이지를 다시 열었을 때, 앱 글쓰기 화면은 두고 양식 정보만 다시 읽기
     private var nativeWriteNeedsReread = false
+    /// 마지막으로 본 글쓰기 페이지 주소 (웹 프로세스가 종료돼 url이 비었을 때 복구용)
+    private var lastWriteURL: URL?
 
     private func keepWriteBeforeReload() async {
         if let s = nativeWrite {
@@ -2115,6 +2117,7 @@ extension WebViewModel: WKNavigationDelegate {
 
         // 글쓰기 화면이면 자짤 자동 첨부
         let writeGID = webView.url.flatMap(AutoImageStore.writeGalleryID)
+        if writeGID != nil { lastWriteURL = webView.url }
         // 앱 글쓰기 화면: 글쓰기 페이지면 덮고, 다른 페이지로 가면(등록 완료 등) 닫음
         var nativeHandled = false
         if let gid = writeGID, Self.nativeWriteEnabled, nativeSkipURL != webView.url {
@@ -2205,6 +2208,18 @@ extension WebViewModel: WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        // 앱 글쓰기 중 웹 프로세스가 (백그라운드에서) 종료됐으면: 화면·내용은 그대로 두고 쓰던 글을 임시저장, 글쓰기 페이지만 다시 열어 양식을 다시 읽음
+        if let s = nativeWrite, !s.submitting, let u = webView.url ?? lastWriteURL {
+            if s.hasText || s.hasUserImages {
+                DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
+                                           preview: String(s.body.prefix(200)), isHTML: false, writeURL: u,
+                                           parts: s.draftParts())
+            }
+            nativeWriteNeedsReread = true
+            nativeSkipURL = nil
+            webView.load(URLRequest(url: u))
+            return
+        }
         webView.reload()
     }
 }
