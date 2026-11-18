@@ -3534,8 +3534,14 @@ enum ContentScript {
       var a = li.querySelector('a');
       var oc = a && a.getAttribute('onclick') || '';
       if (!/head_select/.test(oc)) return;                       // 관리자 전용 말머리 등은 못 고름
-      heads.push({ no: String(li.getAttribute('data-no')), name: txt(a) });
+      var no = String(li.getAttribute('data-no'));
+      // 말머리별 안내 문구: 디시 head_select()가 #placeholder{말머리번호} 값을 편집기에 넣음 (값에 <br> 같은 HTML이 올 수 있어서 원문 그대로 넘기고 앱이 정리)
+      var phEl = document.getElementById('placeholder' + no);
+      heads.push({ no: no, name: txt(a), ph: phEl ? phEl.value : '' });
     });
+    // 기본 안내 문구(말머리가 없거나 안내가 비어 있을 때): #placeholder0, 없으면 본문 칸의 data-ph
+    var ph0 = document.getElementById('placeholder0'), textboxEl = document.getElementById('textbox');
+    var phDefault = ph0 ? ph0.value : (textboxEl ? (textboxEl.getAttribute('data-ph') || '') : '');
     var ht = document.getElementById('headtext');
     var cap = document.getElementById('dcblock'), capImg = null;
     if (cap) {
@@ -3563,7 +3569,7 @@ enum ContentScript {
       anon: !!(name || pw),
       nick: name ? name.value : '', nickLocked: !!(name && (name.disabled || name.readOnly)),
       pw: pw ? pw.value : '',
-      heads: heads, head: ht ? String(ht.value) : '',
+      heads: heads, head: ht ? String(ht.value) : '', phDefault: phDefault,
       captcha: !!cap, captchaImg: capImg,
       gallery: gname ? txt(gname).trim() : ''
     };
@@ -3826,7 +3832,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v255-cmtview', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v256-headph', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

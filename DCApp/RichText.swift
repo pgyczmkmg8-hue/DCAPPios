@@ -104,16 +104,65 @@ enum RichText {
     }
 }
 
+/// 글자 칸 + 안내 문구: 칸이 비어 있고 커서가 없을 때만 안내를 입력 글자와 같은 자리(줄바꿈 포함)에 그림
+/// 안내는 글자가 아니라 라벨이라 저장·제출되지 않음. 커서가 들어가는 순간 바로 숨김
+final class GuideTextView: UITextView {
+    private let guideLabel = UILabel()
+    /// 빈 칸에 보일 안내 (nil이면 안내 없음)
+    var guide: String?
+    /// 커서가 들어가 편집 중이면 true (안내 숨김)
+    var editingNow = false { didSet { refreshGuide() } }
+
+    init() {
+        super.init(frame: .zero, textContainer: nil)
+        setupGuide()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupGuide()
+    }
+
+    private func setupGuide() {
+        guideLabel.numberOfLines = 0
+        guideLabel.font = UIFont.systemFont(ofSize: RichText.baseSize)
+        guideLabel.textColor = .placeholderText
+        guideLabel.isUserInteractionEnabled = false
+        addSubview(guideLabel)
+    }
+
+    /// 안내를 보여야 하는지: 안내가 있고, 글자가 하나도 없고, 편집 중이 아닐 때
+    var showsGuide: Bool { guide != nil && attributedText.length == 0 && !editingNow }
+
+    func refreshGuide() {
+        guideLabel.text = guide
+        guideLabel.isHidden = !showsGuide
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // 글자가 놓이는 자리(안쪽 여백 + 줄 여백)와 같은 곳에 안내를 둠 — 여러 줄이면 줄 수만큼 높이를 잡음
+        let x = textContainerInset.left + textContainer.lineFragmentPadding
+        let w = max(0, bounds.width - x - textContainerInset.right - textContainer.lineFragmentPadding)
+        let h = guideLabel.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
+        guideLabel.frame = CGRect(x: x, y: textContainerInset.top, width: w, height: h)
+    }
+}
+
 /// 꾸밀 수 있는 글자 칸 (내용이 늘어나면 칸도 커짐)
 struct RichTextView: UIViewRepresentable {
     let blockID: UUID
     @ObservedObject var session: NativeWriteSession
     var minLines: Int = 1
+    /// 빈 칸에 보일 안내 문구 (첫 글자 칸에만 넘김, nil이면 없음)
+    var guide: String? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
+        let tv = GuideTextView()
+        tv.guide = guide
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.font = UIFont.systemFont(ofSize: RichText.baseSize)
@@ -127,6 +176,7 @@ struct RichTextView: UIViewRepresentable {
         // 사진 칸을 끌어다 놓을 때 글자 칸이 가로채지 않게 (놓기는 바깥 칸이 받음)
         tv.interactions.filter { $0 is UIDropInteraction }.forEach { tv.removeInteraction($0) }
         session.register(tv, for: blockID)
+        tv.refreshGuide()
         return tv
     }
 
@@ -139,6 +189,10 @@ struct RichTextView: UIViewRepresentable {
             if sel.location + sel.length <= want.length { tv.selectedRange = sel }
         }
         session.register(tv, for: blockID)
+        if let g = tv as? GuideTextView {
+            g.guide = guide
+            g.refreshGuide()
+        }
         if session.focusRequest == blockID {
             DispatchQueue.main.async {
                 tv.becomeFirstResponder()
@@ -150,7 +204,17 @@ struct RichTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView tv: UITextView, context: Context) -> CGSize? {
         let w = proposal.width ?? UIScreen.main.bounds.width
-        let h = tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
+        var h = tv.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
+        // 안내 문구가 긴 경우 그 줄 수만큼 칸을 키움 (커서가 들어가 안내가 숨겨져도 칸 높이가 튀지 않게 빈 칸이면 늘 계산)
+        if let g = guide, tv.attributedText.length == 0 {
+            let inset = tv.textContainerInset
+            let inner = w - inset.left - inset.right - 2 * tv.textContainer.lineFragmentPadding
+            let gh = (g as NSString).boundingRect(with: CGSize(width: max(0, inner), height: .greatestFiniteMagnitude),
+                                                  options: [.usesLineFragmentOrigin, .usesFontLeading],
+                                                  attributes: [.font: UIFont.systemFont(ofSize: RichText.baseSize)],
+                                                  context: nil).height
+            h = max(h, ceil(gh) + inset.top + inset.bottom)
+        }
         let minH = CGFloat(minLines) * 22 + 24
         return CGSize(width: w, height: max(h, minH))
     }
@@ -161,13 +225,18 @@ struct RichTextView: UIViewRepresentable {
 
         func textViewDidChange(_ tv: UITextView) {
             parent.session.setRich(tv.attributedText, of: parent.blockID)
+            (tv as? GuideTextView)?.refreshGuide()
         }
         func textViewDidBeginEditing(_ tv: UITextView) {
+            // 커서가 들어가는 순간 안내를 숨김 (SwiftUI 갱신을 기다리지 않음)
+            (tv as? GuideTextView)?.editingNow = true
             parent.session.activeBlockID = parent.blockID
             parent.session.editingRich = true
             parent.session.refreshFormat(from: tv)
         }
         func textViewDidEndEditing(_ tv: UITextView) {
+            // 글자가 비어 있으면 안내를 다시 보임
+            (tv as? GuideTextView)?.editingNow = false
             parent.session.editingRich = false
         }
         func textViewDidChangeSelection(_ tv: UITextView) {

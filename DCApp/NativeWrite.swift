@@ -70,6 +70,8 @@ extension UTType {
 struct WriteHead: Identifiable, Hashable {
     let no: String
     let name: String
+    /// 이 말머리를 고르면 본문 빈 칸에 보이는 안내 문구 (글자만, 줄바꿈 포함). 디시에 없으면 빈 문자열
+    var guide = ""
     var id: String { no }
 }
 
@@ -82,6 +84,13 @@ final class NativeWriteSession: ObservableObject {
     @Published var blocks: [WriteBlock] = [WriteBlock()]
     @Published var heads: [WriteHead] = []
     @Published var head = ""
+    /// 디시 기본 안내 문구 (#placeholder0): 고른 말머리에 안내가 없을 때 씀
+    @Published var defaultGuide = ""
+    /// 본문 빈 칸에 지금 보일 안내 문구: 고른 말머리의 안내 → 없으면 기본 안내 → 그것도 없으면 "내용"
+    var guideText: String {
+        if let h = heads.first(where: { $0.no == head }), !h.guide.isEmpty { return h.guide }
+        return defaultGuide.isEmpty ? "내용" : defaultGuide
+    }
     @Published var isAnon = false
     @Published var nickLocked = false
     @Published var nick = ""
@@ -692,16 +701,11 @@ struct NativeWriteView: View {
                         if let img = block.image {
                             imageBlock(img, blockID: block.id)
                         } else {
+                            // 안내 문구는 첫 글자 칸에만 (빈 칸일 때만 보이고, 커서가 들어가면 사라짐 — RichText.swift)
                             RichTextView(blockID: block.id, session: session,
-                                         minLines: block.id == session.blocks.last?.id ? (dropTarget != nil ? 2 : 8) : 1)   // 맨 끝 칸은 넉넉하게 (사진을 끄는 중엔 맨 끝에 놓기 쉽게 줄임)
+                                         minLines: block.id == session.blocks.last?.id ? (dropTarget != nil ? 2 : 8) : 1,   // 맨 끝 칸은 넉넉하게 (사진을 끄는 중엔 맨 끝에 놓기 쉽게 줄임)
+                                         guide: block.id == session.blocks.first(where: { $0.image == nil })?.id ? session.guideText : nil)
                                 .padding(.horizontal, 9)      // 본문 글자 왼쪽도 닉네임 칸·제목과 맞춤
-                                .overlay(alignment: .topLeading) {
-                                    if block.text.isEmpty && block.id == session.blocks.first(where: { $0.image == nil })?.id {
-                                        Text("내용").font(.system(size: 16)).foregroundStyle(Color(uiColor: .placeholderText))
-                                            .padding(.leading, 12).padding(.top, 12)
-                                            .allowsHitTesting(false)
-                                    }
-                                }
                         }
                     }
                     // 사진을 끌어다 이 칸 위에 놓으면 이 칸 앞으로

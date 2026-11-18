@@ -1216,8 +1216,10 @@ final class WebViewModel: NSObject, ObservableObject {
         }
         s.heads = (info["heads"] as? [[String: Any]] ?? []).compactMap { h in
             guard let no = h["no"] as? String, let name = h["name"] as? String else { return nil }
-            return WriteHead(no: no, name: name)
+            // 말머리별 안내 문구는 디시 HTML 그대로(<br> 등) 오므로 글자만 남김
+            return WriteHead(no: no, name: name, guide: NativeWriteSession.plainText(fromHTML: h["ph"] as? String ?? ""))
         }
+        s.defaultGuide = NativeWriteSession.plainText(fromHTML: info["phDefault"] as? String ?? "")
         if s.head.isEmpty || !s.heads.contains(where: { $0.no == s.head }) { s.head = info["head"] as? String ?? "" }
         s.hasCaptcha = info["captcha"] as? Bool ?? false
         s.captchaImage = Self.imageFromDataURL(info["captchaImg"] as? String)
