@@ -1317,7 +1317,8 @@ final class WebViewModel: NSObject, ObservableObject {
         }
         guard !targets.isEmpty else { return }
         s.convertingPhotos += targets.count
-        let maxWidth = WriteImageSize.current.maxWidth
+        let size = WriteImageSize.current
+        let maxWidth = size.maxWidth
         Task {
             var failed = 0
             for (id, url) in targets {
@@ -1326,7 +1327,8 @@ final class WebViewModel: NSObject, ObservableObject {
                 if let (data, _) = try? await URLSession.shared.data(for: req),
                    let p = await Task.detached(operation: { AutoImageStore.prepareForUpload(data, maxWidth: maxWidth) }).value {
                     s.replaceImage(id: id, with: WriteImage(data: p.data, mime: p.mime, ext: p.ext,
-                                                            preview: UIImage(data: p.data) ?? UIImage()))
+                                                            preview: UIImage(data: p.data) ?? UIImage(),
+                                                            originalData: data, size: size))
                 } else {
                     failed += 1
                 }
@@ -1344,7 +1346,8 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 15초마다 바뀐 내용을 자동 임시저장 (사진은 빼고 제목·내용만)
     private func runNativeAutosave(_ s: NativeWriteSession) {
         Task {
-            let signature = { @MainActor in s.title + "\u{0}" + s.body + "\u{0}" + s.images.map(\.id.uuidString).joined() }
+            // 사진은 id와 용량으로 (크기만 바꿔도 id는 그대로라서, 용량까지 봐야 바뀐 걸 알아 다시 저장함)
+            let signature = { @MainActor in s.title + "\u{0}" + s.body + "\u{0}" + s.images.map { "\($0.id.uuidString):\($0.data.count)" }.joined() }
             var last = signature()
             while nativeWrite === s {
                 try? await Task.sleep(for: .seconds(15))
@@ -1392,7 +1395,49 @@ final class WebViewModel: NSObject, ObservableObject {
         }
         if silent, s.images.contains(where: \.isAuto) { return }
         s.addImages([WriteImage(data: data, mime: img.mime, ext: img.ext,
-                                preview: UIImage(data: data) ?? UIImage(), isAuto: true)], atTop: true)
+                                preview: UIImage(data: data) ?? UIImage(), isAuto: true, originalData: data)], atTop: true)
+    }
+
+    // MARK: 사진 크기 (앱 글쓰기)
+
+    /// 사진 하나의 업로드 크기를 바꿈 (원본에서 다시 만들어서, 줄였다가 다시 키워도 화질이 안 떨어짐)
+    func setImageSize(_ size: WriteImageSize, for imageID: UUID) {
+        guard let s = nativeWrite else { return }
+        resizeImages(in: s, ids: [imageID], to: size)
+    }
+
+    /// 키보드 위 도구열의 일괄 변경: 기본 크기(이후 넣는 사진·등록)를 바꾸고, 이미 넣은 사진도 모두 이 크기로 (따로 정해 둔 사진도 통일)
+    func setAllImageSizes(_ size: WriteImageSize) {
+        Profile.defaults.set(size.rawValue, forKey: WriteImageSize.key)
+        guard let s = nativeWrite else { return }
+        let ids = s.blocks.compactMap(\.image).filter(\.isResizable).map(\.id)
+        resizeImages(in: s, ids: ids, to: size)
+    }
+
+    private func resizeImages(in s: NativeWriteSession, ids: [UUID], to size: WriteImageSize) {
+        // 이미 그 크기인 사진은 건너뜀. 지금 사진이 줄인 것이어도 원본이 있으면 원본에서 다시 만듦
+        let targets: [(id: UUID, source: Data)] = ids.compactMap { id in
+            guard let img = s.image(id), img.isResizable, img.size != size else { return nil }
+            return (id, img.originalData ?? img.data)
+        }
+        guard !targets.isEmpty else { return }
+        let ticket = UUID()
+        for t in targets { s.resizeTickets[t.id] = ticket }
+        s.convertingPhotos += targets.count         // 다 준비되기 전에는 등록하지 않음
+        let maxWidth = size.maxWidth
+        Task {
+            var failed = 0
+            for t in targets {
+                let source = t.source
+                let p = await Task.detached(priority: .userInitiated) { AutoImageStore.prepareForUpload(source, maxWidth: maxWidth) }.value
+                s.convertingPhotos -= 1
+                // 그 사이 같은 사진을 또 바꿨으면 마지막 요청 결과만 반영
+                guard s.resizeTickets[t.id] == ticket else { continue }
+                s.resizeTickets[t.id] = nil
+                if let p { s.applyPrepared(p, size: size, to: t.id) } else { failed += 1 }
+            }
+            if failed > 0 { showToast("사진 \(failed)장은 크기를 바꾸지 못했어요") }
+        }
     }
 
     /// 앱 글쓰기 '임시' → 임시저장 목록에 새로 저장
@@ -1409,7 +1454,7 @@ final class WebViewModel: NSObject, ObservableObject {
     func submitNative() {
         guard let s = nativeWrite, !s.submitting else { return }
         if !s.loaded { showToast("디시 글쓰기 양식을 불러오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
-        if s.convertingPhotos > 0 { showToast("사진을 가져오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
+        if s.convertingPhotos > 0 { showToast("사진을 준비하는 중이에요. 잠시 뒤에 눌러 주세요"); return }
         let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if title.count < 2 { showToast("제목을 2자 이상 입력해 주세요"); return }
         if title.count > 40 { showToast("제목은 40자까지 쓸 수 있어요"); return }
@@ -1452,7 +1497,7 @@ final class WebViewModel: NSObject, ObservableObject {
             "pw": s.isAnon ? s.pw : NSNull(),
             "captcha": s.hasCaptcha ? s.captcha : NSNull(),
             "head": s.head,
-            "imgSize": WriteImageSize.current.rawValue,
+            "imgSize": Self.submitImageSize(for: s).rawValue,
             // 본문 순서 그대로: 글자 칸 / 사진 칸 (+ 꼬릿말)
             "blocks": bodyBlocks,
         ]
@@ -1483,6 +1528,13 @@ final class WebViewModel: NSObject, ObservableObject {
                 showToast("등록하지 못했어요 (\(r))")
             }
         }
+    }
+
+    /// 등록할 때 디시 imgSize 칸에 넣을 크기: 사진마다 크기가 다를 수 있으니 그중 가장 큰 것
+    /// (작게 줄인 사진은 앱이 이미 줄였으니 더 줄어들 일이 없고, 큰 사진이 디시 쪽 설정에 다시 줄어드는 일도 없음)
+    private static func submitImageSize(for s: NativeWriteSession) -> WriteImageSize {
+        let sizes = s.blocks.compactMap(\.image).filter { $0.rawHTML == nil }.map { $0.size ?? WriteImageSize.current }
+        return sizes.max(by: { $0.rank < $1.rank }) ?? WriteImageSize.current
     }
 
     /// 동영상·디시콘·유튜브·투표: 디시 화면에서 그 기능을 열어 넣게 하고, 다 넣으면 앱 화면으로 가져옴

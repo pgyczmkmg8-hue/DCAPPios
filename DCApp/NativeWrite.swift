@@ -15,6 +15,10 @@ enum WriteImageSize: String, CaseIterable, Identifiable {
     static let key = "writeImageSize"
     var id: String { rawValue }
     var label: String { self == .original ? "원본 크기" : "가로 \(rawValue)px" }
+    /// 사진 위 작은 배지용
+    var short: String { self == .original ? "원본" : "\(rawValue)px" }
+    /// 클수록 큰 크기 (원본 > 1024 > 850 > 640 > 480) — 사진마다 크기가 다를 때 등록에 넘길 '가장 큰 크기'를 고르는 데 씀
+    var rank: Int { self == .original ? Int.max : (Int(rawValue) ?? 0) }
     /// 앱에서 줄일 가로 크기 (원본이면 nil)
     var maxWidth: CGFloat? { Double(rawValue).map { CGFloat($0) } }
     static var current: WriteImageSize {
@@ -24,15 +28,24 @@ enum WriteImageSize: String, CaseIterable, Identifiable {
 
 struct WriteImage: Identifiable {
     var id = UUID()
-    let data: Data
-    let mime: String
-    let ext: String
+    /// 지금 등록에 쓰이는 사진 (크기를 바꾸면 originalData에서 다시 만들어 바뀜)
+    var data: Data
+    var mime: String
+    var ext: String
     var preview: UIImage?
     var isAuto = false
     /// 글 수정: 이미 올라가 있는 사진·디시콘·동영상 등 → 디시 편집기의 칸(HTML)을 그대로 다시 넣음
     var rawHTML: String? = nil
     var remoteURL: URL? = nil
     var label: String? = nil
+    /// 줄이기 전 원본(고른 그대로). 크기를 줄였다가 다시 키워도 여기서 다시 만들어 화질이 떨어지지 않음.
+    /// 예전 임시저장에서 복원한 사진처럼 원본이 없으면 nil (그땐 지금 사진이 기준이라 지금보다 크게는 못 키움)
+    var originalData: Data? = nil
+    /// 지금 사진을 준비한 크기 (nil이면 알 수 없음: 자짤·예전 임시저장 사진)
+    var size: WriteImageSize? = nil
+
+    /// 크기를 고를 수 있는 사진인지 — 앱이 가진 사진만 (글 수정으로 불러온 기존 칸·디시콘·동영상·유튜브·투표 제외, 움짤은 그대로 올림)
+    var isResizable: Bool { rawHTML == nil && label != "디시콘" && mime != "image/gif" && !data.isEmpty }
 }
 
 /// 본문 한 칸: 글자 또는 사진 (순서대로 등록됨)
@@ -237,6 +250,23 @@ final class NativeWriteSession: ObservableObject {
         blocks[i].image?.preview = img
     }
 
+    /// 사진 크기 바꾸기 요청 표 — 같은 사진을 연달아 바꾸면 마지막 요청 결과만 반영하려고
+    var resizeTickets: [UUID: UUID] = [:]
+
+    func image(_ id: UUID) -> WriteImage? { images.first { $0.id == id } }
+
+    /// 다시 준비한 사진을 반영 (처음 바꿀 때 지금 사진을 원본으로 남겨 둠 → 이후 몇 번을 바꿔도 같은 원본에서 만듦)
+    func applyPrepared(_ p: (data: Data, mime: String, ext: String), size: WriteImageSize, to id: UUID) {
+        guard let i = blocks.firstIndex(where: { $0.image?.id == id }), var img = blocks[i].image else { return }
+        if img.originalData == nil { img.originalData = img.data }
+        img.data = p.data
+        img.mime = p.mime
+        img.ext = p.ext
+        img.size = size
+        img.preview = UIImage(data: p.data) ?? img.preview
+        blocks[i].image = img
+    }
+
 
     /// 사진 넣기: 맨 위(자짤) 또는 글 끝 (사진 뒤에 이어 쓸 글자 칸을 하나 둠)
     func addImages(_ imgs: [WriteImage], atTop: Bool = false) {
@@ -308,7 +338,13 @@ final class NativeWriteSession: ObservableObject {
                 return DraftPart(rawHTML: raw, remoteURL: img.remoteURL, label: img.label)
             }
             guard let name = DraftImageStore.store(id: img.id, data: img.data, ext: img.ext) else { return nil }
-            return DraftPart(file: name, mime: img.mime, ext: img.ext, isAuto: img.isAuto ? true : nil)
+            // 원본이 줄인 사진과 다를 때만 따로 남김 (이어 쓸 때도 크기를 키웠다 줄였다 해도 화질이 안 떨어지게)
+            var origName: String?
+            if let o = img.originalData, o.count != img.data.count {
+                origName = DraftImageStore.store(id: img.id, data: o, ext: "orig")
+            }
+            return DraftPart(file: name, mime: img.mime, ext: img.ext, isAuto: img.isAuto ? true : nil,
+                             origFile: origName, size: img.size?.rawValue)
         }
     }
 
@@ -326,7 +362,9 @@ final class NativeWriteSession: ObservableObject {
                 // 파일 이름 = 사진 id → 다시 저장할 때 같은 파일을 그대로 씀
                 let id = UUID(uuidString: String(file.split(separator: ".").first ?? "")) ?? UUID()
                 return WriteBlock(image: WriteImage(id: id, data: data, mime: p.mime ?? "image/jpeg", ext: p.ext ?? "jpg",
-                                                    preview: UIImage(data: data) ?? UIImage(), isAuto: p.isAuto ?? false))
+                                                    preview: UIImage(data: data) ?? UIImage(), isAuto: p.isAuto ?? false,
+                                                    originalData: p.origFile.flatMap(DraftImageStore.load),
+                                                    size: p.size.flatMap(WriteImageSize.init(rawValue:))))
             }
             normalize()
         } else {
@@ -405,6 +443,10 @@ struct NativeWriteView: View {
     /// 앱 전용 사진 고르기 (한 장씩 눌러서만 선택)
     @State private var showGridPicker = false
     @State private var showDraftPicker = false
+    /// 사진 크기 고르기 팝오버가 떠 있는 사진 칸 (한 번에 하나)
+    @State private var sizePickBlockID: UUID?
+    /// 기본 사진 크기 (설정과 같은 값 — 도구열 일괄 메뉴와 사진 배지가 바로 따라가게)
+    @AppStorage(WriteImageSize.key, store: Profile.defaults) private var defaultImageSizeRaw = WriteImageSize.original.rawValue
     @ObservedObject private var draftStore = DraftStore.shared     // 헤더의 '저장 N' 개수
     @State private var didFocus = false
     @State private var dropTarget: UUID?
@@ -825,11 +867,54 @@ struct NativeWriteView: View {
         }
     }
 
+    /// 사진 하나의 업로드 크기 고르기 (원본에서 다시 만들어서 줄였다 키워도 화질은 그대로)
+    private func sizePicker(_ img: WriteImage) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("사진 크기").font(.headline)
+            Text(sizeInfo(img)).font(.caption).foregroundStyle(.secondary)
+            Divider().padding(.vertical, 4)
+            ForEach(WriteImageSize.allCases) { opt in
+                Button {
+                    model.setImageSize(opt, for: img.id)
+                    sizePickBlockID = nil
+                } label: {
+                    HStack {
+                        Text(opt.label)
+                        Spacer(minLength: 16)
+                        if img.size == opt { Image(systemName: "checkmark").foregroundStyle(DCTheme.accent) }
+                    }
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if img.originalData == nil {
+                Text("원본이 없는 사진이라 지금보다 크게는 못 키워요").font(.caption2).foregroundStyle(.secondary).padding(.top, 4)
+            }
+        }
+        .padding(16)
+        .frame(width: 250)
+        .popoverAdaptationCompat()
+    }
+
+    private func sizeInfo(_ img: WriteImage) -> String {
+        let bytes = ByteCountFormatter.string(fromByteCount: Int64(img.data.count), countStyle: .file)
+        guard let p = img.preview else { return bytes }
+        return "지금 \(Int(p.size.width))×\(Int(p.size.height)) · \(bytes)"
+    }
+
     private func imageBlock(_ img: WriteImage, blockID: UUID) -> some View {
         let isDccon = img.label == "디시콘"
         return imagePicture(img)
             // 디시콘은 실제 크기(작게), 사진은 넓게
             .frame(maxWidth: isDccon ? 110 : 300, maxHeight: isDccon ? 110 : 420, alignment: .leading)
+            // 사진을 누르면 이 사진의 업로드 크기를 고름 (아래 X·배지 등은 위에 얹혀 있어 먼저 눌림. 끌기·밀어 삭제와는 길게 누르기·18pt 이동으로 구분됨)
+            .contentShape(Rectangle())
+            .onTapGesture { if img.isResizable { sizePickBlockID = blockID } }
+            .popover(isPresented: Binding(get: { sizePickBlockID == blockID },
+                                          set: { if !$0 && sizePickBlockID == blockID { sizePickBlockID = nil } })) {
+                sizePicker(img)
+            }
             .overlay(alignment: .topTrailing) {
                 Button {
                     withAnimation { session.removeBlock(blockID) }
@@ -856,6 +941,16 @@ struct NativeWriteView: View {
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.black.opacity(0.45), in: Capsule())
                         .padding(8)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                // 지금 적용된 크기 (기본 크기와 다르게 따로 정한 사진은 강조색)
+                if img.isResizable, let size = img.size {
+                    Text(size.short).font(.caption2.bold()).foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(size.rawValue == defaultImageSizeRaw ? Color.black.opacity(0.45) : DCTheme.accent.opacity(0.9), in: Capsule())
+                        .padding(8)
+                        .allowsHitTesting(false)
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 8)
@@ -895,6 +990,26 @@ struct NativeWriteView: View {
                         model.addAutoImage()
                         if session.images.count > before { model.showToast("자짤을 넣었어요 (길게 눌러 옮길 수 있어요)") }
                     }
+                    // 사진 크기: 기본 크기와 지금 넣은 사진 모두를 한 번에 (사진 하나만 바꾸려면 사진을 누름)
+                    Menu {
+                        Section("기본 크기 · 넣은 사진 모두에 적용") {
+                            ForEach(WriteImageSize.allCases) { opt in
+                                Button { model.setAllImageSizes(opt) } label: {
+                                    if opt.rawValue == defaultImageSizeRaw { Label(opt.label, systemImage: "checkmark") } else { Text(opt.label) }
+                                }
+                            }
+                        }
+                    } label: {
+                        VStack(spacing: 0) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 14, weight: .regular))
+                            Text((WriteImageSize(rawValue: defaultImageSizeRaw) ?? .original).short)
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 46)
+                        .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("사진 크기")
                     tool("face.smiling", "디시콘") { dismissKeyboard(); showDcconPicker = true }
                     tool("video", "동영상") { dismissKeyboard(); model.openWebFeature("video", name: "동영상") }
                     tool("play.rectangle", "유튜브") { dismissKeyboard(); model.openWebFeature("youtube", name: "유튜브") }
@@ -1069,14 +1184,16 @@ struct NativeWriteView: View {
     /// 앱 전용 사진 고르기에서 고른 사진 (고른 순서대로 글 끝에)
     private func loadAssets(_ assets: [PHAsset]) {
         guard !assets.isEmpty else { return }
-        let maxWidth = WriteImageSize.current.maxWidth
+        let size = WriteImageSize.current
+        let maxWidth = size.maxWidth
         Task {
             var added: [WriteImage] = []
             for asset in assets {
                 guard let raw = await PhotoGridPicker.loadData(asset) else { continue }
                 let prepared = await Task.detached { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }.value
                 guard let p = prepared else { continue }
-                added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage()))
+                added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage(),
+                                        originalData: raw, size: size))
             }
             if added.count < assets.count { model.showToast("사진 \(assets.count - added.count)장을 불러오지 못했어요") }
             withAnimation { session.addImages(added) }
@@ -1085,14 +1202,16 @@ struct NativeWriteView: View {
 
     /// 카메라로 찍은 사진 (글 끝에 붙임)
     private func loadCaptured(_ image: UIImage) {
-        let maxWidth = WriteImageSize.current.maxWidth
+        let size = WriteImageSize.current
+        let maxWidth = size.maxWidth
         Task {
             guard let raw = image.jpegData(compressionQuality: 0.95),
                   let p = await Task.detached(operation: { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }).value else {
                 model.showToast("찍은 사진을 불러오지 못했어요")
                 return
             }
-            let w = WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage())
+            let w = WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage(),
+                               originalData: raw, size: size)
             withAnimation { session.addImages([w]) }
         }
     }
@@ -1100,14 +1219,16 @@ struct NativeWriteView: View {
     private func loadPhotos(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         photoItems = []
-        let maxWidth = WriteImageSize.current.maxWidth
+        let size = WriteImageSize.current
+        let maxWidth = size.maxWidth
         Task {
             var added: [WriteImage] = []
             for item in items {
                 guard let raw = try? await item.loadTransferable(type: Data.self) else { continue }
                 let prepared = await Task.detached { AutoImageStore.prepareForUpload(raw, maxWidth: maxWidth) }.value
                 guard let p = prepared else { continue }
-                added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage()))
+                added.append(WriteImage(data: p.data, mime: p.mime, ext: p.ext, preview: UIImage(data: p.data) ?? UIImage(),
+                                        originalData: raw, size: size))
             }
             // 글 끝에 붙임 → 길게 눌러 끌어서 글 위로 옮길 수 있음
             withAnimation { session.addImages(added) }

@@ -195,6 +195,8 @@ struct DraftPart: Codable, Hashable {
     var mime: String?
     var ext: String?
     var isAuto: Bool?         // 자짤
+    var origFile: String?     // 줄이기 전 원본 사진 파일 (크기를 다시 키워도 화질이 안 떨어지게)
+    var size: String?         // 사진을 준비한 크기 (WriteImageSize.rawValue)
     // 글 수정·디시콘 등: 디시 편집기 칸(HTML) 그대로
     var rawHTML: String?
     var remoteURL: URL?
@@ -214,7 +216,9 @@ enum DraftImageStore {
     static func store(id: UUID, data: Data, ext: String) -> String? {
         let name = id.uuidString + "." + (ext.isEmpty ? "jpg" : ext)
         let url = dir.appendingPathComponent(name)
-        if !FileManager.default.fileExists(atPath: url.path) {
+        // 같은 사진은 한 번만 씀. 다만 사진 크기를 바꾸면 같은 id의 내용이 달라지므로 크기가 다르면 다시 씀
+        let existing = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int
+        if existing != data.count {
             guard (try? data.write(to: url, options: .atomic)) != nil else { return nil }
         }
         return name
@@ -251,7 +255,8 @@ final class DraftStore: ObservableObject {
         if let data = try? JSONEncoder().encode(drafts) {
             Profile.defaults.set(data, forKey: key)
         }
-        DraftImageStore.cleanup(keeping: Set(drafts.flatMap { $0.parts ?? [] }.compactMap(\.file)))
+        let parts = drafts.flatMap { $0.parts ?? [] }
+        DraftImageStore.cleanup(keeping: Set(parts.compactMap(\.file) + parts.compactMap(\.origFile)))
     }
 
     /// 직접 저장 → 새 항목
