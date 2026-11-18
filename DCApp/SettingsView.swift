@@ -529,8 +529,9 @@ struct DetailSettingsView: View {
             // 스크롤할 때 컨트롤바·새로고침 숨기기 (컨트롤바 버튼 화면과 같은 설정)
             Section {
                 Toggle("스크롤할 때 컨트롤바·새로고침 숨기기", isOn: $autoHideBar)
+                if autoHideBar { BarAutoHideStylePicker() }
             } footer: {
-                Text("스크롤하는 동안 컨트롤바와 댓글 새로고침 버튼이 화면 밖으로 들어갔다가, 멈추면 다시 나와요. 끄면 항상 보여요.")
+                Text(BarAutoHideStylePicker.footer)
             }
 
             // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
@@ -1195,8 +1196,9 @@ struct ControlBarOrderView: View {
             }
             Section {
                 Toggle("스크롤할 때 숨기기", isOn: $autoHideBar)
+                if autoHideBar { BarAutoHideStylePicker() }
             } footer: {
-                Text("페이지를 스크롤하는 동안 컨트롤바가 화면 아래(세로 막대는 오른쪽)로 들어가고, 멈추면 다시 나와요.")
+                Text(BarAutoHideStylePicker.footer)
             }
             Section {
                 Toggle("⋮ 메뉴를 상단바 오른쪽에 두기", isOn: $menuInTopBar)
@@ -1323,6 +1325,18 @@ private struct FontSizeRow: View {
         }
         .onChangeCompat(of: stored) { _, _ in
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+        }
+    }
+}
+
+/// 컨트롤바 숨기는 방식 선택 (스크롤하는 동안만 / 내리면 숨기고 올리면 표시)
+struct BarAutoHideStylePicker: View {
+    @AppStorage(ControlBarItem.autoHideStyleKey, store: Profile.defaults) private var style = ControlBarItem.autoHideStyleScrolling
+    static let footer = "스크롤하는 동안만: 스크롤하는 동안 화면 밖(가로 막대는 아래, 세로 막대는 오른쪽)으로 들어갔다가 멈추면 다시 나와요. 내리면 숨기고 올리면 표시: 아래로 스크롤하면 숨기고 멈춰도 그대로 두고, 위로 스크롤하면 다시 나와요. 댓글 영역에 닿으면 다시 나와요. 끄면 항상 보여요."
+    var body: some View {
+        Picker("숨기는 방식", selection: $style) {
+            Text("스크롤하는 동안만").tag(ControlBarItem.autoHideStyleScrolling)
+            Text("내리면 숨기고 올리면 표시").tag(ControlBarItem.autoHideStyleDirection)
         }
     }
 }

@@ -92,6 +92,13 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var isScrolling = false
     /// 글 읽으며 아래로 스크롤하는 중이면 true (상단바 숨김용). 위로 올리거나 맨 위 근처면 false
     @Published var navHiddenByScroll = false
+    /// 컨트롤바 '내리면 숨기기' 방식: 아래로 스크롤하면 true(멈춰도 유지), 위로 올리거나 맨 위 근처면 false
+    @Published var barHiddenByDirection = false
+    /// 댓글 영역이 화면에 닿았는지 (페이지 스크립트가 알려줌). 닿으면 컨트롤바를 다시 보여 줌
+    @Published var commentsInView = false
+    private var barLastY: CGFloat = 0
+    private var barAnchorY: CGFloat = 0
+    private var barDirDown = true
     private var lastScrollY: CGFloat = 0
     private var scrollAnchorY: CGFloat = 0
     private var scrollDirDown = true
@@ -262,9 +269,25 @@ final class WebViewModel: NSObject, ObservableObject {
         else if moved < -30, navHiddenByScroll { navHiddenByScroll = false; navToggleAt = Date() }
     }
 
+    /// 아래로 일정 거리 스크롤하면 컨트롤바를 숨기고, 위로 일정 거리 올리면 다시 보임 (멈춰도 그대로)
+    private func updateBarHiddenByDirection(_ sv: UIScrollView) {
+        let off = sv.contentOffset.y
+        defer { barLastY = off }
+        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { barAnchorY = off; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
+        let dy = off - barLastY
+        if dy == 0 { return }
+        if (dy > 0) != barDirDown { barDirDown = dy > 0; barAnchorY = barLastY }   // 방향이 바뀌면 기준점 새로
+        let moved = off - barAnchorY
+        let y = off + sv.adjustedContentInset.top
+        if y < 40 { if barHiddenByDirection { barHiddenByDirection = false }; return }
+        if moved > 24, y > 100, !barHiddenByDirection { barHiddenByDirection = true }
+        else if moved < -24, barHiddenByDirection { barHiddenByDirection = false }
+    }
+
     private func scrollMoved() {
         let sv = webView.scrollView
-        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { lastScrollY = sv.contentOffset.y; return }
+        guard sv.isTracking || sv.isDragging || sv.isDecelerating else { lastScrollY = sv.contentOffset.y; barLastY = sv.contentOffset.y; return }
+        updateBarHiddenByDirection(sv)
         updateNavHidden(sv)
         if !isScrolling { isScrolling = true }
         scrollStopTask?.cancel()
@@ -1870,6 +1893,9 @@ extension WebViewModel: WKScriptMessageHandler {
         case "cmtmissing":   // 댓글은 등록됐는데 목록에 안 보임 → 글을 다시 불러와 댓글 위치로 (나갔다 들어온 것과 같게)
             scrollToCommentsAfterLoad = true
             reload()
+        case "cmtview":   // 댓글 영역이 화면에 닿음/벗어남 → 컨트롤바 '내리면 숨기기'에서 댓글에 닿으면 다시 보임
+            let on = (body["on"] as? Bool) ?? false
+            if commentsInView != on { commentsInView = on }
         case "tdock":
             let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
             if writeToolbarHeight != h { writeToolbarHeight = h }
@@ -2043,6 +2069,8 @@ extension WebViewModel: WKNavigationDelegate {
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
+        barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임
+        commentsInView = false
         if AdBlock.paused {
             adResumeTask?.cancel()
             AdBlock.setPaused(false, controller: webView.configuration.userContentController)

@@ -155,23 +155,23 @@ enum ContentScript {
       'html.dcapp-nc .comment-write{border:0!important;background:transparent!important}',
       // 컨트롤바가 세로 막대일 때: 댓글 입력칸을 화면(분할이면 글 화면) 아래에 고정 — 입력칸만 (댓글 수·새로고침·본문·댓글 위로 머리글은 없음)
       // 입력칸은 화면 아래에 고정하되, 원래 자리에는 '글 목록' 띠를 남겨 댓글과 아래 글 목록이 섞여 보이지 않게
-      'html.dcapp-nc.dcapp-pin .comment-write-btm{position:relative!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;height:44px!important;min-height:0!important;padding:0 14px!important;background:#e9ebf2!important;border-top:1px solid #d3d6e0!important;border-bottom:1px solid #d3d6e0!important}',
-      'html.dcapp-pin .comment-write-btm::after{content:"▼ 글 목록";font-size:13px;line-height:1;font-weight:700;color:#6b6f80}',
-      'html.dcapp-pin .comment-write-btm .comment-write{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
-      'html.darkmode.dcapp-nc.dcapp-pin .comment-write-btm{background:#2a2a2d!important;border-color:#3d3d40!important}',
-      'html.darkmode.dcapp-pin .comment-write-btm::after{color:#9a9ca6}',
-      'html.darkmode.dcapp-pin .comment-write-btm .comment-write{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
+      'html.dcapp-nc.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]){position:relative!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;height:44px!important;min-height:0!important;padding:0 14px!important;background:#e9ebf2!important;border-top:1px solid #d3d6e0!important;border-bottom:1px solid #d3d6e0!important}',
+      'html.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{content:"▼ 글 목록";font-size:13px;line-height:1;font-weight:700;color:#6b6f80}',
+      'html.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]) .comment-write{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
+      'html.darkmode.dcapp-nc.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]){background:#2a2a2d!important;border-color:#3d3d40!important}',
+      'html.darkmode.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{color:#9a9ca6}',
+      'html.darkmode.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]) .comment-write{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
       'html.dcapp-pin body{padding-bottom:84px!important}',
-      'html.dcapp-nc .comment-write-btm{padding:10px 12px!important}',
+      'html.dcapp-nc .comment-write-btm:not([id^="img_comment_write_div"]){padding:10px 12px!important}',
       'html.dcapp-nc #comment_write .who,html.dcapp-nc #comment_write .btm-wrt-btns,html.dcapp-nc [id^="comment_addDiv"]:not([data-dcapp-show]){height:0!important;overflow:hidden!important;visibility:hidden!important;margin:0!important;padding:0!important;border:0!important;min-height:0!important}',
       'html.dcapp-nc #comment_write #comment_memo.comment-caption{height:44px!important;min-height:44px!important;border:1px solid #d6d8e2!important;border-radius:22px!important;background:#f2f3f8!important;padding:11px 18px!important;font-size:15px!important;line-height:20px!important;overflow:hidden!important;box-shadow:none!important}',
       'html.darkmode.dcapp-nc #comment_write #comment_memo.comment-caption{background:#2c2c2e!important;border-color:#3d3d40!important}',
       'html.dcapp-nc #txtconBoxComment,html.dcapp-nc #txtconBoxReple,html.dcapp-nc #dcconBoxComment,html.dcapp-nc #dcconBoxReple{position:fixed!important;left:-3000px!important;top:0!important;width:360px!important}',
       // 댓글 헤더: 새로고침·본문·정렬 드롭다운은 숨기고, 등록순/최신순/답글순 체크 버튼으로 대신함
-      '.all-comment-tit .sp-reload{display:none!important}',
+      '#comment_box .all-comment-tit .sp-reload{display:none!important}',
       '.dcapp-cmtin{margin-left:8px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:none;color:#3b4890;font-size:12px;font-weight:600;flex:none}',
       'html.darkmode .dcapp-cmtin{border-color:#55565c;color:#9db0ff}',
-      '.all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
+      '#comment_box .all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
       '.dcapp-sort{display:flex;align-items:center;gap:15px}',
       '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:6px 0;font-size:16px;color:#8a8a90}',
       '.dcapp-sort button.on{color:#222;font-weight:600}',
@@ -1507,7 +1507,8 @@ enum ContentScript {
   }
   // 화면에 보이는 댓글 머리글 (디시가 다시 그리면 옛 머리글이 남아 있을 수 있어서 보이는 것을 고름)
   function commentHeader() {
-    var hs = document.querySelectorAll('.all-comment-tit');
+    var hs = document.querySelectorAll('#comment_box .all-comment-tit');
+    if (!hs.length) hs = Array.prototype.filter.call(document.querySelectorAll('.all-comment-tit'), function (h) { return !h.closest('[id^="img_comment_div"]'); });
     for (var i = 0; i < hs.length; i++) {
       if (hs[i].querySelector('.tit-box') && hs[i].getBoundingClientRect().height > 0) return hs[i];
     }
@@ -2608,12 +2609,14 @@ enum ContentScript {
   // ---------- 댓글 새로고침: 디시 댓글 머리글의 ⟳ 버튼을 대신 눌러줌 ----------
   function commentRefreshButton() {
     // 댓글 헤더의 새로고침(sp-reload)은 숨겨 둬도 눌러지도록 먼저 찾음
-    var hiddenReload = document.querySelector('.all-comment-tit .sp-reload');
+    // 이미지 댓글(글 안 사진 밑 '댓글') 머리글에도 sp-reload가 있어서, 본댓글 상자 안 것만 고름 (이미지 댓글 새로고침을 누르면 이미지 댓글 양식이 열려 버림)
+    var hiddenReload = document.querySelector('#comment_box .all-comment-tit .sp-reload');
     if (hiddenReload) return hiddenReload;
     var cands = document.querySelectorAll('[class*="refresh"], [class*="reload"], [onclick*="omment"], [href*="omment"]');
     for (var i = 0; i < cands.length; i++) {
       var c = cands[i];
       if (!visible(c)) continue;
+      if (c.closest('[id^="img_comment_div"], [id^="img_comment_write_div"]')) continue;    // 이미지 댓글 쪽은 제외
       var label = (clsOf(c) + ' ' + (c.id || '') + ' ' + (c.getAttribute('onclick') || '') + ' ' + (c.getAttribute('href') || '')).toLowerCase();
       var inComment = !!c.closest('[class*="comment"], [id*="comment"]');
       if (/refresh|reload/.test(label) && (inComment || /comment|cmt/.test(label))) return c;
@@ -3262,6 +3265,21 @@ enum ContentScript {
     return !!box;
   }
 
+  // ---------- 댓글 영역에 닿았는지 앱에 알림 (컨트롤바 '내리면 숨기기'에서 댓글에 가면 다시 보이게) ----------
+  // 댓글 영역 윗부분이 화면 아래쪽 끝에서 60px 안으로 들어오면 on, 그 위로 돌아가면 off. 바뀔 때만 보냄
+  var cmtViewOn = false, cmtViewTick = false;
+  function checkCmtView() {
+    cmtViewTick = false;
+    var box = document.getElementById('comment_box');
+    var on = !!box && box.getBoundingClientRect().top < window.innerHeight - 60;
+    if (on !== cmtViewOn) { cmtViewOn = on; post('cmtview', { on: on }); }
+  }
+  window.addEventListener('scroll', function () {
+    if (!cmtViewTick) { cmtViewTick = true; requestAnimationFrame(checkCmtView); }
+  }, { passive: true });
+  window.addEventListener('resize', checkCmtView);
+  setTimeout(checkCmtView, 300);
+
   // ---------- 말머리 목록 읽기 (갤러리 목록 위의 전체/일반/공지/정보… 탭) ----------
   // 갤러리 목록 위에는 "전체/개념글/공지" 줄(목록 종류)과 "전체/자유/공식정보…" 줄(말머리)이 따로 있음.
   // 목록 종류 줄은 말머리가 아니므로 제외 (정식 갤러리는 말머리 줄이 없어서 빈 목록이 됨)
@@ -3806,7 +3824,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v252-cmtrefresh', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v254-imgcmt', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');

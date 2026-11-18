@@ -372,8 +372,13 @@ struct BrowserView: View {
     @Environment(\.verticalSizeClass) private var vSizeClass
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
-    /// 스크롤 중이라 컨트롤바를 화면 밖으로 넣었는지
-    private var barTucked: Bool { autoHideBar && model.isScrolling }
+    @AppStorage(ControlBarItem.autoHideStyleKey, store: Profile.defaults) private var autoHideStyle = ControlBarItem.autoHideStyleScrolling
+    /// 컨트롤바를 화면 밖으로 넣었는지 — 방식 1: 스크롤하는 동안만 / 방식 2: 내리면 숨기고 올리면 표시(댓글 영역에 닿으면 다시 표시)
+    private var barTucked: Bool {
+        guard autoHideBar else { return false }
+        if autoHideStyle == ControlBarItem.autoHideStyleDirection { return model.barHiddenByDirection && !model.commentsInView }
+        return model.isScrolling
+    }
     @AppStorage(ControlBarItem.verticalPortraitKey, store: Profile.defaults) private var verticalInPortrait = ControlBarItem.defaultVerticalInPortrait
     /// 화면(이 브라우저 영역) 크기 — 가로로 쓰는지 판단
     @State private var viewSize: CGSize = .zero
@@ -2546,6 +2551,10 @@ enum ControlBarItem: String, CaseIterable, Identifiable {
     static let verticalPortraitKey = "controlBarVerticalPortrait"
     /// 스크롤하는 동안 컨트롤바 숨기기
     static let autoHideKey = "controlBarAutoHide"
+    /// 숨기는 방식: 스크롤하는 동안만(기본) / 내리면 숨기고 올리면 표시
+    static let autoHideStyleKey = "controlBarAutoHideStyle"
+    static let autoHideStyleScrolling = "scrolling"
+    static let autoHideStyleDirection = "direction"
     /// 컨트롤바를 동그란 버튼 하나로 접어 둠
     static let collapsedKey = "controlBarCollapsed"
     /// 좌우반전 (왼손용)
