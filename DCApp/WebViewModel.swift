@@ -11,12 +11,25 @@ struct BlockRequest: Identifiable {
     let ip: String
     let dcconKey: String
     let dcconSrc: String
+    /// 본문 사진을 길게 누른 경우: 사진 차단 키와 사진 주소 (비어 있으면 사진이 아님)
+    let imgKey: String
+    let imgSrc: String
+    /// 본문 사진의 원본 매칭용: 글 속 전체 사진에서의 순서(-1이면 모름), 전체 사진 수, 전체 파일 번호 (가린 사진 포함)
+    let imgIndex: Int
+    let imgCount: Int
+    let imgFilenos: [Int]
     let snippet: String
+    /// 사진이 있는 글 주소 (원본 링크를 PC 글에서 찾을 때 씀) — 길게 누른 시점의 글
+    var pageURL: URL? = nil
 
     init(_ body: [String: Any]) {
         func s(_ k: String) -> String { (body[k] as? String) ?? "" }
         kind = s("kind"); nick = s("nick"); userID = s("userId"); ip = s("ip")
         dcconKey = s("dcconKey"); dcconSrc = s("dcconSrc"); snippet = s("snippet")
+        imgKey = s("imgKey"); imgSrc = s("imgSrc")
+        imgIndex = (body["imgIndex"] as? NSNumber)?.intValue ?? -1
+        imgCount = (body["imgCount"] as? NSNumber)?.intValue ?? 0
+        imgFilenos = (body["imgFilenos"] as? [NSNumber])?.map(\.intValue) ?? []
     }
 }
 
@@ -134,12 +147,16 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 키보드가 떠 있는지 (제목 칸 포커스가 먹혔는지 확인용)
     private var keyboardUp = false
     @Published var toast: String?
+    /// 429로 막힌 댓글을 자동으로 다시 누르는 중 ('댓글을 다는 중입니다' 말풍선)
+    @Published var isRetryingComment = false
     private var toastTask: Task<Void, Never>?
 
     private var cancellables = Set<AnyCancellable>()
     /// 아래로 끌어서 새로고침: 이 거리(pt)만큼 끌면 바로 새로고침 (기본 동작은 훨씬 길게 끌어야 함)
     private static let pullTrigger: CGFloat = 95
     private var pullObserver: NSKeyValueObservation?
+    /// 문서가 좌우로 밀리지 않게 contentOffset.x를 0으로 되돌리는 관찰
+    private var horizontalObserver: NSKeyValueObservation?
     private var pullFired = false
     private var lastHost: String?
     private var pendingCredential: LoginCredential?
@@ -179,6 +196,18 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.allowsLinkPreview = false   // 길게 누르기를 차단 메뉴에 사용
         webView.removeInputAccessoryBar()   // 키보드 위 ▲▼✓ 막대 없애기 (댓글창이 키보드에 딱 붙도록)
         webView.scrollView.keyboardDismissMode = .interactive   // 아래로 쓸어내려 키보드 닫기
+        // 세로로만 움직이게: 가로 스크롤 막기 (페이지가 좌우로 밀려 흔들리는 것 방지)
+        webView.scrollView.showsHorizontalScrollIndicator = false
+        webView.scrollView.alwaysBounceHorizontal = false
+        webView.scrollView.isDirectionalLockEnabled = true
+        // WebKit이 스크롤뷰 델리게이트를 쓰고 있어서 델리게이트 대신 contentOffset을 관찰해 x를 0으로 되돌림
+        // (확대 중에는 건드리지 않음)
+        horizontalObserver = webView.scrollView.observe(\.contentOffset, options: [.new]) { sv, _ in
+            MainActor.assumeIsolated {
+                guard sv.contentOffset.x != 0, sv.zoomScale <= sv.minimumZoomScale + 0.001 else { return }
+                sv.contentOffset.x = 0
+            }
+        }
 
         // 화면 어디서나 좌우로 쓸어서 뒤로/앞으로 (가장자리 스와이프는 웹뷰 기본 제스처가 처리)
         let swipe = UIPanGestureRecognizer(target: self, action: #selector(handleSwipe(_:)))
@@ -837,7 +866,10 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 크기가 바뀐 뒤 웹 화면을 새 크기로 다시 배치 (돌린 뒤 비어 보이는 일 대비)
     func nudgeLayout() {
+        // 웹뷰가 들어 있는 상자의 현재 크기에 맞추고, 웹 화면(스크롤 영역 포함)을 다시 배치
+        if let sv = webView.superview { webView.frame = sv.bounds }
         webView.setNeedsLayout()
+        webView.scrollView.setNeedsLayout()
         webView.evaluateJavaScript("window.dispatchEvent(new Event('resize')); true", completionHandler: nil)
     }
 
@@ -1904,11 +1936,11 @@ final class WebViewModel: NSObject, ObservableObject {
 
     // MARK: - 토스트 알림
 
-    func showToast(_ text: String) {
+    func showToast(_ text: String, seconds given: Double? = nil) {
         toastTask?.cancel()
         toast = text
-        // 제목과 이유·재시도 권유가 함께 나오는 여러 줄 알림은 읽을 시간을 더 줌
-        let seconds: Double = text.contains("\n") ? 4.5 : 1.8
+        // 제목과 이유·재시도 권유가 함께 나오는 여러 줄 알림은 읽을 시간을 더 줌 (필요하면 호출하는 쪽에서 지정)
+        let seconds: Double = given ?? (text.contains("\n") ? 4.5 : 1.8)
         toastTask = Task {
             try? await Task.sleep(for: .seconds(seconds))
             if !Task.isCancelled { toast = nil }
@@ -2073,7 +2105,9 @@ extension WebViewModel: WKScriptMessageHandler {
                 return
             }
             if isBlockPickMode { setBlockPickMode(false) }   // 한 번 고르면 모드 종료
-            blockRequest = BlockRequest(body)
+            var req = BlockRequest(body)
+            req.pageURL = webView.url
+            blockRequest = req
         case "draft":
             if let gid = currentWriteGalleryID {
                 DraftStore.shared.autosave(galleryID: gid,
@@ -2087,7 +2121,19 @@ extension WebViewModel: WKScriptMessageHandler {
             let urls = (body["urls"] as? [String] ?? []).compactMap(URL.init(string:))
             if !urls.isEmpty {
                 imageViewer = ImageViewerItem(urls: urls, index: (body["index"] as? NSNumber)?.intValue ?? 0, pageURL: webView.url,
-                                           filenos: (body["filenos"] as? [NSNumber])?.map(\.intValue))
+                                              keys: body["keys"] as? [String],
+                                              slots: (body["slots"] as? [NSNumber])?.map(\.intValue),
+                                              allCount: (body["allCount"] as? NSNumber)?.intValue ?? 0,
+                                              allFilenos: (body["allFilenos"] as? [NSNumber])?.map(\.intValue))
+            }
+        case "checkimg":   // 차단한 사진과 키는 안 맞지만 사진이 있음 → 사진 생김새를 받아 같은 사진이면 페이지에서 가림
+            let key = body["key"] as? String ?? "", urlString = body["url"] as? String ?? ""
+            guard !key.isEmpty, !urlString.isEmpty else { break }
+            Task {
+                guard let h = await ImageBlockHash.fetch(urlString) else { return }
+                FilterStore.shared.recordImageHash(key: key, hash: h)      // 차단 상태 판별·해제에 쓰려고 키↔해시를 기억
+                guard FilterStore.shared.imageHashBlocked(h) else { return }
+                await call("if (window.__dcapp) window.__dcapp.markBlockedImageKey(k); return true;", ["k": key])
             }
         case "gotolist":   // 분할 화면 오른쪽 글 화면의 '글목록' 버튼
             if let u = webView.url, let g = Gallery.parse(u) {
@@ -2155,15 +2201,19 @@ extension WebViewModel: WKScriptMessageHandler {
                 }
                 commentCompose?.sending = false      // 성공이면 이미 닫혔고, 실패면 입력창을 다시 쓸 수 있게
             }
-        case "cmtretry":   // 429 뒤 자동 재등록 상태
+        case "cmtretry":   // 429 뒤 자동 재등록 상태 — 댓글이 달리거나 멈출 때까지 '댓글을 다는 중' 말풍선을 띄움
             switch body["state"] as? String {
-            case "start": showToast("댓글이 막혀서 등록될 때까지 다시 누를게요")
-            case "check":
-                showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)")
+            case "start": isRetryingComment = true
+            case "check":      // Cloudflare 체크가 필요: 말풍선은 내리고 안내 (체크가 끝나면 페이지가 start를 다시 보냄)
+                isRetryingComment = false
+                showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)", seconds: 8)
                 if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
                 commentCarry = nil
                 if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
-            case "done": showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
+            case "done":
+                isRetryingComment = false
+                showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
+            case "stop": isRetryingComment = false
             default: break
             }
         case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
@@ -2324,6 +2374,7 @@ extension WebViewModel: WKNavigationDelegate {
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
+        isRetryingComment = false    // 새 페이지로 가면 댓글 재시도 말풍선도 내림 (남아 있으면 영구히 떠 있게 됨)
         barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임
         barRefY = webView.scrollView.contentOffset.y
         barStats.navResets += 1
@@ -2642,8 +2693,50 @@ extension WebViewModel: WKUIDelegate {
 
 struct WebView: UIViewRepresentable {
     let model: WebViewModel
-    func makeUIView(context: Context) -> WKWebView { model.webView }
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func makeUIView(context: Context) -> WebViewContainer { WebViewContainer(model: model) }
+    func updateUIView(_ uiView: WebViewContainer, context: Context) {
+        uiView.model = model
+        uiView.attachWebView()
+    }
+}
+
+/// 웹 화면을 담는 빈 상자. 웹뷰(model.webView)는 항상 한 상자 안에만 있도록 옮겨 붙임
+/// 분할·접기 전환 때 옛 화면이 뒤늦게 사라져도, 이미 새 상자로 옮겨 간 웹뷰는 옛 상자와 함께 지워지지 않음
+final class WebViewContainer: UIView {
+    var model: WebViewModel
+
+    init(model: WebViewModel) {
+        self.model = model
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        attachWebView()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// 웹뷰를 이 상자의 자식으로 (다른 상자에 있으면 옮겨 옴), 상자 크기에 맞춤
+    func attachWebView() {
+        let web = model.webView
+        if web.superview !== self {
+            // 이미 창(window)에 붙어 있는 다른 상자가 들고 있는데 이 상자는 아직 창에 안 붙었으면(분기 전환 중 해제될 옛 상자) 빼앗지 않음
+            if let sv = web.superview, sv.window != nil, self.window == nil { return }
+            web.removeFromSuperview()
+            addSubview(web)
+        }
+        web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        web.frame = bounds
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { attachWebView() }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if model.webView.superview === self { model.webView.frame = bounds }
+    }
 }
 
 // MARK: - 스와이프 제스처가 웹 스크롤과 같이 동작하도록

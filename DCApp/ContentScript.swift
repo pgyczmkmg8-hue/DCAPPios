@@ -25,6 +25,8 @@ enum ContentScript {
   })();
 
   var cfg = window.__DCAPP_CONFIG__ || {};
+  var runtimeImg = {};   // 사진 생김새(해시)가 차단한 사진과 같다고 알아낸 키 (페이지마다 새로, setConfig에서 비움)
+  var imgChecked = {};   // 생김새 확인을 이미 앱에 요청한 키
   var IP_RE = /\((\d{1,3}\.\d{1,3})\)/;
   var NOTICE_CLASS_RE = /(^|[-_\s])(toast|noti|notice|alarm|alert|push|popup|pop|layer|banner|float)([-_\s]|$)/i;
 
@@ -133,7 +135,6 @@ enum ContentScript {
       // 세로 줄 영역은 웹 화면에서 터치되지 않게 (투명 막이 터치를 받아 아래 페이지로 안 넘김). 네이티브 컨트롤바는 이 위에 따로 떠 있어 그대로 조작됨
       'html.dcapp-duocol::before{content:"";position:fixed;top:0;bottom:0;right:0;width:env(safe-area-inset-right);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol::after{content:"";position:fixed;top:0;bottom:0;left:0;width:env(safe-area-inset-left);z-index:2147483646;touch-action:none;pointer-events:auto}',
-      'html.dcapp-duocol .thum-txtin img,html.dcapp-duocol .thum-txtin video,html.dcapp-duocol .thum-txtin iframe{max-width:calc(100% + env(safe-area-inset-left) + env(safe-area-inset-right))!important}',
       // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
       'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add,html.dcapp-duoflip #dcapp-headbar{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
       // 글 아래 목록보기·수정·삭제 버튼 줄: 오른쪽 끝(삭제)이 세로 줄 터치 차단막 밑에 깔려 안 눌림 → 다른 글자칸처럼 줄 밖으로
@@ -149,14 +150,28 @@ enum ContentScript {
       'html.dcapp-duoflip .layer-center-popup.full{padding-left:0!important;padding-right:env(safe-area-inset-left)!important}',
       'html.dcapp-duoflip::after{width:0!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
+      // 페이지 전체가 좌우로 넘쳐 밀리지 않게 (말머리 탭 등 개별 요소의 가로 스크롤은 그대로)
+      'html,body{overflow-x:hidden!important;max-width:100%!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
       // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
       '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
+      '.thum-txtin video,.thum-txtin iframe{max-width:100%!important}',
       // 스포일러 글: 경고 칸(#spoiler)을 누르기 전까지 그 아래 본문을 흐리게 (.dcapp-spo-blur = 경고 칸 뒤의 본문을 감싼 칸, spoilerGuard가 만듦)
       '.thum-txtin > .dcapp-spo-blur{display:block!important;padding:0!important;margin:0!important;filter:blur(22px)!important;-webkit-filter:blur(22px)!important;clip-path:inset(0)!important;pointer-events:none!important;-webkit-user-select:none!important;user-select:none!important}',
       '.thum-txtin #spoiler{cursor:pointer}',
+      // 본문 사진 길게 누르면 iOS 기본 메뉴(사진 저장 등) 대신 앱 차단 메뉴
+      '.thum-txtin img,.thum-txtin video.dc_mv{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important}',
+      // 본문 사진 차단: 그 사진만 가림 (.dcapp-imgblk = 사진을 감싼 칸, applyImageBlocks가 만듦). 블러 또는 회색 칸, 짧게 누르면 잠깐 보임
+      '.dcapp-imgblk{display:inline-block;position:relative;max-width:100%;line-height:0;vertical-align:top}',
+      '.dcapp-imgblk-badge{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;font-size:13px;line-height:1.2;font-weight:600;letter-spacing:0;color:#fff;background:rgba(0,0,0,.55);padding:8px 14px;border-radius:16px;pointer-events:none}',
+      '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"]) > .dcapp-imgblk-badge{display:block}',
+      '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="blur"] > img,.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="blur"] > video{filter:blur(22px) brightness(.82)!important;-webkit-filter:blur(22px) brightness(.82)!important}',
+      '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"]){overflow:hidden;border-radius:8px}',
+      '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"]{background:#c7c7cc}',
+      '.darkmode .dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"]{background:#3a3a3c}',
+      '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"] > img,.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"] > video{visibility:hidden!important}',
       // 경고 칸 아래쪽 안내 (디시 사진에는 '스크롤 해주세요'라고만 적혀 있어서, 눌러야 풀린다는 걸 알려 줌)
       '.thum-txtin #spoiler > .spoiler-wrap::after{content:"누르면 스포일러가 보여요";position:absolute;left:50%;bottom:14px;transform:translateX(-50%);white-space:nowrap;font-size:13px;line-height:1;letter-spacing:0;font-weight:600;color:#333;padding:8px 14px;border:1px solid #888;border-radius:16px;pointer-events:none}',
       '.gall-thum-btm{padding-top:14px!important}',
@@ -747,6 +762,98 @@ enum ContentScript {
     if (!/dccon/i.test(s) && !/dccon/i.test(clsOf(m))) return null;
     var q = s.match(/[?&]no=([^&#]+)/);
     return q ? q[1] : (s.split('#')[0] || null);
+  }
+
+  // ---------- 본문 사진 차단 (그 사진만 가림) ----------
+  // 키: 사진 주소의 no= 값(소문자), 없으면 호스트+경로+쿼리(소문자). 앱은 키를 직접 만들지 않고 페이지가 준 키만 씀
+  function imgBlockKey(src) {
+    if (!src) return '';
+    var no = src.match(/[?&]no=([^&#]+)/i);
+    if (no) return 'n:' + no[1].toLowerCase();
+    try {
+      var u = new URL(src, location.href);
+      return ('p:' + u.host + u.pathname + u.search).toLowerCase();
+    } catch (e) { return ''; }
+  }
+  /// 차단할 수 있는 본문 사진·움짤 (디시콘, 스포일러 경고 칸 안, 40px 이하 작은 사진은 제외)
+  function imgEligible(m) {
+    if (!m || !m.tagName) return false;
+    var body = articleBody();
+    if (!body || !body.contains(m) || (m.closest && m.closest('#spoiler'))) return false;
+    if (m.tagName === 'VIDEO') return m.classList.contains('dc_mv') && !!galleryMediaURL(m);
+    if (m.tagName !== 'IMG' || dcconKey(m)) return false;
+    if (!m.complete) return false;      // 아직 안 받은 사진은 크기를 모름 → 받으면(load) 다시 판단
+    return (m.naturalWidth || m.width || 0) > 40;
+  }
+  /// 터치·클릭한 곳의 사진·움짤 (가린 칸 위를 눌렀으면 그 안의 사진)
+  function mediaAt(target) {
+    if (!target || !target.closest) return null;
+    var m = target.closest('img, video');
+    if (m) return m;
+    var blk = target.closest('.dcapp-imgblk');
+    return blk ? blk.querySelector('img, video') : null;
+  }
+  /// 차단돼 가려져 있고 아직 안 보여 준 사진인지
+  function imgHidden(m) {
+    var w = m && m.closest ? m.closest('.dcapp-imgblk') : null;
+    return !!w && w.getAttribute('data-dcapp-blocked') === '1' && w.getAttribute('data-dcapp-img-revealed') !== '1';
+  }
+  /// 글 속 사진·움짤 전체 (PC 원본 첨부와 순서를 맞추는 기준): 디시콘·스포일러 경고 칸 안·40px 이하 작은 사진 제외, 가려진 사진 포함
+  /// keep: 사진 보기에서 눌러 연 사진 (작은 사진이라도 보여 주려고 넣음)
+  function bodyPhotos(keep) {
+    var body = articleBody();
+    if (!body) return [];
+    return Array.prototype.filter.call(body.querySelectorAll('img, video.dc_mv'), function (x) {
+      if (keep && x === keep) return true;
+      if (dcconKey(x) || (x.closest && x.closest('#spoiler')) || !galleryMediaURL(x)) return false;
+      if (x.tagName === 'VIDEO') return true;
+      var w = x.naturalWidth || parseInt(x.getAttribute('width'), 10) || x.width || 0;
+      return w === 0 || w > 40;     // 아직 안 받아서 크기를 모르는 사진은 넣음 (PC 원본 목록에는 있을 가능성이 큼)
+    });
+  }
+  function photoFileno(x) { return parseInt(x.getAttribute('data-fileno'), 10) || 0; }
+  function wrapImg(m) {
+    var w = document.createElement('span');
+    w.className = 'dcapp-imgblk';
+    var badge = document.createElement('span');
+    badge.className = 'dcapp-imgblk-badge';
+    badge.textContent = '차단한 이미지 · 탭해서 보기';
+    m.parentNode.insertBefore(w, m);
+    w.appendChild(m);
+    w.appendChild(badge);
+    return w;
+  }
+  function unwrapImg(w) {
+    var parent = w.parentNode;
+    if (!parent) return;
+    Array.prototype.slice.call(w.children).forEach(function (c) {
+      if (!c.classList.contains('dcapp-imgblk-badge')) parent.insertBefore(c, w);
+    });
+    parent.removeChild(w);
+  }
+  /// 차단한 사진만 감싸서 가림. 차단이 풀리면 원래대로. 키로 안 걸리는 사진은 (차단한 사진의 생김새 해시가 있을 때) 앱에 한 번 확인 요청
+  function applyImageBlocks(enabled) {
+    var body = articleBody();
+    if (!body) return;
+    var listed = {};
+    (cfg.images || []).forEach(function (k) { listed[k] = true; });
+    var hasHashes = !!(cfg.imgHashes && cfg.imgHashes.length);
+    var style = cfg.imgStyle === 'gray' ? 'gray' : 'blur';
+    Array.prototype.slice.call(body.querySelectorAll('img, video.dc_mv')).forEach(function (m) {
+      var wrap = m.parentNode && m.parentNode.classList && m.parentNode.classList.contains('dcapp-imgblk') ? m.parentNode : null;
+      if (!enabled || !imgEligible(m)) { if (wrap) unwrapImg(wrap); return; }
+      var url = galleryMediaURL(m);
+      var key = imgBlockKey(url);
+      if (!key) return;
+      if (listed[key] || runtimeImg[key]) {
+        if (!wrap) wrap = wrapImg(m);
+        wrap.setAttribute('data-dcapp-blocked', '1');
+        wrap.setAttribute('data-dcapp-style', style);
+        return;
+      }
+      if (wrap) unwrapImg(wrap);
+      if (hasHashes && !imgChecked[key]) { imgChecked[key] = true; post('checkimg', { key: key, url: url }); }
+    });
   }
 
   // ---------- 차단 판정 ----------
@@ -1886,6 +1993,7 @@ enum ContentScript {
         lab.parentNode.removeChild(lab);
       }
     });
+    try { applyImageBlocks(enabled); } catch (e) {}
     if (enabled && cfg.hideBest) hideBestNotice();
     try { homeRankOnly(); } catch (e) {}
     if (cfg.hideHeader !== false) hideSiteHeader();
@@ -1893,8 +2001,8 @@ enum ContentScript {
   }
 
   // ---------- 길게 누르기 → 차단 메뉴 ----------
-  function describe(unitEl, target) {
-    var d = { kind: 'dccon', nick: '', userId: '', ip: '', snippet: '', dcconKey: '', dcconSrc: '' };
+  function describe(unitEl, target, allowImage) {
+    var d = { kind: 'dccon', nick: '', userId: '', ip: '', snippet: '', dcconKey: '', dcconSrc: '', imgKey: '', imgSrc: '', imgIndex: -1, imgCount: 0, imgFilenos: [] };
     if (unitEl) {
       var u = { el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') };
       var idn = identity(u);
@@ -1903,13 +2011,24 @@ enum ContentScript {
       var tit = u.kind === 'article' ? unitEl.querySelector('.tit') : null;
       d.snippet = txt(tit || unitEl).slice(0, 80);
     }
-    var m = target && target.closest ? target.closest('img, video') : null;
+    var m = mediaAt(target);
     var key = dcconKey(m);
-    if (!key && unitEl) {
+    if (!key && unitEl && !(allowImage && imgEligible(m))) {
       var all = Array.prototype.filter.call(unitEl.querySelectorAll('img, video'), dcconKey);
       if (all.length === 1) { m = all[0]; key = dcconKey(m); }
     }
     if (key) { d.dcconKey = key; d.dcconSrc = mediaSrc(m); }
+    else if (allowImage && imgEligible(m)) {
+      var url = galleryMediaURL(m), ik = imgBlockKey(url);
+      if (ik) {
+        d.imgKey = ik; d.imgSrc = url;
+        // 원본 저장: 가린 사진을 포함한 글 속 전체 사진에서 몇 번째인지 (PC 원본 첨부 목록과 짝짓는 데 씀)
+        var photos = bodyPhotos(null);
+        d.imgIndex = photos.indexOf(m);
+        d.imgCount = photos.length;
+        d.imgFilenos = photos.map(photoFileno);
+      }
+    }
     return d;
   }
 
@@ -1931,8 +2050,9 @@ enum ContentScript {
     if (!target || !target.closest) return;
     if (target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return;   // 입력 중인 칸은 그대로
     var unitEl = target.closest('[data-dcapp-unit]');
-    var media = target.closest('img, video');
-    if (!unitEl && !dcconKey(media)) return;
+    var media = mediaAt(target);
+    var bodyImg = imgEligible(media);     // 본문 사진·움짤: 길게 누르면 이미지 차단 메뉴
+    if (!unitEl && !dcconKey(media) && !bodyImg) return;
     if (unitEl && unitEl.classList.contains('dcapp-collapsed')) return;
     // 댓글 글자를 길게 누르면 → 앱이 댓글 내용만 따로 띄움 (선택·복사하기 쉽게, 드래그하다 차단 메뉴가 뜨지 않게)
     var cmtBox = (unitEl && unitEl.getAttribute('data-dcapp-unit') === 'comment' && !dcconKey(media)) ? target.closest('.txt, .usertxt') : null;
@@ -1952,7 +2072,7 @@ enum ContentScript {
       return;
     }
     // 차단·메모 메뉴는 닉네임(또는 그 옆 메모 칸)을 길게 누를 때만 — 본문·댓글 글자는 평소처럼 길게 눌러 복사
-    if (!dcconKey(media)) {
+    if (!dcconKey(media) && !bodyImg) {
       var nk = unitEl ? nickElement({ el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') }) : null;
       var onNick = (nk && (nk === target || nk.contains(target))) || !!target.closest('.dcapp-memo') || !!nickArea(target);
       // 글 목록 행(post)은 닉네임뿐 아니라 그 글 행 어디를 꾹 눌러도 (버튼 등 특수 요소는 제외). 본문(article)·댓글은 기존대로 닉네임만
@@ -1967,7 +2087,7 @@ enum ContentScript {
         lp = null;
         suppressClickUntil = Date.now() + 800;
         lpHeld = true;      // 손을 뗄 때(touchend) 한 번 더 막음 — 오래 누르고 있다 떼도 글로 이동하지 않게
-        post('longpress', describe(unitEl, target));
+        post('longpress', describe(unitEl, target, true));
         // 길게 누르면 iOS가 글자를 선택해 버림 → 메뉴가 뜬 뒤 선택 풀기 (선택은 누르기가 끝날 때 생겨서 몇 번 나눠서)
         [60, 300, 700].forEach(function (ms) { setTimeout(clearSelection, ms); });
       }, 550)
@@ -2041,7 +2161,7 @@ enum ContentScript {
     e.preventDefault(); e.stopPropagation();
     if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     if (Date.now() < suppressClickUntil) return;    // 방금 길게 눌러 메뉴를 띄웠음
-    post('longpress', describe(unitEl, t));
+    post('longpress', describe(unitEl, t, false));
   }, true);
 
   // 글 목록 행을 길게 눌러 메뉴가 뜬 직후 손을 뗄 때 생기는 click은 글 링크로 이동하지 않게 (짧게 한 번 탭하는 건 평소처럼 글로 이동)
@@ -2068,8 +2188,8 @@ enum ContentScript {
     if (blockPick) {
       e.preventDefault(); e.stopPropagation();
       var unitEl = target && target.closest ? target.closest('[data-dcapp-unit]') : null;
-      var media = target && target.closest ? target.closest('img, video') : null;
-      if (unitEl || dcconKey(media)) post('longpress', describe(unitEl, target));
+      var media = mediaAt(target);
+      if (unitEl || dcconKey(media)) post('longpress', describe(unitEl, target, false));
       else post('blockmiss', {});
       return;
     }
@@ -2090,6 +2210,13 @@ enum ContentScript {
       apply();
       return;
     }
+    // 차단해서 가려진 사진을 짧게 누르면 가림만 풀어 보여 줌 (풀린 뒤 다시 누르면 평소처럼 사진 보기)
+    var hiddenBlk = target && target.closest ? target.closest('.dcapp-imgblk[data-dcapp-blocked="1"]') : null;
+    if (hiddenBlk && hiddenBlk.getAttribute('data-dcapp-img-revealed') !== '1') {
+      e.preventDefault(); e.stopPropagation();
+      hiddenBlk.setAttribute('data-dcapp-img-revealed', '1');
+      return;
+    }
     // 스포일러 경고 칸(그 안의 '스포일러 주의' 사진 포함)을 누르면 → 사진 보기가 아니라 경고 칸을 치우고 본문 흐림을 풂 (칸 안의 '설정' 링크는 그대로 동작)
     var spo = target && target.closest ? target.closest('#spoiler') : null;
     if (spo && spo === spoilerBox()) {
@@ -2106,15 +2233,18 @@ enum ContentScript {
     var tapped = target && target.closest ? target.closest('img, video.dc_mv') : null;
     var abody = tapped ? articleBody() : null;
     if (abody && abody.contains(tapped) && !dcconKey(tapped)) {
-      var shots = Array.prototype.filter.call(abody.querySelectorAll('img, video.dc_mv'), function (x) {
-        // 스포일러 경고 칸의 사진(닫아도 문서에는 남아 있음)은 사진 보기 목록에서 뺌
-        return !dcconKey(x) && !x.closest('#spoiler') && galleryMediaURL(x) && (x.tagName === 'VIDEO' || (x.naturalWidth || x.width) > 40 || x === tapped);
-      });
+      // 보여 줄 목록: 차단해서 가린 사진은 뺌 (눌러서 보여 준 사진은 포함). 스포일러 경고 칸 사진은 빠짐
+      var full = bodyPhotos(null);
+      var shots = bodyPhotos(tapped).filter(function (x) { return !imgHidden(x); });
       var at = shots.indexOf(tapped);
       if (at >= 0) {
         e.preventDefault(); e.stopPropagation();
+        // slots: 보여 줄 사진이 글 속 전체 목록의 몇 번째인지 / allCount·allFilenos: 가린 사진까지 포함한 전체 (PC 원본 첨부 목록과 짝짓는 기준)
         post('images', { urls: shots.map(galleryMediaURL), index: at,
-          filenos: shots.map(function (x) { return parseInt(x.getAttribute('data-fileno'), 10) || 0; }) });
+          keys: shots.map(function (x) { return imgBlockKey(galleryMediaURL(x)); }),
+          slots: shots.map(function (x) { return full.indexOf(x); }),
+          allCount: full.length,
+          allFilenos: full.map(photoFileno) });
         return;
       }
     }
@@ -2688,10 +2818,12 @@ enum ContentScript {
     if (!cmtRetry.on && e.isTrusted && commentFormOf(e.target)) cmtRetry.form = e.target;
   }, true);
   function stopCmtRetry() {
+    var wasOn = cmtRetry.on;
     cmtRetry.on = false; cmtRetry.tries = 0; cmtRetry.refreshed = false; cmtRetry.waitingList = false; cmtRetry.tsWaitAt = 0;
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
     document.documentElement.classList.remove('dcapp-cmtretry');
+    if (wasOn) post('cmtretry', { state: 'stop' });     // 앱의 '댓글을 다는 중' 말풍선을 내리게
   }
   // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
   function scheduleCmtRetry() {
@@ -2819,7 +2951,9 @@ enum ContentScript {
       cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
       return;
     }
+    var resumed = cmtRetry.askedCheck;      // Cloudflare 체크를 기다리다 끝난 것 → 앱 말풍선을 다시 켬
     cmtRetry.askedCheck = false;
+    if (resumed) post('cmtretry', { state: 'start' });
     // 다시 누르기 전에 댓글 목록을 먼저 새로 받고, 그 목록이 화면에 반영된 뒤 등록 (답글 양식은 목록 안에 있어 새로 받으면 사라지므로 그대로 누름)
     if (!cmtRetry.refreshed && !f.closest('.all-comment-lst, [id^="comment_addDiv"]')) {
       cmtRetry.refreshed = true;
@@ -4017,7 +4151,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v264-tscheck', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v268-nohscroll', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
@@ -4279,10 +4413,16 @@ enum ContentScript {
     setTimeout(function () { scheduled = false; try { apply(); } catch (e) {} }, 80);
   }
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('load', function (e) {
+    var t = e.target, body = articleBody();
+    if (t && t.tagName === 'IMG' && body && body.contains(t)) schedule();
+  }, true);
 
   window.__dcapp = {
     setConfig: function (c) {
       cfg = c || {};
+      runtimeImg = {};
+      imgChecked = {};
       // 탭해서 펼쳐 본 글도 차단 설정이 바뀌면 다시 접히게 (펼친 뒤 다시 차단했을 때 바로 가려지도록)
       document.querySelectorAll('[data-dcapp-revealed]').forEach(function (el) { el.removeAttribute('data-dcapp-revealed'); });
       clearSelection();
@@ -4290,6 +4430,7 @@ enum ContentScript {
       return true;
     },
     clearSelection: function () { clearSelection(); return true; },
+    markBlockedImageKey: function (key) { if (key) runtimeImg[key] = true; apply(); return true; },
     loginState: loginState,
     openManageLog: openManageLog,
     setPickMode: function (on) { pick.on = !!on; clearPick(); return true; },
@@ -4302,7 +4443,7 @@ enum ContentScript {
     articleAuthor: function () {
       findUnits();
       var h = articleHead();
-      return h ? describe(h, null) : null;
+      return h ? describe(h, null, false) : null;
     },
     pickParent: function () {
       if (pick.el && pick.el.parentElement) choose(pick.el.parentElement, 400);

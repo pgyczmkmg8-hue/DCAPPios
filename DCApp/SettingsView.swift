@@ -379,6 +379,9 @@ struct BlockSettingsView: View {
                 NavigationLink { BlockedDcconsView() } label: {
                     LabeledContent("차단한 디시콘", value: "\(filters.settings.dccons.count)")
                 }
+                NavigationLink { BlockedImagesView() } label: {
+                    LabeledContent("차단한 이미지", value: "\(filters.settings.images.count)")
+                }
                 NavigationLink { KeywordsView() } label: {
                     LabeledContent("차단 키워드", value: "\(filters.settings.keywords.count)")
                 }
@@ -704,6 +707,67 @@ struct BlockedDcconsView: View {
         }
         .navigationTitle("차단한 디시콘")
         .toolbar { EditButton() }
+    }
+}
+
+/// 글 속 사진 차단 목록: 가리는 방식, 목록(썸네일), 빼기
+struct BlockedImagesView: View {
+    @ObservedObject private var filters = FilterStore.shared
+
+    var body: some View {
+        List {
+            Section {
+                Picker("차단된 이미지 표시", selection: $filters.settings.imageBlockStyle) {
+                    ForEach(ImageBlockStyle.allCases) { Text($0.label).tag($0) }
+                }
+            } footer: {
+                Text("글 속에서 차단한 사진만 여기서 고른 방식으로 가려져요. 가려진 사진을 짧게 누르면 잠깐 보이고, 길게 누르면 차단을 풀 수 있어요. 같은 사진을 다른 이름으로 다시 올려도 찾아서 가려요.")
+            }
+
+            Section {
+                if filters.settings.images.isEmpty {
+                    Text("차단한 이미지가 없어요. 글 속 사진을 길게 누르거나 사진 보기에서 차단할 수 있어요.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(filters.settings.images) { img in
+                    HStack(spacing: 12) {
+                        BlockedImageThumb(urlString: img.src)
+                        Text(img.hash == nil ? "같은 사진 찾기 준비 중" : "다시 올린 사진도 찾아요")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete { offsets in
+                    let keys = offsets.map { filters.settings.images[$0].key }
+                    keys.forEach { filters.removeImage(key: $0) }
+                }
+            }
+        }
+        .navigationTitle("차단한 이미지")
+        .toolbar { EditButton() }
+    }
+}
+
+/// 차단한 사진의 작은 미리보기 (디시 사진 서버는 Referer가 필요해서 직접 받음)
+private struct BlockedImageThumb: View {
+    let urlString: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Color.secondary.opacity(0.15)
+                    .overlay(Image(systemName: "photo").foregroundStyle(.secondary))
+            }
+        }
+        .frame(width: 56, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: urlString) {
+            guard image == nil, let data = await ImageBlockHash.download(urlString) else { return }
+            image = UIImage(data: data)
+        }
     }
 }
 

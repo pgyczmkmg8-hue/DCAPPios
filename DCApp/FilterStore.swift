@@ -28,6 +28,21 @@ struct BlockedDccon: Codable, Hashable, Identifiable {
     var id: String { key }
 }
 
+/// 차단한 본문 사진 한 장. key: 사진 주소에서 뽑은 키(no= 값, 없으면 주소 경로), hash: 생김새 해시(같은 사진을 다시 올린 것도 찾음, 아직 못 받았으면 nil)
+struct BlockedImage: Codable, Hashable, Identifiable {
+    var key: String
+    var hash: String?
+    var src: String           // 차단할 때의 사진 주소 (목록 썸네일, 나중에 해시를 받을 때 씀)
+    var id: String { key }
+}
+
+/// 차단한 사진을 가리는 방식
+enum ImageBlockStyle: String, Codable, CaseIterable, Identifiable {
+    case blur, gray
+    var id: String { rawValue }
+    var label: String { self == .blur ? "블러 처리" : "회색 칸" }
+}
+
 struct HiddenElement: Codable, Hashable, Identifiable {
     var selector: String      // CSS 선택자
     var memo: String
@@ -88,6 +103,8 @@ struct FilterSettings: Codable {
     var hiddenElements: [HiddenElement] = []
     var hideBestNotice = true
     var advancedRules: [AdvancedBlockRule] = []
+    var images: [BlockedImage] = []
+    var imageBlockStyle: ImageBlockStyle = .blur
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -100,6 +117,8 @@ struct FilterSettings: Codable {
         hiddenElements = try c.decodeIfPresent([HiddenElement].self, forKey: .hiddenElements) ?? []
         hideBestNotice = try c.decodeIfPresent(Bool.self, forKey: .hideBestNotice) ?? true
         advancedRules = try c.decodeIfPresent([AdvancedBlockRule].self, forKey: .advancedRules) ?? []
+        images = try c.decodeIfPresent([BlockedImage].self, forKey: .images) ?? []
+        imageBlockStyle = try c.decodeIfPresent(ImageBlockStyle.self, forKey: .imageBlockStyle) ?? .blur
     }
 }
 
@@ -116,6 +135,9 @@ final class FilterStore: ObservableObject {
             NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
         }
     }
+
+    /// 페이지·사진 보기에서 알아낸 사진 키 → 해시 (저장하지 않음). 차단 목록에 키가 없어도 같은 사진(재업로드)이면 차단으로 봄
+    @Published private(set) var keyHashes: [String: String] = [:]
 
     private let key = "filterSettings"
 
@@ -173,6 +195,52 @@ final class FilterStore: ObservableObject {
 
     func isDcconBlocked(_ key: String) -> Bool {
         !key.isEmpty && settings.dccons.contains { $0.key == key }
+    }
+
+    // MARK: 본문 사진 차단
+
+    /// 키가 차단 목록에 있거나, 키의 사진 해시가 차단한 사진과 같으면 차단된 사진
+    func isImageBlocked(key: String) -> Bool {
+        guard !key.isEmpty else { return false }
+        if settings.images.contains(where: { $0.key == key }) { return true }
+        guard let h = keyHashes[key] else { return false }
+        return imageHashBlocked(h)
+    }
+
+    /// 사진 키의 생김새 해시를 기록 (페이지 확인·사진 보기에서 계산했을 때)
+    func recordImageHash(key: String, hash: String) {
+        guard !key.isEmpty, !hash.isEmpty else { return }
+        keyHashes[key] = hash
+    }
+
+    func addImage(key: String, src: String, hash: String?) {
+        guard !key.isEmpty, !settings.images.contains(where: { $0.key == key }) else { return }
+        settings.images.append(BlockedImage(key: key, hash: hash, src: src))
+    }
+
+    /// 차단한 사진의 해시를 나중에 채움 (이미 있으면 그대로 둠)
+    func setImageHash(key: String, hash: String) {
+        recordImageHash(key: key, hash: hash)
+        guard let i = settings.images.firstIndex(where: { $0.key == key }), settings.images[i].hash == nil else { return }
+        settings.images[i].hash = hash
+    }
+
+    /// 차단 해제: 키가 같은 항목뿐 아니라, 키의 해시가 차단한 사진과 같은 항목(재업로드 사진)도 함께 뺌
+    func removeImage(key: String) {
+        let h = keyHashes[key]
+        settings.images.removeAll { b in
+            if b.key == key { return true }
+            guard let h, let bh = b.hash else { return false }
+            return ImageBlockHash.matches(bh, h)
+        }
+    }
+
+    /// 이 사진의 해시가 차단한 사진과 같은 사진인지 (다른 이름으로 다시 올린 것도 잡음)
+    func imageHashBlocked(_ hash: String) -> Bool {
+        settings.images.contains { b in
+            guard let h = b.hash else { return false }
+            return ImageBlockHash.matches(h, hash)
+        }
     }
 
     func removeUser(_ u: BlockedUser) {
@@ -251,6 +319,9 @@ final class FilterStore: ObservableObject {
             "anonG": AnonStore.galleryScriptValue,   // 갤러리별 유동 닉/비번 (있으면 공통보다 우선)
             "duoFlip": BrowserView.windowLeftColumn,   // 돌려서 왼쪽에 생긴 줄 → 글자 여백을 오른쪽으로 뒤집음
             "duoCol": BrowserView.hasSideColumnOnly,   // 듀오 옆 세로 줄이 있으면 글자는 줄 안쪽으로
+            "images": s.images.map(\.key),                  // 차단한 본문 사진 키
+            "imgHashes": s.images.compactMap { $0.hash },   // 해시 (있으면 페이지가 사진 생김새를 확인해 같은 사진을 찾음)
+            "imgStyle": s.imageBlockStyle.rawValue,         // 가리는 방식: blur / gray
             "tint": (DCTheme.current.pageTint as Any?) ?? NSNull(),   // 웹페이지 속 디시 파란색 → 테마 색   // 내 글·댓글 닉네임 형광펜용
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: dict),

@@ -5,26 +5,44 @@ import Photos
 /// 글 속 사진 보기 요청 (페이지에서 사진을 탭하면 만들어짐)
 struct ImageViewerItem: Identifiable {
     let id = UUID()
+    /// 보여 줄 사진 (차단해서 가린 사진은 뺌)
     let urls: [URL]
     let index: Int
     /// 사진이 있는 글 주소 (원본 다운로드 주소를 PC 글에서 찾는 데 씀)
     var pageURL: URL? = nil
-    /// 본문 사진마다 디시가 붙인 파일 번호 (원본 첨부 목록은 이 번호 순이라 본문 순서와 다를 수 있음)
-    var filenos: [Int]? = nil
+    /// 사진마다 차단 키 (페이지가 만든 키 — 사진 차단 버튼이 이 키로 차단 목록에 넣음)
+    var keys: [String]? = nil
+    /// 보여 줄 사진마다: 글 속 전체 사진에서의 순서 (-1이면 모름 → 원본 매칭 안 함)
+    var slots: [Int]? = nil
+    /// 글 속 전체 사진 수 (가린 사진 포함) — PC 원본 첨부 목록과 개수를 맞출 때 씀
+    var allCount: Int = 0
+    /// 글 속 전체 사진의 파일 번호 (가린 사진 포함, 같은 순서) — 원본 첨부 목록 순서를 구할 때 씀
+    var allFilenos: [Int]? = nil
+
+    /// 보여 줄 i번째 사진의 글 속 전체 순서 (모르면 nil)
+    func globalIndex(_ i: Int) -> Int? {
+        guard let slots, i < slots.count, slots[i] >= 0 else { return nil }
+        return slots[i]
+    }
 }
+
+/// 사진 보기에서 앨범 시트를 연 목적 (한 장 저장 / 전체 저장)
+private enum AlbumAction { case one, all }
 
 /// 글 속 사진 전체 화면 보기: 핀치·더블탭 확대 / 좌우로 넘기기 / 위아래로 쓸어서 닫기 / 저장
 struct ImageViewer: View {
     let item: ImageViewerItem
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var filters = FilterStore.shared
 
     @State private var index: Int
     @State private var images: [Int: UIImage] = [:]
     @State private var datas: [Int: Data] = [:]
     @State private var failed: Set<Int> = []
     @State private var originals: Set<Int> = []        // 원본으로 바뀐 사진
-    @State private var originalLinks: [URL]?           // PC 글의 원본 첨부파일 주소 (사진 순서)
-    @State private var linksLoaded = false
+    @State private var linksTask: Task<[URL]?, Never>? // PC 글의 원본 첨부파일 주소 (사진 순서) — 한 번만 구함
+    @State private var bulkSaving = false              // 전체 저장 중 (중복 실행 막기)
+    @State private var albumAction: AlbumAction = .one // 앨범 시트를 연 목적
 
     @State private var scale: CGFloat = 1
     @State private var baseScale: CGFloat = 1
@@ -49,6 +67,13 @@ struct ImageViewer: View {
         return ws.map { $0.safeAreaInsets[keyPath: side] }.max() ?? 0
     }
     private var count: Int { item.urls.count }
+    /// 지금 보고 있는 사진의 차단 키 (없으면 차단 버튼을 못 씀)
+    private var currentKey: String? { key(at: index) }
+
+    private func key(at i: Int) -> String? {
+        guard let keys = item.keys, i < keys.count, !keys[i].isEmpty else { return nil }
+        return keys[i]
+    }
     private var zoomed: Bool { scale > 1.01 }
     /// 아래로 끌수록 배경이 투명해져서 뒤의 글이 보임
     private var backgroundOpacity: Double { 1 - min(Double(abs(dismissDrag)) / 500, 0.8) }
@@ -66,11 +91,8 @@ struct ImageViewer: View {
                                 y: i == index ? offset.height + dismissDrag : 0)
                 }
 
-                chrome
-                    .padding(.leading, Self.windowInset(\.left))    // 닫기·저장 버튼은 안전 영역 안(듀오 시계 줄을 피함)
-                    .padding(.trailing, Self.windowInset(\.right))
-                    .padding(.top, Self.windowInset(\.top))          // 사진은 위·아래 끝까지 채우고 버튼만 안전 영역 안에
-                    .padding(.bottom, Self.windowInset(\.bottom))
+                // 사진은 위·아래 끝까지 채우고, 버튼만 안전 영역 안에 (듀오는 옆 세로 줄 안에)
+                chromeLayer(geo.size)
                     .opacity(showChrome && dismissDrag == 0 ? 1 : 0)
                     .animation(.easeOut(duration: 0.15), value: showChrome)
             }
@@ -86,7 +108,10 @@ struct ImageViewer: View {
         .sheet(isPresented: $askAlbum) {
             NavigationStack {
                 PhotoAlbumPicker(title: "어디에 저장할까요?", selectedID: PhotoSaver.defaultAlbumID) { id in
-                    Task { await save(albumID: id) }
+                    switch albumAction {
+                    case .one: Task { await save(albumID: id) }
+                    case .all: Task { await saveAll(albumID: id) }
+                    }
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("취소") { askAlbum = false } }
@@ -116,40 +141,153 @@ struct ImageViewer: View {
         }
     }
 
-    private var chrome: some View {
-        VStack {
-            HStack {
-                Button { close(direction: 1, height: 0) } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                Spacer()
-                if count > 1 {
-                    Text("\(index + 1) / \(count)")
-                        .font(.subheadline.monospacedDigit().weight(.medium))
-                }
-                Spacer()
-                Button {
-                    if PhotoSaver.askEveryTime { askAlbum = true } else { Task { await save(albumID: PhotoSaver.defaultAlbumID) } }
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .disabled(datas[index] == nil)
+    /// 조작 줄 전체. 일반 화면은 위쪽 가로 줄, 듀오(옆에 세로 안전 영역이 있을 때)는 그 세로 줄 아래쪽에 세로로 모음
+    /// 화면을 돌리면 이 함수가 다시 그려지면서 안전 영역을 새로 읽음
+    @ViewBuilder
+    private func chromeLayer(_ size: CGSize) -> some View {
+        let left = Self.windowInset(\.left), right = Self.windowInset(\.right)
+        ZStack {
+            if BrowserView.hasSideColumnOnly {
+                duoChrome(column: max(left, right), onLeft: BrowserView.windowLeftColumn,
+                          bottom: Self.windowInset(\.bottom))
+            } else {
+                topChrome(left: left, right: right, top: Self.windowInset(\.top))
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 8)
-            Spacer()
             if let message {
                 Text(message)
                     .font(.subheadline.weight(.medium))
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(.regularMaterial, in: Capsule())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 40)
             }
         }
+        .frame(width: size.width, height: size.height)
+    }
+
+    /// 일반 화면: 위쪽 한 줄 — 닫기(왼쪽), 페이지 번호(가운데), 차단·저장(오른쪽). 안전 영역 안쪽으로 여유 있게
+    private func topChrome(left: CGFloat, right: CGFloat, top: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            closeButton
+            Spacer(minLength: 8)
+            if count > 1 { pageCapsule() }      // 두 캡슐 사이 빈 공간의 가운데 (정중앙에 고정하면 오른쪽 캡슐과 겹칠 수 있음)
+            Spacer(minLength: 8)
+            actionCapsule(vertical: false)
+        }
+        .foregroundStyle(.white)
+        .environment(\.colorScheme, .dark)           // 유리 색을 어두운 쪽으로 (밝은 사진 위에서도 흰 글자가 묻히지 않게)
+        .padding(.leading, left + 14)
+        .padding(.trailing, right + 14)
+        .padding(.top, top + 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// 듀오: 옆 세로 안전 영역 안에 세로로 모음 — 위쪽은 시계·카메라 자리라 비우고, 아래쪽에 맞춰 줄 가운데에 둠
+    private func duoChrome(column: CGFloat, onLeft: Bool, bottom: CGFloat) -> some View {
+        VStack(spacing: 10) {
+            if count > 1 { pageCapsule(inColumn: column) }
+            actionCapsule(vertical: true)
+            closeButton
+        }
+        .frame(width: column)
+        .foregroundStyle(.white)
+        .environment(\.colorScheme, .dark)
+        .padding(.bottom, max(bottom, 16) + 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: onLeft ? .bottomLeading : .bottomTrailing)
+    }
+
+    /// 닫기 (52pt 원형 유리)
+    private var closeButton: some View {
+        Button { close(direction: 1, height: 0) } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 52, height: 52)
+                .contentShape(Capsule())
+                .modifier(ViewerGlassCapsule())
+        }
+    }
+
+    /// 페이지 번호 캡슐 (사진이 2장 이상일 때). inColumn: 듀오 세로 줄 폭 — 그 안에서 한 줄로 줄어들게
+    private func pageCapsule(inColumn column: CGFloat? = nil) -> some View {
+        let label = Text("\(index + 1) / \(count)")
+            .font(.callout.monospacedDigit().weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+        return Group {
+            if let column {
+                label
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .frame(maxWidth: max(column - 6, 52))
+            } else {
+                label
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+            }
+        }
+        .modifier(ViewerGlassCapsule())
+    }
+
+    /// 차단·이 사진 저장·전체 저장 (52pt 버튼 3개)
+    @ViewBuilder
+    private var actionItems: some View {
+        Button { toggleBlock() } label: {
+            Image(systemName: currentBlocked ? "hand.raised.slash.fill" : "hand.raised")
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 52, height: 52)
+                .contentShape(Rectangle())
+        }
+        .disabled(currentKey == nil)
+        Button { startSaveOne() } label: {
+            Image(systemName: "square.and.arrow.down")
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 52, height: 52)
+                .contentShape(Rectangle())
+        }
+        .disabled(datas[index] == nil)
+        if count > 1 {
+            Button { startSaveAll() } label: {
+                Image(systemName: "square.and.arrow.down.on.square")
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 52, height: 52)
+                    .contentShape(Rectangle())
+            }
+            .disabled(bulkSaving)
+        }
+    }
+
+    /// 조작 버튼을 하나의 유리 캡슐 안에 (가로 줄 또는 듀오의 세로 줄)
+    @ViewBuilder
+    private func actionCapsule(vertical: Bool) -> some View {
+        if vertical {
+            VStack(spacing: 4) { actionItems }
+                .padding(.vertical, 4)
+                .modifier(ViewerGlassCapsule())
+        } else {
+            HStack(spacing: 0) { actionItems }
+                .modifier(ViewerGlassCapsule())
+        }
+    }
+
+    /// 지금 사진이 차단 목록에 있는지
+    private var currentBlocked: Bool { currentKey.map { filters.isImageBlocked(key: $0) } ?? false }
+
+    /// 지금 사진을 차단하거나 차단을 품 (차단하면 글 속에서 이 사진이 가려짐)
+    private func toggleBlock() {
+        guard let key = currentKey else { return }
+        if filters.isImageBlocked(key: key) {
+            filters.removeImage(key: key)
+            flash("이미지 차단을 풀었어요")
+            return
+        }
+        let url = item.urls[index]
+        let data = datas[index]
+        filters.addImage(key: key, src: url.absoluteString, hash: data.flatMap { ImageBlockHash.hash(data: $0) })
+        if data == nil {
+            // 아직 안 받은 사진이면 받은 뒤 생김새 해시를 채움
+            Task {
+                if let h = await ImageBlockHash.fetch(url.absoluteString) { filters.setImageHash(key: key, hash: h) }
+            }
+        }
+        flash("이 이미지를 차단했어요")
     }
 
     // MARK: - 제스처
@@ -235,6 +373,8 @@ struct ImageViewer: View {
         if let r = await Self.fetch(item.urls[i]) {
             datas[i] = r.data
             images[i] = r.image
+            // 이 사진의 생김새를 기록 → 같은 사진이 다른 이름으로 다시 올라온 것도 차단 상태를 알 수 있게
+            if let key = key(at: i), let h = ImageBlockHash.hash(data: r.data) { filters.recordImageHash(key: key, hash: h) }
         } else {
             failed.insert(i)
         }
@@ -242,15 +382,11 @@ struct ImageViewer: View {
     }
 
     private func upgrade(_ i: Int) async {
-        guard !originals.contains(i) else { return }
-        if !linksLoaded {
-            linksLoaded = true
-            originalLinks = await Self.originalLinks(page: item.pageURL, count: count)
-        }
-        guard let links = originalLinks else { return }
-        let slot = Self.linkSlot(i, filenos: item.filenos)
+        guard !originals.contains(i), let g = item.globalIndex(i) else { return }
+        guard let links = await ensureLinks() else { return }
+        let slot = PostPhotoOriginals.linkSlot(g, filenos: item.allFilenos)
         guard slot < links.count,
-              let data = await Self.download(links[slot]),
+              let data = await PostPhotoOriginals.download(links[slot]),
               let img = Self.decode(data) else { return }
         datas[i] = data
         images[i] = img
@@ -258,51 +394,20 @@ struct ImageViewer: View {
         originals.insert(i)
     }
 
-    /// 모바일 웹의 사진은 줄어든 사진이라, PC 글 아래 '원본 첨부파일' 링크(download.php)에서 원본을 받음
-    /// 모바일 글 주소 → PC 글 주소로 바꿔서 원본 링크를 사진 순서대로 읽음. 못 찾으면 nil
-    nonisolated private static func originalLinks(page: URL?, count: Int) async -> [URL]? {
-        guard let page, let pc = pcURL(page) else { return nil }
-        var req = URLRequest(url: pc)
-        req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-                     forHTTPHeaderField: "User-Agent")
-        req.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
-        guard let (html, _) = try? await URLSession.shared.data(for: req),
-              let text = String(data: html, encoding: .utf8),
-              let box = text.range(of: "appending_file") else { return nil }
-        let tail = String(text[box.upperBound...])
-        let end = tail.range(of: "</ul>")?.lowerBound ?? tail.endIndex
-        let section = String(tail[..<end]).replacingOccurrences(of: "&amp;", with: "&")
-        guard let re = try? NSRegularExpression(pattern: #"https://image\.dcinside\.com/download\.php\?[^"'\s<>]+"#) else { return nil }
-        let links = re.matches(in: section, range: NSRange(section.startIndex..., in: section))
-            .compactMap { Range($0.range, in: section).map { String(section[$0]) } }
-            .compactMap { URL(string: $0) }
-        // 사진 수와 원본 파일 수가 같을 때만 순서로 짝지음 (다르면 엉뚱한 파일일 수 있어서)
-        return links.count == count ? links : nil
+    /// 이 글의 PC 원본 링크 목록 — 한 번만 구하고, 진행 중이면 같은 작업을 기다림
+    private func ensureLinks() async -> [URL]? {
+        if linksTask == nil {
+            let page = item.pageURL, n = item.allCount
+            linksTask = Task { await PostPhotoOriginals.links(page: page, count: n) }
+        }
+        return await linksTask?.value
     }
 
-    /// 본문 i번째 사진의 원본이 첨부 목록의 몇 번째인지 — 첨부 목록은 파일 번호가 작은 순이므로 본문 사진의 파일 번호 순위로 구함
-    /// (파일 번호가 없거나 겹치면 본문 순서 그대로)
-    nonisolated private static func linkSlot(_ i: Int, filenos: [Int]?) -> Int {
-        guard let f = filenos, i < f.count, !f.contains(0), Set(f).count == f.count else { return i }
-        return f.filter { $0 < f[i] }.count
-    }
-
-    nonisolated private static func download(_ u: URL) async -> Data? {
-        var dl = URLRequest(url: u)
-        dl.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
-        guard let (data, res) = try? await URLSession.shared.data(for: dl),
-              (res as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty,
-              CGImageSourceCreateWithData(data as CFData, nil) != nil else { return nil }
-        return data
-    }
-
-    /// m.dcinside.com/board/{id}/{no} (mini·person도) → gall.dcinside.com/.../board/view/?id=&no=
-    nonisolated private static func pcURL(_ url: URL) -> URL? {
-        let parts = url.path.split(separator: "/").map(String.init)
-        guard parts.count >= 3, let kind = ["board", "mini", "person"].first(where: { $0 == parts[0] }),
-              parts[2].allSatisfy(\.isNumber) else { return nil }
-        let prefix = kind == "board" ? "" : "/\(kind)"
-        return URL(string: "https://gall.dcinside.com\(prefix)/board/view/?id=\(parts[1])&no=\(parts[2])")
+    /// 저장할 원본 데이터 한 장 (이미 원본으로 받아 둔 사진은 그대로, 아니면 PC 원본 → 모바일 사진)
+    private func originalData(_ i: Int, links: [URL]?) async -> Data? {
+        if originals.contains(i), let d = datas[i] { return d }
+        return await PostPhotoOriginals.original(links: links, index: item.globalIndex(i) ?? -1,
+                                                 filenos: item.allFilenos, mobile: item.urls[i])
     }
 
     /// 디시 사진 서버는 Referer가 없으면 막으므로 붙여서 요청
@@ -351,11 +456,81 @@ struct ImageViewer: View {
         }
     }
 
+    /// 한 장 저장: 앨범을 물어보는 설정이면 시트부터
+    private func startSaveOne() {
+        if PhotoSaver.askEveryTime {
+            albumAction = .one
+            askAlbum = true
+        } else {
+            Task { await save(albumID: PhotoSaver.defaultAlbumID) }
+        }
+    }
+
+    /// 전체 저장: 앨범을 물어보는 설정이면 시트를 한 번만 띄워 고른 앨범에 모두 넣음
+    private func startSaveAll() {
+        guard !bulkSaving else { return }
+        if PhotoSaver.askEveryTime {
+            albumAction = .all
+            askAlbum = true
+        } else {
+            Task { await saveAll(albumID: PhotoSaver.defaultAlbumID) }
+        }
+    }
+
+    /// 글 속 사진 전부를 원본으로 순서대로 저장 (가려진 사진은 목록에 없어서 빠짐)
+    private func saveAll(albumID: String?) async {
+        guard !bulkSaving else { return }
+        bulkSaving = true
+        defer { bulkSaving = false }
+        let total = count
+        let links = await ensureLinks()
+        var saved = 0, missed = 0
+        var albumName: String?
+        for i in 0..<total {
+            message = "전체 저장 중 (\(i + 1)/\(total))…"
+            guard let data = await originalData(i, links: links) else { missed += 1; continue }
+            do {
+                albumName = try await PhotoSaver.save(data, albumID: albumID)
+                saved += 1
+            } catch PhotoSaver.SaveError.denied {
+                flash("설정에서 사진 접근을 허용해주세요")
+                return
+            } catch {
+                missed += 1
+            }
+        }
+        guard saved > 0 else {
+            flash("사진을 저장하지 못했어요")
+            return
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        if missed == 0 {
+            flash(albumName.map { "'\($0)' 앨범에 \(saved)장 저장했어요" } ?? "사진 \(saved)장을 모두 저장했어요")
+        } else {
+            flash((albumName.map { "'\($0)' 앨범에 \(saved)장 저장, " } ?? "사진 \(saved)장 저장, ") + "\(missed)장은 가져오지 못했어요")
+        }
+    }
+
     private func flash(_ text: String) {
         message = text
         Task {
             try? await Task.sleep(for: .seconds(1.6))
             if message == text { message = nil }
+        }
+    }
+}
+
+/// 사진 보기 상단 조각의 유리 캡슐: iOS 26 이상은 어두운 틴트의 리퀴드 글래스, 그 아래는 어두운 막 + 얇은 재질
+/// (밝은 사진이 뒤에 와도 흰 아이콘이 묻히지 않도록 뒤를 어둡게 깔아 둠)
+private struct ViewerGlassCapsule: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.tint(.black.opacity(0.35)).interactive(), in: Capsule())
+        } else {
+            content
+                .background(Capsule().fill(.black.opacity(0.45)))
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.25)))
         }
     }
 }

@@ -389,6 +389,8 @@ struct BrowserView: View {
     }
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var showFooterEditor = false
+    /// 길게 눌러 '원본 저장'을 골랐을 때 앨범을 물어보는 설정이면 그 요청을 들고 시트를 띄움
+    @State private var albumAsk: BlockRequest?
     @Environment(\.verticalSizeClass) private var vSizeClass
     @AppStorage(ControlBarItem.verticalLandscapeKey, store: Profile.defaults) private var verticalInLandscape = true
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
@@ -904,14 +906,30 @@ struct BrowserView: View {
                         }
                 }
             }
-            .confirmationDialog(model.blockRequest.map { isAlreadyBlocked($0) } == true ? "차단 해제/메모/갤로그" : "차단/메모/갤로그",
+            .confirmationDialog(model.blockRequest.map { blockDialogTitle($0) } ?? "차단/메모/갤로그",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
                                 titleVisibility: .visible,
                                 presenting: model.blockRequest) { req in
                 blockButtons(req)
             } message: { req in
-                Text(req.snippet.isEmpty ? (isAlreadyBlocked(req) ? "차단을 풀까요?" : "무엇을 차단할까요?") : req.snippet)
+                if !req.imgKey.isEmpty {
+                    Text(filters.isImageBlocked(key: req.imgKey) ? "이 사진을 저장하거나 차단을 풀까요?" : "이 사진을 저장하거나 가릴까요?")
+                } else {
+                    Text(req.snippet.isEmpty ? (isAlreadyBlocked(req) ? "차단을 풀까요?" : "무엇을 차단할까요?") : req.snippet)
+                }
+            }
+            .sheet(item: $albumAsk) { req in
+                NavigationStack {
+                    PhotoAlbumPicker(title: "어디에 저장할까요?", selectedID: PhotoSaver.defaultAlbumID) { id in
+                        albumAsk = nil
+                        savePhotoOriginal(req, albumID: id)
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("취소") { albumAsk = nil } }
+                    }
+                }
+                .presentationDetents([.medium, .large])
             }
             .background {
                 // 요소 숨기기 확인 (다이얼로그끼리 겹치지 않게 별도 레이어에 부착)
@@ -1171,15 +1189,16 @@ struct BrowserView: View {
             }
     }
 
+    /// 이 브라우저가 사진 보기·댓글 내용 창을 직접 띄워야 하는지 (RootView의 메인·글 화면이 아닌 단독 브라우저)
+    private var ownsCovers: Bool { model !== router.mainBrowser && model !== router.detailBrowser }
+
     /// 글쓰기 화면 → 이 갤러리 자짤 설정 / 사진 보기
     private var layer7: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer6)
             .overlay(alignment: .bottom) { CommentComposerHost(model: model, barInset: composerBarInset, barLeft: barMirrored).ignoresSafeArea(.keyboard, edges: .bottom) }   // 앱 댓글 입력창 (키보드가 내려가는 동안 입력창·어두운 막이 키보드 높이만큼 줄어 아래 흰 바탕이 보이지 않게 화면 맨 아래까지 유지)
-            .fullScreenCover(item: $model.imageViewer) { item in
-                ImageViewer(item: item)
-                    .presentationBackgroundCompat(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
-            }
+            // 사진 보기·댓글 내용 보기는 RootView가 맡음 (분할 전환 중에도 창이 끊기지 않게). 단독 브라우저만 여기서 띄움
+            .background { if ownsCovers { BrowserCovers(model: model) } }
             .overlay { commentTextPromptButton }
             .sheet(item: $idSearchTarget) { t in
                 IdPostSearchSheet(gallery: t.gallery, code: t.code) { url in model.load(url) }
@@ -1193,13 +1212,6 @@ struct BrowserView: View {
                 }
             }
             .onChangeCompat(of: model.isScrolling) { _, on in if on { model.commentTextPrompt = nil } }
-            .fullScreenCover(item: $model.commentText) { item in
-                CommentTextViewer(item: item) { url in
-                    model.commentText = nil     // 디시 링크는 닫고 앱 안에서 열기
-                    model.load(url)
-                }
-                .presentationBackgroundCompat(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
-            }
             .sheet(isPresented: Binding(get: { autoImageGallery != nil },
                                         set: { if !$0 { autoImageGallery = nil } })) {
                 if let gid = autoImageGallery {
@@ -2323,13 +2335,70 @@ struct BrowserView: View {
             || !filters.blockedKeywords(in: req.snippet, gallery: currentGallery?.id).isEmpty
     }
 
+    /// 길게 눌러 고른 본문 사진의 원본을 사진 앱에 저장 (PC 원본 → 못 받으면 모바일 사진)
+    private func savePhotoOriginal(_ req: BlockRequest, albumID: String?) {
+        let page = req.pageURL, index = req.imgIndex, count = req.imgCount, filenos = req.imgFilenos
+        let mobile = URL(string: req.imgSrc)
+        Task {
+            var links: [URL]?
+            if index >= 0 { links = await PostPhotoOriginals.links(page: page, count: count) }
+            guard let data = await PostPhotoOriginals.original(links: links, index: index, filenos: filenos, mobile: mobile) else {
+                model.showToast("사진을 가져오지 못했어요")
+                return
+            }
+            do {
+                let album = try await PhotoSaver.save(data, albumID: albumID)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                model.showToast(album.map { "'\($0)' 앨범에 저장했어요" } ?? "사진 앱에 저장했어요")
+            } catch PhotoSaver.SaveError.denied {
+                model.showToast("설정에서 사진 접근을 허용해주세요")
+            } catch {
+                model.showToast("저장하지 못했어요")
+            }
+        }
+    }
+
+    /// 차단 확인 창 제목: 사진이면 사진 차단, 아니면 기존 제목
+    private func blockDialogTitle(_ req: BlockRequest) -> String {
+        if !req.imgKey.isEmpty { return "사진" }
+        return isAlreadyBlocked(req) ? "차단 해제/메모/갤로그" : "차단/메모/갤로그"
+    }
+
     @ViewBuilder
     private func blockButtons(_ req: BlockRequest) -> some View {
-        if isAlreadyBlocked(req) {
+        if !req.imgKey.isEmpty {
+            // 본문 사진: 그 사진만 차단·해제 (작성자 차단 등은 같이 뜨지 않게)
+            imageBlockButtons(req)
+        } else if isAlreadyBlocked(req) {
             unblockButtons(req)
         } else {
             newBlockButtons(req)
         }
+    }
+
+    @ViewBuilder
+    private func imageBlockButtons(_ req: BlockRequest) -> some View {
+        let store = FilterStore.shared
+        Button("원본 저장") {
+            if PhotoSaver.askEveryTime { albumAsk = req } else { savePhotoOriginal(req, albumID: PhotoSaver.defaultAlbumID) }
+        }
+        if store.isImageBlocked(key: req.imgKey) {
+            Button("이미지 차단 해제") {
+                store.removeImage(key: req.imgKey)
+                model.showToast("이미지 차단을 풀었어요")
+            }
+        } else {
+            Button("이 이미지 차단", role: .destructive) {
+                let key = req.imgKey, src = req.imgSrc
+                store.addImage(key: key, src: src, hash: nil)
+                model.showToast("이미지를 차단했어요")
+                // 같은 사진을 다른 이름으로 다시 올린 것도 찾도록, 사진을 받아 생김새 해시를 채움 (백그라운드)
+                Task {
+                    if let h = await ImageBlockHash.fetch(src) { store.setImageHash(key: key, hash: h) }
+                }
+            }
+        }
+        Button("취소", role: .cancel) {}
     }
 
     @ViewBuilder
@@ -2814,7 +2883,10 @@ struct ToastOverlay: View {
     var body: some View {
         let composing = model.commentCompose != nil
         ZStack {
-            if let text = model.toast {
+            if model.isRetryingComment {
+                RetryingBubble()
+                    .transition(.move(edge: composing ? .top : .bottom).combined(with: .opacity))
+            } else if let text = model.toast {
                 ToastBubble(text: text)
                     .transition(.move(edge: composing ? .top : .bottom).combined(with: .opacity))
             }
@@ -2823,6 +2895,56 @@ struct ToastOverlay: View {
         .padding(.bottom, composing ? 0 : 88)       // 평소엔 하단 바 위
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: composing ? .top : .bottom)
         .animation(.spring(duration: 0.3), value: model.toast)
+        .animation(.spring(duration: 0.3), value: model.isRetryingComment)
         .allowsHitTesting(false)
+    }
+}
+
+/// 429로 막힌 댓글을 자동으로 다시 누르는 동안 떠 있는 말풍선: 톱니바퀴 + 문구 (댓글이 달리거나 멈출 때까지 계속)
+struct RetryingBubble: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text("댓글을 다는 중입니다")
+                .font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+        .padding(.horizontal, 24)
+    }
+}
+
+/// 사진 보기·댓글 내용 보기 창 (분할 화면 맨 바깥에 붙여 두는 호스트). 닫히면 웹 화면 레이아웃을 다시 맞춤
+struct BrowserCovers: View {
+    @ObservedObject var model: WebViewModel
+    /// 같이 보이는 다른 웹 화면 (분할 화면이면 반대쪽 글 화면). 창을 닫은 뒤 두 화면을 모두 다시 맞춤
+    var other: WebViewModel? = nil
+
+    /// 창을 닫으면 두 웹 화면을 즉시, 그리고 0.15초 뒤 한 번 더 다시 맞춤 (닫히는 중에 새 자리가 드러나도 빈 화면이 남지 않게)
+    private func relayout() {
+        model.nudgeLayout()
+        other?.nudgeLayout()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            model.nudgeLayout()
+            other?.nudgeLayout()
+        }
+    }
+
+    var body: some View {
+        Color.clear
+            .fullScreenCover(item: $model.imageViewer, onDismiss: { relayout() }) { item in
+                ImageViewer(item: item)
+                    .presentationBackgroundCompat(.clear)   // 끌어내릴 때 뒤의 글이 비쳐 보이도록
+            }
+            .fullScreenCover(item: $model.commentText, onDismiss: { relayout() }) { item in
+                CommentTextViewer(item: item) { url in
+                    model.commentText = nil     // 디시 링크는 닫고 앱 안에서 열기
+                    model.load(url)
+                }
+                .presentationBackgroundCompat(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
+            }
     }
 }

@@ -156,6 +156,11 @@ final class AppRouter: ObservableObject {
             singleUsesDetail = true
             detailBrowser.isDetailPane = false
         }
+        // 분할이 바뀐 뒤 두 웹 화면을 새 자리 크기에 맞춰 다시 배치 (전환 중 빈 화면으로 남지 않게)
+        DispatchQueue.main.async { [mainBrowser, detailBrowser] in
+            mainBrowser.nudgeLayout()
+            detailBrowser.nudgeLayout()
+        }
     }
 
     /// 계정 전환: 지금 로그인을 지우고 → 로그인 화면을 열어 고른 계정으로 자동 로그인
@@ -444,6 +449,11 @@ struct RootView: View {
             }
         }) {
             TutorialView { showTutorial = false }
+        }
+        // 사진 보기·댓글 내용 보기: 분할/접기 전환과 상관없이 떠 있도록 화면 맨 바깥에서 붙임 (두 웹 화면 모두)
+        .background {
+            BrowserCovers(model: router.mainBrowser, other: router.detailBrowser)
+            BrowserCovers(model: router.detailBrowser, other: router.mainBrowser)
         }
         .sheet(isPresented: $showIconPicker) {
             NavigationStack { AppIconSettingsView() }
