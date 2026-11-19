@@ -2158,7 +2158,11 @@ extension WebViewModel: WKScriptMessageHandler {
         case "cmtretry":   // 429 뒤 자동 재등록 상태
             switch body["state"] as? String {
             case "start": showToast("댓글이 막혀서 등록될 때까지 다시 누를게요")
-            case "check": showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)")
+            case "check":
+                showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)")
+                if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
+                commentCarry = nil
+                if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
             case "done": showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
             default: break
             }

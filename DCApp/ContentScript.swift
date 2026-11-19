@@ -89,6 +89,7 @@ enum ContentScript {
       '.dcapp-dccon-off{display:none!important}',
       '.dcapp-home-off{display:none!important}',
       'html.dcapp-home-wait body{opacity:0!important}',
+      'html.dcapp-cmtretry .loading-box{display:none!important}',
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       // 닉네임·디시콘만 길게 누르기 메뉴를 쓰므로 iOS 기본 메뉴(복사 등)를 막고, 나머지 글자는 평소처럼 선택·복사 가능
@@ -2690,6 +2691,7 @@ enum ContentScript {
     cmtRetry.on = false; cmtRetry.tries = 0; cmtRetry.refreshed = false; cmtRetry.waitingList = false; cmtRetry.tsWaitAt = 0;
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
+    document.documentElement.classList.remove('dcapp-cmtretry');
   }
   // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
   function scheduleCmtRetry() {
@@ -2766,6 +2768,7 @@ enum ContentScript {
         try { memo = new URLSearchParams(d.body || '').get('comment_memo') || ''; } catch (e) {}
         if (!memo || !cmtRetry.form || !document.body.contains(cmtRetry.form)) return;   // 디시콘 등 → 안 함
         cmtRetry.on = true; cmtRetry.memo = memo; cmtRetry.tries = 0; cmtRetry.url = location.href;
+        document.documentElement.classList.add('dcapp-cmtretry');
         post('cmtretry', { state: 'start' });
       }
       clearTimeout(cmtRetry.watchdog);
@@ -2808,6 +2811,7 @@ enum ContentScript {
     if (tsNeedsCheck()) {
       if (!cmtRetry.askedCheck) {
         cmtRetry.askedCheck = true;
+        try { revealCheck(f); } catch (e) {}
         try { dcTs.host.scrollIntoView({ block: 'center' }); } catch (e) {}
         post('cmtretry', { state: 'check' });
       }
@@ -4013,7 +4017,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v262-tsretry', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v264-tscheck', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
