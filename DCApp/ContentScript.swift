@@ -81,7 +81,7 @@ enum ContentScript {
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       // 닉네임·디시콘만 길게 누르기 메뉴를 쓰므로 iOS 기본 메뉴(복사 등)를 막고, 나머지 글자는 평소처럼 선택·복사 가능
       '.dcapp-lp-nick,.dcapp-memo,img[src*="dccon"],img[data-original*="dccon"]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}',
-      '[data-dcapp-unit="post"]{-webkit-user-select:none;user-select:none}',
+      '[data-dcapp-unit="post"],[data-dcapp-unit="post"] a{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}',
       '.dcapp-dory{display:none!important}',
       // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
       // 글목록: 닉네임 칸의 오른쪽 여백을 빼서 메모와의 간격을 글·댓글과 같게
@@ -1909,6 +1909,7 @@ enum ContentScript {
   }
   var lp = null;
   var suppressClickUntil = 0;
+  var lpHeld = false;
   function clearLP() { if (lp) { clearTimeout(lp.timer); lp = null; } }
 
   document.addEventListener('touchstart', function (e) {
@@ -1941,7 +1942,9 @@ enum ContentScript {
     if (!dcconKey(media)) {
       var nk = unitEl ? nickElement({ el: unitEl, kind: unitEl.getAttribute('data-dcapp-unit') }) : null;
       var onNick = (nk && (nk === target || nk.contains(target))) || !!target.closest('.dcapp-memo') || !!nickArea(target);
-      if (!onNick) return;
+      // 글 목록 행(post)은 닉네임뿐 아니라 그 글 행 어디를 꾹 눌러도 (버튼 등 특수 요소는 제외). 본문(article)·댓글은 기존대로 닉네임만
+      var onListRow = !!unitEl && unitEl.getAttribute('data-dcapp-unit') === 'post' && !target.closest('button, input, textarea, select');
+      if (!onNick && !onListRow) return;
     }
     var t = e.touches[0];
     clearLP();
@@ -1950,6 +1953,7 @@ enum ContentScript {
       timer: setTimeout(function () {
         lp = null;
         suppressClickUntil = Date.now() + 800;
+        lpHeld = true;      // 손을 뗄 때(touchend) 한 번 더 막음 — 오래 누르고 있다 떼도 글로 이동하지 않게
         post('longpress', describe(unitEl, target));
         // 길게 누르면 iOS가 글자를 선택해 버림 → 메뉴가 뜬 뒤 선택 풀기 (선택은 누르기가 끝날 때 생겨서 몇 번 나눠서)
         [60, 300, 700].forEach(function (ms) { setTimeout(clearSelection, ms); });
@@ -1961,8 +1965,12 @@ enum ContentScript {
     var t = e.touches[0];
     if (Math.abs(t.clientX - lp.x) > 10 || Math.abs(t.clientY - lp.y) > 10) clearLP();
   }, { capture: true, passive: true });
-  document.addEventListener('touchend', clearLP, { capture: true, passive: true });
-  document.addEventListener('touchcancel', clearLP, { capture: true, passive: true });
+  function endTouch() {
+    if (lpHeld) { lpHeld = false; suppressClickUntil = Date.now() + 700; }
+    clearLP();
+  }
+  document.addEventListener('touchend', endTouch, { capture: true, passive: true });
+  document.addEventListener('touchcancel', endTouch, { capture: true, passive: true });
 
   // ---------- 요소 선택해서 숨기기 ----------
   var pick = { on: false, el: null };
@@ -2021,6 +2029,15 @@ enum ContentScript {
     if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     if (Date.now() < suppressClickUntil) return;    // 방금 길게 눌러 메뉴를 띄웠음
     post('longpress', describe(unitEl, t));
+  }, true);
+
+  // 글 목록 행을 길게 눌러 메뉴가 뜬 직후 손을 뗄 때 생기는 click은 글 링크로 이동하지 않게 (짧게 한 번 탭하는 건 평소처럼 글로 이동)
+  window.addEventListener('click', function (e) {
+    if (Date.now() >= suppressClickUntil) return;
+    var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (!t || !t.closest || !t.closest('[data-dcapp-unit="post"]')) return;
+    e.preventDefault(); e.stopPropagation();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
   }, true);
 
   // ---------- 글쓰기: 위쪽 갤러리 이름을 눌러도 갤러리로 이동하지 않음 ----------
@@ -3832,7 +3849,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v256-headph', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v258-listlp', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
