@@ -1473,11 +1473,7 @@ private struct NativeWriteToast: View {
     var body: some View {
         Group {
             if let toast = model.toast {
-                Text(toast)
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: Capsule())
+                ToastBubble(text: toast)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

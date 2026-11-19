@@ -418,6 +418,10 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     /// 입력창의 내용을 디시 댓글 양식에 채우고 등록 버튼을 누름
+    /// 댓글을 보낸 뒤 응답이 끝내 안 오면 입력창을 다시 쓸 수 있게 풀어 주는 시간
+    /// (보안 확인 대기 최대 50초 + 등록 요청 최대 20초 + 여유 5초. 정상 응답·오류는 그보다 먼저 'cmtdone'으로 풀림)
+    static let commentSendFallback: Duration = .seconds(75)
+
     func submitComment() {
         guard let s = commentCompose, !s.sending else { return }
         let text = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -435,8 +439,14 @@ final class WebViewModel: NSObject, ObservableObject {
             switch r {
             case "sent":
                 // 성공하면 'cmtok'으로 닫힘. 응답이 없으면(디시가 입력 오류 안내만 띄운 경우 등) 입력창을 다시 쓸 수 있게
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: Self.commentSendFallback)
                 if commentCompose === s { s.sending = false }
+            case "tswait", "tserror":
+                s.sending = false
+                showToast(Self.tsWaitToast(r))
+            case "notready":
+                s.sending = false
+                showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
             case "check":
                 showToast("Cloudflare 체크박스를 누른 뒤 아래 '등록'을 눌러 주세요")
                 commentCompose = nil
@@ -509,10 +519,16 @@ final class WebViewModel: NSObject, ObservableObject {
         switch r {
         case "sent":
             Task {
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: Self.commentSendFallback)
                 if commentCompose === s { s.sending = false }
             }
             return true
+        case "tswait", "tserror":
+            s.sending = false
+            showToast(Self.tsWaitToast(r))
+        case "notready":
+            s.sending = false
+            showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
         case "check":
             showToast("Cloudflare 체크박스를 누른 뒤 글자콘을 다시 등록해 주세요")
             commentCompose = nil
@@ -534,10 +550,16 @@ final class WebViewModel: NSObject, ObservableObject {
         case "sent":
             Task {
                 // 성공하면 'cmtok'으로 닫힘. 응답이 없으면 입력창을 다시 쓸 수 있게
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: Self.commentSendFallback)
                 if commentCompose === s { s.sending = false }
             }
             return true
+        case "tswait", "tserror":
+            s.sending = false
+            showToast(Self.tsWaitToast(r))
+        case "notready":
+            s.sending = false
+            showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
         case "check":
             showToast("Cloudflare 체크박스를 누른 뒤 디시콘을 다시 골라 주세요")
             commentCompose = nil
@@ -1885,10 +1907,25 @@ final class WebViewModel: NSObject, ObservableObject {
     func showToast(_ text: String) {
         toastTask?.cancel()
         toast = text
+        // 제목과 이유·재시도 권유가 함께 나오는 여러 줄 알림은 읽을 시간을 더 줌
+        let seconds: Double = text.contains("\n") ? 4.5 : 1.8
         toastTask = Task {
-            try? await Task.sleep(for: .seconds(1.8))
+            try? await Task.sleep(for: .seconds(seconds))
             if !Task.isCancelled { toast = nil }
         }
+    }
+
+    /// 보안 확인(Cloudflare)이 늦거나 실패했을 때 댓글 입력창에 띄우는 알림: 첫 줄은 상태, 다음 줄은 이유와 재시도 권유
+    static func tsWaitToast(_ result: String?) -> String {
+        let title = result == "tserror" ? "보안 확인에 실패했어요" : "보안 확인이 아직 진행 중이에요"
+        return title + "\n데이터 속도가 느려 보안 확인(Cloudflare) 처리가 지연되고 있어요. 잠시 기다린 뒤 다시 등록을 눌러 주세요."
+    }
+
+    /// 데이터가 느려 보안 확인이 늦어질 때 디시가 띄우는 안내에 이유와 재시도 권유를 덧붙임 (해당하지 않으면 nil)
+    nonisolated static func slowNetworkNote(for message: String) -> String? {
+        let tsWait = message.contains("보안 확인") && (message.contains("진행") || message.contains("확인 중"))
+        guard tsWait || message.contains("등록되지 않았") else { return nil }
+        return "데이터 속도가 느려 보안 확인 처리가 지연되고 있을 수 있어요. 잠시 기다린 뒤 다시 등록을 눌러 주세요."
     }
 
     func pickParent() {
@@ -2109,8 +2146,13 @@ extension WebViewModel: WKScriptMessageHandler {
             let h = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
             if writeToolbarHeight != h { writeToolbarHeight = h }
         case "cmtdone":   // 댓글 등록 요청 끝 → 광고 차단 다시 켜기 (429면 자동으로 다시 누르는 중이라 그대로)
-            if (body["status"] as? NSNumber)?.intValue != 429 {
+            let st = (body["status"] as? NSNumber)?.intValue ?? -1
+            if st != 429 {
                 resumeAdBlock(after: 1)
+                // 0 = 연결이 끊기거나 제한 시간(20초)을 넘김 → 알리고, 입력창은 다시 쓸 수 있게 풀어 둠
+                if st == 0, commentCompose?.sending == true {
+                    showToast("연결이 느려 댓글을 등록하지 못했어요\n데이터 속도가 느리거나 연결이 불안정해요. 잠시 뒤 다시 등록을 눌러 주세요.")
+                }
                 commentCompose?.sending = false      // 성공이면 이미 닫혔고, 실패면 입력창을 다시 쓸 수 있게
             }
         case "cmtretry":   // 429 뒤 자동 재등록 상태
@@ -2545,7 +2587,8 @@ extension WebViewModel: WKUIDelegate {
         let closeAfter = (nativeWrite != nil || commentCompose != nil) && (Self.looksLikeBan(message) || opening)
         await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
             let once = PanelOnce()
-            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+            let shown = Self.slowNetworkNote(for: message).map { message + "\n\n" + $0 } ?? message
+            let alert = UIAlertController(title: nil, message: shown, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "확인", style: .default) { _ in once.run { cont.resume() } })
             presentPanel(alert) { once.run { cont.resume() } }
         }

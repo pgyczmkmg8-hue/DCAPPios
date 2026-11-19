@@ -12,6 +12,18 @@ enum ContentScript {
     return;
   }
 
+  // ---------- 느린 연결에서 댓글 등록이 끊기지 않게 ----------
+  // 디시 댓글 등록(jQuery ajax)은 timeout 5초로 걸려 있는데, 이 제한은 XHR의 timeout 속성이 아니라 jQuery 자체 타이머가 건다
+  // → 등록 요청(/ajax/comment-write)만 제한 시간을 20초로 늘림 (디시가 Cloudflare 확인을 기다리는 최대 시간 20초와 맞춤)
+  (function () {
+    var jq = window.jQuery;
+    if (!jq || !jq.ajaxPrefilter || jq.__dcappPre) return;
+    jq.__dcappPre = true;
+    jq.ajaxPrefilter(function (o) {
+      if (o && o.timeout > 0 && o.timeout < 20000 && /\/ajax\/(comment-write|access)/.test(String(o.url || ''))) o.timeout = 20000;
+    });
+  })();
+
   var cfg = window.__DCAPP_CONFIG__ || {};
   var IP_RE = /\((\d{1,3}\.\d{1,3})\)/;
   var NOTICE_CLASS_RE = /(^|[-_\s])(toast|noti|notice|alarm|alert|push|popup|pop|layer|banner|float)([-_\s]|$)/i;
@@ -2675,13 +2687,13 @@ enum ContentScript {
     if (!cmtRetry.on && e.isTrusted && commentFormOf(e.target)) cmtRetry.form = e.target;
   }, true);
   function stopCmtRetry() {
-    cmtRetry.on = false; cmtRetry.tries = 0; cmtRetry.refreshed = false;
+    cmtRetry.on = false; cmtRetry.tries = 0; cmtRetry.refreshed = false; cmtRetry.waitingList = false; cmtRetry.tsWaitAt = 0;
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
   }
   // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
   function scheduleCmtRetry() {
-    if (!cmtRetry.on || cmtRetry.timer) return;
+    if (!cmtRetry.on || cmtRetry.timer || cmtRetry.waitingList) return;
     cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
   }
   // 댓글이 등록됐는데 목록에 안 나타나는 경우(가끔 디시가 새로 불러온 목록에 빠져 있음) → 앱이 글을 다시 불러오게
@@ -2720,17 +2732,30 @@ enum ContentScript {
     if (!memo) { post('cmtwritten', { memo: '(디시콘)', nick: nickIn, ip: '', id: '', title: title }); return; }   // 디시콘만 단 댓글은 글자로 확인 못 함
     var key = memo.slice(0, 20);
     var page = location.href;
-    setTimeout(function () {
-      if (location.href !== page) return;
+    function findMine() {
       var mine = null;
       Array.prototype.some.call(document.querySelectorAll('li.comment, li.comment-add'), function (li) {
         if ((li.textContent || '').replace(/\s+/g, ' ').indexOf(key) >= 0) { mine = li; return true; }
         return false;
       });
+      return mine;
+    }
+    function written(mine) {
       // 작성한 댓글 기록: 쓴 신분(닉네임·IP·아이디)은 목록에 나온 내 댓글에서 읽음
       var who = mine ? identity({ el: mine, kind: 'comment' }) : { nick: nickIn, ip: '', id: '' };
       post('cmtwritten', { memo: memo.slice(0, 80), nick: who.nick || nickIn, ip: who.ip || '', id: who.id || '', title: title });
-      if (!mine) post('cmtmissing', {});
+    }
+    // 느린 연결에서는 목록 반영이 늦을 수 있어 2.5초 뒤 한 번 더 확인 — 그래도 없을 때만 앱이 글을 다시 불러옴 (전체 새로고침 최소화)
+    setTimeout(function () {
+      if (location.href !== page) return;
+      var mine = findMine();
+      if (mine) return written(mine);
+      setTimeout(function () {
+        if (location.href !== page) return;
+        var mine2 = findMine();
+        written(mine2);
+        if (!mine2) post('cmtmissing', {});
+      }, 2500);
     }, 2500);
   });
   window.addEventListener('dcapp-cmtwrite', function (ev) {
@@ -2791,15 +2816,35 @@ enum ContentScript {
       return;
     }
     cmtRetry.askedCheck = false;
-    // 다시 누르기 전에 댓글 목록을 먼저 새로 받음 → 0.8초 뒤 등록 (답글 양식은 목록 안에 있어 새로 받으면 사라지므로 그대로 누름)
+    // 다시 누르기 전에 댓글 목록을 먼저 새로 받고, 그 목록이 화면에 반영된 뒤 등록 (답글 양식은 목록 안에 있어 새로 받으면 사라지므로 그대로 누름)
     if (!cmtRetry.refreshed && !f.closest('.all-comment-lst, [id^="comment_addDiv"]')) {
       cmtRetry.refreshed = true;
-      try { refreshComments(); } catch (e) {}
+      var how = 'none';
+      try { how = refreshComments(); } catch (e) {}
       clearTimeout(cmtRetry.watchdog);
-      cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 800);
+      if (how === 'none') {      // 다시 받을 방법이 없으면 짧게 쉬고 바로 다음 누르기
+        cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 800);
+        return;
+      }
+      // 목록이 다시 받아져 화면에 반영되면(또는 최대 3.5초 뒤) 다음 누르기 — 고정 0.8초보다 느린 연결에서도 안전
+      cmtRetry.waitingList = true;
+      waitCmtList(3500).then(function () {
+        cmtRetry.waitingList = false;
+        if (cmtRetry.on && !cmtRetry.timer) retryCommentOnce();
+      });
       return;
     }
     cmtRetry.refreshed = false;
+    // 보안 확인이 아직 돌고 있으면(토큰 없음) 끝날 때까지 기다렸다가 누름 — 빈 토큰으로 보내면 디시가 '진행 중' 거절하고 위젯을 처음부터 다시 돌림
+    if (tsIsPendingNoToken()) {
+      if (!cmtRetry.tsWaitAt) cmtRetry.tsWaitAt = Date.now();
+      if (Date.now() - cmtRetry.tsWaitAt < 50000) {
+        clearTimeout(cmtRetry.watchdog);
+        cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 300);
+        return;
+      }
+    }
+    cmtRetry.tsWaitAt = 0;
     var btn = f.querySelector('button.btn-comment-write, button[type="submit"], input[type="submit"]');
     cmtRetry.tries++;
     if (btn) btn.click();
@@ -3011,11 +3056,78 @@ enum ContentScript {
     var info = await composeInfo(ta);
     return info.codeImg || null;
   }
-  function cmtSubmit(p) {
+  // ---------- 보안 확인(Turnstile)이 끝난 뒤에만 등록 ----------
+  // 디시는 20초가 지나도 토큰이 없으면 빈 토큰으로 보내고, 서버는 '보안 확인 진행 중'으로 거절하며, 요청이 끝나면 위젯을 0%로 초기화함(dcTsReset)
+  // → 등록 버튼은 토큰이 나온 뒤에 누르고, 진행 중인 확인은 초기화하지 않음
+  // 반환: ready(토큰 있음) / check(사용자가 체크해야 함) / error(확인 실패) / timeout(maxMs 안에 토큰 없음) / none(이 페이지엔 확인 칸 없음)
+  async function waitTurnstileReady(maxMs) {
+    if (!document.getElementById('dc-turnstile')) return 'none';
+    var t0 = Date.now(), lastLoad = 0;
+    // 대기를 시작할 때 위젯이 오류·만료로 굳어 있으면 (느린 연결에서 Cloudflare가 실패로 끝낸 경우) 이 호출에 한해 한 번 다시 시작
+    // 다시 시작한 뒤 대기 중에 또 오류가 나면 'error'로 돌려보냄 → 다음에 등록을 누르면 또 한 번 다시 시작해 봄 (무한 재시도 방지)
+    try {
+      if (typeof window.turnstile !== 'undefined' && window.dcTs && window.dcTs.id !== null && typeof window.dcTsReset === 'function') {
+        var s0 = window.dcTs.state || '', k0 = '';
+        try { k0 = window.turnstile.getResponse(window.dcTs.id) || ''; } catch (e) {}
+        if (!k0 && (s0 === 'error' || s0 === 'expired')) { tsRestarts++; window.dcTsReset(); }
+      }
+    } catch (e) {}
+    for (;;) {
+      var api = typeof window.turnstile !== 'undefined' && !!window.dcTs && window.dcTs.id !== null;
+      if (api) {
+        var tok = '';
+        try { tok = window.turnstile.getResponse(window.dcTs.id) || ''; } catch (e) {}
+        if (tok) return 'ready';
+        var st = window.dcTs.state || '';
+        if (st === 'interactive') return 'check';     // 페이지가 직접 '체크해야 함'이라고 기록한 상태만 봄 (위젯 크기로 추측하면 확인 중에도 잘못 판단함)
+        if (st === 'error') return 'error';
+      } else if (typeof window.dcTsLoad === 'function' && Date.now() - lastLoad > 3000) {
+        lastLoad = Date.now();                        // 스크립트가 아직 없으면 다시 불러 봄 (디시 dcTsWait과 같은 동작, 중복 방지 검사는 디시 쪽이 함)
+        try { window.dcTsLoad(); } catch (e) {}
+      }
+      if (Date.now() - t0 >= maxMs) return 'timeout';
+      await sleep(200);
+    }
+  }
+  async function tsGate(form) {
+    var r = await waitTurnstileReady(50000);
+    if (r === 'ready' || r === 'none') return null;   // 바로 등록해도 됨
+    if (r === 'check') return revealCheck(form);     // 체크박스를 띄워 사용자가 누르게 함
+    return r === 'error' ? 'tserror' : 'tswait';     // 확인 실패 / 50초 안에 토큰 없음 → 빈 토큰으로 보내지 않고 알림
+  }
+  // 재시도 중 보안 확인이 아직 진행 중(토큰 없음)인지 — 체크가 필요한 상태와 확인 실패는 제외
+  function tsIsPendingNoToken() {
+    try {
+      if (!document.getElementById('dc-turnstile')) return false;
+      if (typeof window.turnstile === 'undefined' || !window.dcTs || window.dcTs.id === null) return true;
+      if (window.dcTs.state === 'interactive' || window.dcTs.state === 'error') return false;
+      return !window.turnstile.getResponse(window.dcTs.id);
+    } catch (e) { return false; }
+  }
+
+  // 댓글 등록 버튼은 양식의 onsubmit(comment_write_ok)을 부름. 이 함수가 아직 없으면 양식이 그냥 제출돼 페이지가 넘어가므로 준비될 때까지 기다림
+  async function waitCommentReady(ms) {
+    for (var t = 0; t < ms; t += 200) {
+      if (typeof window.comment_write_ok === 'function') return true;
+      await sleep(200);
+    }
+    return typeof window.comment_write_ok === 'function';
+  }
+  // 댓글 목록(/ajax/response-comment)이 다시 받아져 화면에 반영될 때까지 기다림 (최대 ms, 그 뒤엔 그냥 진행)
+  function waitCmtList(ms) {
+    return new Promise(function (resolve) {
+      var t = null;
+      function fin() { clearTimeout(t); window.removeEventListener('dcapp-cmtlist', fin); resolve(); }
+      t = setTimeout(fin, ms);
+      window.addEventListener('dcapp-cmtlist', fin);
+    });
+  }
+  async function cmtSubmit(p) {
+    if (!(await waitCommentReady(5000))) return 'notready';
     var form = composeFill(p);
     if (!form) return 'gone';
     cmtRetry.form = form;
-    if (tsNeedsCheck()) return revealCheck(form);          // Cloudflare 체크박스가 떠 있으면 사용자가 체크한 뒤 디시 등록을 누르게
+    var gate = await tsGate(form); if (gate) return gate;          // Cloudflare 체크박스가 떠 있으면 사용자가 체크한 뒤 디시 등록을 누르게
     var btn = form.querySelector('button.btn-comment-write, button[type="submit"]');
     if (btn) btn.click();
     else if (form.requestSubmit) form.requestSubmit();
@@ -3056,11 +3168,12 @@ enum ContentScript {
     if (b) b.click();
     return !!b;
   }
-  function txtconSend(p) {
+  async function txtconSend(p) {
+    if (!(await waitCommentReady(5000))) return 'notready';
     var form = composeFill(p);
     if (!form) return 'gone';
     cmtRetry.form = form;
-    if (tsNeedsCheck()) return revealCheck(form);
+    var gate = await tsGate(form); if (gate) return gate;
     if (typeof window.insertTxtcon !== 'function') return 'nofeature';
     try { window.insertTxtcon(); } catch (e) { return 'err:' + e.message; }
     return 'sent';
@@ -3070,12 +3183,13 @@ enum ContentScript {
     return true;
   }
   // 디시콘 댓글: 닉네임·비밀번호·코드를 양식에 채운 뒤, 디시 페이지의 디시콘 등록 함수로 바로 등록 (글자는 건드리지 않음)
-  function composeDcconSend(p, pkg, detail) {
+  async function composeDcconSend(p, pkg, detail) {
+    if (!(await waitCommentReady(5000))) return 'notready';
     var form = composeFill(p);
     var ta = composeTarget;
     if (!form) return 'gone';
     cmtRetry.form = form;
-    if (tsNeedsCheck()) return revealCheck(form);
+    var gate = await tsGate(form); if (gate) return gate;
     if (typeof window.insertDccon !== 'function') return 'nofeature';
     try {
       // 대댓글에 다는 답(@멘션)은 디시가 별도 양식(comment_write_mention)과 모드(com_mention)를 씀 → 모드를 잘못 주면 대댓글 자기 번호로 답글이 가서 '삭제된 댓글'이라고 나옴
@@ -3139,6 +3253,56 @@ enum ContentScript {
     }
     tsRefocus.prev = st;
   }, 300);
+  // ---------- 보안 확인(Cloudflare Turnstile) 미리 불러두기 ----------
+  // 디시는 댓글 칸에 포커스가 가야 Turnstile 스크립트를 내려받기 시작함 → 느린 연결에서는 등록을 누르고 기다리는 20초 안에 토큰이 나오지 못함
+  // (진단: state=pending, token_ms=0, focus_ms=26552). 보안 확인 칸이 있는 페이지에서는 디시 함수가 준비되는 대로 미리 불러 둠
+  // 이미 불러왔거나 통과했으면 아무것도 하지 않음 (디시 dcTsLoad도 스크립트 중복 방지 검사를 함). 포커스 시각(dcTs.focusAt)은 건드리지 않음
+  var tsPre = { tries: 0, called: false, skipped: '' };
+  var tsRestarts = 0;     // 보안 확인이 오류·만료로 굳었을 때 다시 시작한 횟수 (진단용)
+  (function preloadTurnstile() {
+    function tick() {
+      tsPre.tries++;
+      try {
+        if (!document.getElementById('dc-turnstile')) { tsPre.skipped = 'no-slot'; return; }   // 이 페이지엔 보안 확인 칸이 없음
+        if (typeof window.turnstile !== 'undefined') { tsPre.skipped = 'loaded'; return; }
+        if (window.dcTs && window.dcTs.id !== null) { tsPre.skipped = 'rendered'; return; }
+        if (document.querySelector('script[src*="challenges.cloudflare.com/turnstile/"]')) { tsPre.skipped = 'script'; return; }
+        if (typeof window.dcTsLoad === 'function') { window.dcTsLoad(); tsPre.called = true; return; }
+      } catch (e) { tsPre.skipped = 'err'; return; }
+      if (tsPre.tries < 100) setTimeout(tick, 300);  // 디시 함수(common.min.js)가 3G처럼 느린 연결에서 늦게 준비되는 경우 최대 약 30초까지 기다림
+      else tsPre.skipped = 'timeout';
+    }
+    tick();
+  })();
+  // 디시는 댓글 등록 요청이 끝나면 위젯을 초기화(dcTsReset → turnstile.reset)함. 진행 중인 확인을 그렇게 날리면 처음부터 다시 기다리게 되므로,
+  // 토큰 없이 진행 중(pending)이고 시작한 지 1분 30초가 안 됐으면 초기화하지 않음. 토큰이 나왔거나 오류·만료·체크 필요 상태면 평소대로 초기화
+  (function guardTsReset() {
+    var orig = window.dcTsReset;
+    if (typeof orig !== 'function' || orig.__dcappGuard) return;
+    var guarded = function () {
+      try {
+        if (typeof window.turnstile !== 'undefined' && window.dcTs && window.dcTs.id !== null && window.dcTs.state === 'pending') {
+          var tok = '';
+          try { tok = window.turnstile.getResponse(window.dcTs.id) || ''; } catch (e) {}
+          if (!tok && Date.now() - (window.dcTs.loadAt || 0) < 90000) return;
+        }
+      } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+    guarded.__dcappGuard = true;
+    window.dcTsReset = guarded;
+  })();
+  // 진단: 보안 확인 상태 한 줄 (스크립트 로드 여부, 위젯 생성 여부, 디시가 기록한 오류)
+  function tsDiag() {
+    try {
+      var d = (typeof dcTs !== 'undefined' && dcTs) ? dcTs : null;
+      return 'turnstile: js=' + (typeof window.turnstile) + ' slot=' + (document.getElementById('dc-turnstile') ? 'Y' : 'N') +
+        ' dcTsLoad=' + (typeof window.dcTsLoad) + ' rendered=' + (d && d.id !== null ? 'Y' : 'N') +
+        ' state=' + (d ? d.state : '-') + ' err=' + (d ? (d.err || '-') : '-') + ' retried=' + (d ? !!d.retried : '-') +
+        ' preload=' + tsPre.tries + '/' + (tsPre.called ? 'called' : (tsPre.skipped || 'waiting')) + ' restart=' + tsRestarts;
+    } catch (e) { return 'turnstile: 진단 실패 ' + e.message; }
+  }
+
   // 답글 칸을 열고 포커스를 옮김 (디시가 답글 칸을 열 때 조금 늦게 만들 수 있어서 칸이 생길 때까지 기다림)
   function openReplyFor(li) {
     // 남아 있던 글자 선택은 풀고 진행 (선택이 남아 있어서 첫 탭이 무시되던 문제)
@@ -3849,7 +4013,8 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v258-listlp', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v262-tsretry', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -4196,6 +4361,22 @@ enum ContentScript {
 (function () {
   if (window.__dcappNet) return;
   var log = window.__dcappNet = [];
+  // 보안 확인(Cloudflare) 서버와 연결을 미리 맞춰 둠 — 스크립트(common.min.js)를 내려받는 동안 연결 설정을 끝내 두려고 (글·글쓰기 페이지에서만)
+  (function () {
+    if (!/\/(board|mini|person)\/[^\/]+\/\d+|\/write(mini|pr)?\//.test(location.pathname)) return;
+    function add() {
+      var p = document.head || document.documentElement;
+      if (!p) return false;
+      [null, 'anonymous'].forEach(function (cors) {   // 스크립트(무자격)와 fetch(CORS)는 연결 풀이 달라서 둘 다
+        var l = document.createElement('link');
+        l.rel = 'preconnect'; l.href = 'https://challenges.cloudflare.com';
+        if (cors) l.crossOrigin = cors;
+        p.appendChild(l);
+      });
+      return true;
+    }
+    if (!add()) document.addEventListener('DOMContentLoaded', add, { once: true });
+  })();
   var RE = /alarm|noti|push|alim|bell|memo|recv|message|comment-write|ts_state|pwcheck|ajax\/access/i;
   // 댓글·글 등록 요청에 실린 Cloudflare 체크 상태만 뽑기 (비밀번호 등 다른 값은 안 뽑음)
   function tsSummary(body) {
@@ -4204,7 +4385,7 @@ enum ContentScript {
       var q = new URLSearchParams(body);
       return '  <TS state=' + (q.get('ts_state') || '') +
         ' token=' + ((q.get('cf-turnstile-response') || '').length ? 'O' : 'X') +
-        ' focus_ms=' + (q.get('ts_focus_ms') || '') + ' token_ms=' + (q.get('ts_token_ms') || '') + '>';
+        ' focus_ms=' + (q.get('ts_focus_ms') || '') + ' token_ms=' + (q.get('ts_token_ms') || '') + ' err=' + (q.get('ts_err') || '') + '>';
     } catch (e) { return ''; }
   }
   function add(kind, method, url, status, body) {
@@ -4235,6 +4416,10 @@ enum ContentScript {
         if (/\/ajax\/comment-write/.test(String(info.u))) {
           window.dispatchEvent(new CustomEvent('dcapp-cmtwrite', { detail: { status: x.status, body: reqBody, text: text } }));
         }
+      } catch (e) {}
+      // 댓글 목록을 다시 받음 → 429 자동 재등록이 목록 반영 뒤에 다음 누르기를 하도록
+      try {
+        if (/\/ajax\/response-comment/.test(String(info.u))) window.dispatchEvent(new CustomEvent('dcapp-cmtlist', { detail: { status: x.status } }));
       } catch (e) {}
       // 댓글 등록 요청이 끝남 → 댓글 쓰는 동안 꺼 둔 광고 차단을 다시 켜도록
       try {

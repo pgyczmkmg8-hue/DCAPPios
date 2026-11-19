@@ -692,7 +692,12 @@ struct BrowserView: View {
     }
 
     // body를 여러 조각으로 나눔 (한 덩어리면 컴파일러가 타입 계산을 못 함)
-    var body: some View { layer7 }
+    var body: some View { layer8 }
+
+    /// 가장 위 층: 알림(토스트). 댓글 입력창·가림막보다 위에 그려서 떠 있어도 보이게
+    private var layer8: some View {
+        AnyView(layer7).overlay { ToastOverlay(model: model) }
+    }
 
     /// 웹뷰 + 상단바 + 하단 바 + 키보드 감지
     private var layer1: some View {
@@ -946,19 +951,8 @@ struct BrowserView: View {
     /// 토스트 / 키워드·유저 차단 입력
     private var layer3: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
+        // (알림은 가장 위 층 layer8에서 그림 — 댓글 입력창에 가려지지 않게)
         AnyView(layer2)
-            .overlay(alignment: .bottom) {
-                if let toast = model.toast {
-                    Text(toast)
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.bottom, 88)   // 하단 바 위에 표시
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(duration: 0.3), value: model.toast)
             // 진단용: 화면이 컨트롤바를 숨겨야 한다고 본 순간을 모델에 남김 (페이지 구조 진단의 '컨트롤바 숨김' 줄)
             .onChangeCompat(of: barTucked) { _, v in
                 model.noteViewTucked(v)
@@ -2783,4 +2777,52 @@ private struct SplitBottom: ViewModifier {
 /// 글 목록 상단바(내비게이션 바) 아래 끝 위치 — 글쓰기 상단바 높이를 맞추는 데 씀
 enum ListBarMetrics {
     nonisolated(unsafe) static var bottom: CGFloat = 0
+}
+
+// MARK: - 알림(토스트)
+
+/// 알림 말풍선: 첫 줄은 제목(굵게), 나머지 줄은 설명 ("\n"으로 구분). 여러 줄이어도 둥근 사각형 안에서 가운데 정렬
+struct ToastBubble: View {
+    let text: String
+
+    var body: some View {
+        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        VStack(spacing: 4) {
+            Text(lines.first ?? "")
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+            if lines.count > 1 {
+                Text(lines.dropFirst().joined(separator: "\n"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 320)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+        .padding(.horizontal, 24)
+    }
+}
+
+/// 브라우저 화면의 알림: 댓글 입력창이 떠 있으면 위쪽에, 아니면 하단 바 위에 띄움
+struct ToastOverlay: View {
+    @ObservedObject var model: WebViewModel
+
+    var body: some View {
+        let composing = model.commentCompose != nil
+        ZStack {
+            if let text = model.toast {
+                ToastBubble(text: text)
+                    .transition(.move(edge: composing ? .top : .bottom).combined(with: .opacity))
+            }
+        }
+        .padding(.top, composing ? 96 : 0)          // 댓글 입력창이 아래를 덮으니 위쪽 (상단 바 아래)
+        .padding(.bottom, composing ? 0 : 88)       // 평소엔 하단 바 위
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: composing ? .top : .bottom)
+        .animation(.spring(duration: 0.3), value: model.toast)
+        .allowsHitTesting(false)
+    }
 }
