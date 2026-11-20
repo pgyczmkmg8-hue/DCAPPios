@@ -397,6 +397,15 @@ struct BlockSettingsView: View {
                 Text("글 목록이나 댓글을 길게 누르면 작성자·디시콘을 바로 차단할 수 있어요. '차단됨 표시'는 그 자리에 회색 안내 칸을 남기고(탭하면 내용 보기), '완전히 숨김'은 흔적 없이 가려요.")
             }
 
+            Section {
+                Toggle("특수문자 끼워넣기 무시", isOn: $filters.settings.ignoreSymbols)
+                Toggle("공백 끼워넣기 무시", isOn: $filters.settings.ignoreSpaces)
+            } header: {
+                Text("단어·닉네임 비교")
+            } footer: {
+                Text("특수문자 끼워넣기 무시를 켜면 '야미큐레' 차단이 '야$미@@큐레'처럼 특수문자를 끼운 글도 가려요.\n공백 끼워넣기 무시를 켜면 '야미큐레' 차단이 '야 미 큐 레'도 가려요. 짧은 단어는 띄어 쓴 다른 말에도 걸릴 수 있어요 (예: '시발' → '이 시 발표').")
+            }
+
             // 고닉 식별코드 보기 (자동메모와 같이 쓸 수 없음)
             Section {
                 Toggle("고닉 식별코드 보기", isOn: Binding(get: { showIdCode && !autoMemo }, set: { showIdCode = $0 }))
@@ -782,7 +791,7 @@ struct KeywordsView: View {
         List {
             Section {
                 HStack {
-                    TextField("차단할 단어", text: $input)
+                    TextField("차단할 단어 (쉼표로 여러 개)", text: $input)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .onSubmit(add)
@@ -791,7 +800,7 @@ struct KeywordsView: View {
                 }
                 GalleryScopeRow(galleryID: $galleryID)
             } footer: {
-                Text("제목·본문·댓글·닉네임에 이 단어가 들어가면 가려져요. 대소문자는 구분하지 않아요. 적용 범위에서 갤러리를 고르면 그 갤러리에서만 가려요. 즐겨찾기·방문한 갤러리에서 이름으로 찾을 수 있어요.")
+                Text("제목·본문·댓글·닉네임에 이 단어가 들어가면 가려져요. 대소문자는 구분하지 않아요. 쉼표로 여러 단어를 넣으면 모두 들어간 글·댓글만 가려요 (예: 안녕하세요, 야미큐레). 적용 범위에서 갤러리를 고르면 그 갤러리에서만 가려요.\n특수문자·공백 끼워넣기 무시는 차단 설정의 '단어·닉네임 비교'에서 켤 수 있어요.")
             }
             Section("키워드 목록") {
                 if filters.settings.keywords.isEmpty {
@@ -800,15 +809,15 @@ struct KeywordsView: View {
                 ForEach(filters.settings.keywords.indices, id: \.self) { i in
                     let k = filters.settings.keywords[i]
                     NavigationLink {
-                        BlockScopeDetail(title: k.word, detail: "차단 키워드",
+                        BlockScopeDetail(title: k.displayText, detail: "차단 키워드",
                                          gallery: Binding(
                                             get: { i < filters.settings.keywords.count ? filters.settings.keywords[i].gallery ?? "" : "" },
                                             set: { if i < filters.settings.keywords.count { filters.settings.keywords[i].gallery = $0.isEmpty ? nil : $0 } }),
                                          onRemove: { if i < filters.settings.keywords.count { filters.settings.keywords.remove(at: i) } })
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(k.word)
-                            Text(GalleryScopeLabel.text(k.gallery))
+                            Text(k.displayText)
+                            Text((BlockMatch.terms(k.word).count >= 2 ? "모두 포함 · " : "") + GalleryScopeLabel.text(k.gallery))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -986,7 +995,7 @@ struct AdvancedBlockView: View {
     @State private var galleryID = ""
 
     private var wordList: [String] {
-        words.split(whereSeparator: { $0 == "," || $0 == "\n" })
+        words.split(whereSeparator: { $0 == "," || $0 == "，" || $0 == "\n" })
             .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
@@ -1000,7 +1009,7 @@ struct AdvancedBlockView: View {
                 TextField(kind == .ip ? "IP 앞 두 자리 (예: 117.111)" : kind == .id ? "아이디(식별코드)" : "닉네임", text: $value)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("단어 (쉼표로 여러 개)", text: $words)
+                TextField("단어 (쉼표로 묶으면 모두 들어간 것만)", text: $words)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 GalleryScopeRow(galleryID: $galleryID)
@@ -1015,7 +1024,7 @@ struct AdvancedBlockView: View {
             } header: {
                 Text("새 규칙")
             } footer: {
-                Text("통신사 IP처럼 여러 사람이 같이 쓰는 대상 중 특정인만 가리고 싶을 때 써요. 그 대상이 쓴 글·댓글에 입력한 단어 중 하나라도 들어 있을 때만 가려져요. 단어는 대소문자를 구분하지 않아요.")
+                Text("통신사 IP처럼 여러 사람이 같이 쓰는 대상 중 특정인만 가리고 싶을 때 써요. 그 대상이 쓴 글·댓글에 입력한 단어가 모두 들어 있을 때만 가려져요 (쉼표로 나눈 단어 전부). 단어는 대소문자를 구분하지 않아요.\n특수문자·공백 끼워넣기 무시는 차단 설정의 '단어·닉네임 비교'에서 켤 수 있어요.")
             }
             Section("규칙 목록") {
                 if filters.settings.advancedRules.isEmpty {
@@ -1025,7 +1034,7 @@ struct AdvancedBlockView: View {
                     let r = filters.settings.advancedRules[i]
                     NavigationLink {
                         BlockScopeDetail(title: "\(r.kind.label) \(r.value)",
-                                         detail: "단어: " + r.keywords.joined(separator: ", "),
+                                         detail: r.wordsLabel,
                                          gallery: Binding(
                                             get: { i < filters.settings.advancedRules.count ? filters.settings.advancedRules[i].gallery ?? "" : "" },
                                             set: { if i < filters.settings.advancedRules.count { filters.settings.advancedRules[i].gallery = $0.isEmpty ? nil : $0 } }),
@@ -1033,7 +1042,7 @@ struct AdvancedBlockView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(r.kind.label) \(r.value)")
-                            Text("단어: " + r.keywords.joined(separator: ", ") + " · " + GalleryScopeLabel.text(r.gallery))
+                            Text(r.wordsLabel + " · " + GalleryScopeLabel.text(r.gallery))
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }

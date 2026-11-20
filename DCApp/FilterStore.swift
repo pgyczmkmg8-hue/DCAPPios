@@ -77,6 +77,8 @@ struct BlockedKeyword: Codable, Hashable, Identifiable {
     var id: String { "\(word.lowercased())@\(gallery ?? "*")" }
 
     init(word: String, gallery: String? = nil) { self.word = word; self.gallery = gallery }
+    /// 목록에 보이는 문구: 쉼표로 나눈 단어들을 " + "로 (단어가 하나면 그대로)
+    var displayText: String { BlockMatch.terms(word).joined(separator: " + ") }
     init(from decoder: Decoder) throws {
         if let one = try? decoder.singleValueContainer().decode(String.self) { word = one; gallery = nil; return }
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -85,13 +87,122 @@ struct BlockedKeyword: Codable, Hashable, Identifiable {
     }
 }
 
-/// 고급 차단: 특정 작성자(IP·식별코드·닉네임)가 특정 단어를 말할 때만 가림
+/// 고급 차단: 특정 작성자(IP·식별코드·닉네임)가 쓴 글·댓글에 단어(keywords)가 모두 들어 있을 때만 가림
 struct AdvancedBlockRule: Codable, Hashable, Identifiable {
     var id = UUID()
     var kind: BlockedUser.Kind
     var value: String
     var keywords: [String]
     var gallery: String? = nil   // 이 갤러리에서만 (nil = 모든 갤러리)
+    /// 단어를 모두 포함해야 하는지. 예전 저장값(이 필드 없음)은 단어 중 하나면 가려지는 OR였으므로,
+    /// 불러올 때 FilterSettings.migrateAdvanced가 단어마다 규칙으로 나눠 같은 동작이 되게 함
+    var allWords: Bool = true
+
+    init(kind: BlockedUser.Kind, value: String, keywords: [String], gallery: String? = nil, allWords: Bool = true) {
+        self.kind = kind; self.value = value; self.keywords = keywords; self.gallery = gallery; self.allWords = allWords
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        kind = try c.decode(BlockedUser.Kind.self, forKey: .kind)
+        value = try c.decode(String.self, forKey: .value)
+        keywords = try c.decodeIfPresent([String].self, forKey: .keywords) ?? []
+        gallery = try c.decodeIfPresent(String.self, forKey: .gallery)
+        allWords = try c.decodeIfPresent(Bool.self, forKey: .allWords) ?? false
+    }
+
+    /// 목록·상세에 보이는 단어 문구: 단어가 2개 이상이면 "단어 모두 포함: A + B", 하나면 "단어: A"
+    var wordsLabel: String {
+        keywords.count >= 2 ? "단어 모두 포함: " + keywords.joined(separator: " + ") : "단어: " + keywords.joined(separator: "")
+    }
+}
+
+/// 차단 단어·닉네임 판정 (차단 키워드·고급 차단·유저 차단이 같이 씀). 웹페이지 쪽 JS(blockedReason)와 같은 규칙
+/// - 쉼표(`,`와 전각 `，`)로 나눈 단어 조각은 모두 들어 있어야 참 (AND)
+/// - 비교 전 정규화 (소문자화는 항상 함):
+///   · 특수문자 무시(symbols): 글자(L)·결합 문자(M)·숫자(N)·공백이 아닌 문자를 뺌
+///   · 공백 무시(spaces): 공백(줄바꿈 포함, JS \s와 같은 범위)을 뺌
+///   · 둘 다 켜면 둘 다 뺌, 둘 다 꺼지면 원문 포함 비교만
+enum BlockMatch {
+    /// 단어 한 줄 → 조각들 (쉼표로 나눠 앞뒤 공백을 떼고 빈 조각은 버림)
+    nonisolated static func terms(_ word: String) -> [String] {
+        word.split(whereSeparator: { $0 == "," || $0 == "，" })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// 공백 판정 (JS \s와 같게: 유니코드 공백 + BOM, 단 U+0085는 제외)
+    nonisolated private static func isSpace(_ u: Unicode.Scalar) -> Bool {
+        (u.properties.isWhitespace && u.value != 0x85) || u.value == 0xFEFF
+    }
+
+    /// 글자(L)·결합 문자(M)·숫자(N) 판정 (JS \p{L}\p{M}\p{N}과 같은 범주)
+    nonisolated private static func isWordScalar(_ u: Unicode.Scalar) -> Bool {
+        switch u.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter, .modifierLetter, .otherLetter,
+             .nonspacingMark, .spacingMark, .enclosingMark,
+             .decimalNumber, .letterNumber, .otherNumber:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 비교용 정규화: 소문자화 후 (spaces면 공백 제거) (symbols면 글자·결합 문자·숫자·공백만 남김)
+    nonisolated static func normalize(_ s: String, symbols: Bool, spaces: Bool) -> String {
+        var out = String.UnicodeScalarView()
+        for u in s.lowercased().unicodeScalars {
+            let space = isSpace(u)
+            if spaces && space { continue }
+            if symbols && !space && !isWordScalar(u) { continue }
+            out.append(u)
+        }
+        return String(out)
+    }
+
+    /// 조각(또는 차단 닉네임)에 특수문자(글자·결합 문자·숫자·공백이 아닌 문자)가 하나라도 있는지
+    nonisolated static func hasSymbol(_ s: String) -> Bool {
+        s.unicodeScalars.contains { !isSpace($0) && !isWordScalar($0) }
+    }
+
+    /// 본문에 조각들이 모두 들어 있는지. 조각마다 따로 판단:
+    /// - 원문에 있으면 통과
+    /// - 조각에 특수문자가 있으면 그 조각만은 특수문자를 빼지 않고(공백 무시만 적용) 비교 → `c++`가 `c`로 넓게 걸리지 않게
+    /// - 그 밖의 조각은 켜진 옵션대로 정규화해서 비교
+    /// - 정규화하면 빈 문자열이 되는 조각은 원문 비교만
+    nonisolated static func textMatches(terms: [String], text: String, symbols: Bool, spaces: Bool) -> Bool {
+        guard !terms.isEmpty, !text.isEmpty else { return false }
+        let lower = text.lowercased()
+        var normFull: String?     // 특수문자·공백 정규화 본문 (특수문자 무시 기준)
+        var normSpace: String?    // 공백만 정규화한 본문 (특수문자가 든 조각 기준)
+        for t in terms {
+            let tl = t.lowercased()
+            if lower.contains(tl) { continue }
+            let sym = symbols && !hasSymbol(tl)
+            guard sym || spaces else { return false }
+            let nt = normalize(tl, symbols: sym, spaces: spaces)
+            guard !nt.isEmpty else { return false }
+            if sym {
+                if normFull == nil { normFull = normalize(text, symbols: true, spaces: spaces) }
+                guard normFull?.contains(nt) == true else { return false }
+            } else {
+                if normSpace == nil { normSpace = normalize(text, symbols: false, spaces: spaces) }
+                guard normSpace?.contains(nt) == true else { return false }
+            }
+        }
+        return true
+    }
+
+    /// 닉네임이 같은지. 기준은 차단 값(blocked)이 정함: 차단 값에 특수문자가 있으면 특수문자는 빼지 않고(공백 무시만),
+    /// 없으면 켜진 옵션대로. 작성자 닉네임(actual)도 같은 기준으로 정규화해서 비교. 정규화 결과가 비면 원문 비교
+    nonisolated static func nickMatches(blocked: String, actual: String, symbols: Bool, spaces: Bool) -> Bool {
+        guard !blocked.isEmpty, !actual.isEmpty else { return false }
+        if blocked == actual { return true }
+        let sym = symbols && !hasSymbol(blocked)
+        guard sym || spaces else { return false }
+        let nb = normalize(blocked, symbols: sym, spaces: spaces)
+        return !nb.isEmpty && nb == normalize(actual, symbols: sym, spaces: spaces)
+    }
 }
 
 struct FilterSettings: Codable {
@@ -105,8 +216,24 @@ struct FilterSettings: Codable {
     var advancedRules: [AdvancedBlockRule] = []
     var images: [BlockedImage] = []
     var imageBlockStyle: ImageBlockStyle = .blur
+    /// 특수문자 끼워넣기 무시: 차단 단어·닉네임 비교 때 특수문자를 빼고 비교 (기본 꺼짐)
+    var ignoreSymbols = false
+    /// 공백 끼워넣기 무시: 차단 단어·닉네임 비교 때 공백을 빼고 비교 (기본 꺼짐, ignoreSymbols와 독립)
+    var ignoreSpaces = false
 
     init() {}
+
+    /// 예전 고급 차단(단어 OR)을 새 규칙(단어 AND)으로: 단어가 2개 이상인 예전 규칙은 단어마다 규칙 하나로 나눠 같은 동작을 유지
+    static func migrateAdvanced(_ rules: [AdvancedBlockRule]) -> [AdvancedBlockRule] {
+        rules.flatMap { r -> [AdvancedBlockRule] in
+            if r.allWords || r.keywords.count <= 1 {
+                var one = r
+                one.allWords = true
+                return [one]
+            }
+            return r.keywords.map { AdvancedBlockRule(kind: r.kind, value: r.value, keywords: [$0], gallery: r.gallery) }
+        }
+    }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
@@ -116,9 +243,11 @@ struct FilterSettings: Codable {
         keywords = try c.decodeIfPresent([BlockedKeyword].self, forKey: .keywords) ?? []
         hiddenElements = try c.decodeIfPresent([HiddenElement].self, forKey: .hiddenElements) ?? []
         hideBestNotice = try c.decodeIfPresent(Bool.self, forKey: .hideBestNotice) ?? true
-        advancedRules = try c.decodeIfPresent([AdvancedBlockRule].self, forKey: .advancedRules) ?? []
+        advancedRules = FilterSettings.migrateAdvanced(try c.decodeIfPresent([AdvancedBlockRule].self, forKey: .advancedRules) ?? [])
         images = try c.decodeIfPresent([BlockedImage].self, forKey: .images) ?? []
         imageBlockStyle = try c.decodeIfPresent(ImageBlockStyle.self, forKey: .imageBlockStyle) ?? .blur
+        ignoreSymbols = try c.decodeIfPresent(Bool.self, forKey: .ignoreSymbols) ?? false
+        ignoreSpaces = try c.decodeIfPresent(Bool.self, forKey: .ignoreSpaces) ?? false
     }
 }
 
@@ -181,16 +310,18 @@ final class FilterStore: ObservableObject {
             switch u.kind {
             case .id: return !id.isEmpty && u.value == id
             case .ip: return !ip.isEmpty && u.value == ip
-            case .nick: return !nick.isEmpty && u.value == nick
+            case .nick: return BlockMatch.nickMatches(blocked: u.value, actual: nick, symbols: settings.ignoreSymbols, spaces: settings.ignoreSpaces)
             }
         }
     }
 
-    /// 이 내용에 걸리는 차단 키워드들
+    /// 이 내용에 걸리는 차단 키워드들 (쉼표로 나눈 단어가 모두 들어 있어야 걸림)
     func blockedKeywords(in text: String, gallery: String?) -> [BlockedKeyword] {
-        let t = text.lowercased()
-        guard !t.isEmpty else { return [] }
-        return settings.keywords.filter { GalleryScope.applies($0.gallery, gallery) && t.contains($0.word.lowercased()) }
+        let symbols = settings.ignoreSymbols, spaces = settings.ignoreSpaces
+        return settings.keywords.filter { k in
+            GalleryScope.applies(k.gallery, gallery)
+                && BlockMatch.textMatches(terms: BlockMatch.terms(k.word), text: text, symbols: symbols, spaces: spaces)
+        }
     }
 
     func isDcconBlocked(_ key: String) -> Bool {
@@ -256,11 +387,13 @@ final class FilterStore: ObservableObject {
     }
 
     /// gallery가 있으면 그 갤러리에서만, nil이면 모든 갤러리에서 차단
+    /// 쉼표(`,`·`，`)로 나눈 단어는 모두 들어 있어야 가림 (조각을 정리해서 ", "로 이어 저장)
     func addKeyword(_ word: String, gallery: String? = nil) {
-        let w = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        let terms = BlockMatch.terms(word)
+        guard !terms.isEmpty else { return }
         let g = (gallery?.isEmpty ?? true) ? nil : gallery
-        let k = BlockedKeyword(word: w, gallery: g)
-        guard !w.isEmpty, !settings.keywords.contains(where: { $0.id == k.id }) else { return }
+        let k = BlockedKeyword(word: terms.joined(separator: ", "), gallery: g)
+        guard !settings.keywords.contains(where: { $0.id == k.id }) else { return }
         settings.keywords.append(k)
     }
 
@@ -279,7 +412,7 @@ final class FilterStore: ObservableObject {
             switch b.kind {
             case .id: return !id.isEmpty && id == b.value
             case .ip: return !ip.isEmpty && ip == b.value
-            case .nick: return !nick.isEmpty && nick == b.value
+            case .nick: return BlockMatch.nickMatches(blocked: b.value, actual: nick, symbols: settings.ignoreSymbols, spaces: settings.ignoreSpaces)
             }
         }
     }
@@ -297,8 +430,10 @@ final class FilterStore: ObservableObject {
             "mode": s.display.rawValue,
             "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value, "g": $0.gallery ?? ""] },
             "dccons": s.dccons.map(\.key),
-            "keywords": s.keywords.map { ["w": $0.word.lowercased(), "g": $0.gallery ?? ""] },
-            "advRules": s.advancedRules.map { ["k": $0.kind.rawValue, "v": $0.value, "w": $0.keywords.map { $0.lowercased() }, "g": $0.gallery ?? ""] as [String: Any] },
+            "keywords": s.keywords.map { ["t": BlockMatch.terms($0.word).map { $0.lowercased() }, "g": $0.gallery ?? ""] as [String: Any] },
+            "ignoreSymbols": s.ignoreSymbols,
+            "ignoreSpaces": s.ignoreSpaces,
+            "advRules": s.advancedRules.map { ["k": $0.kind.rawValue, "v": $0.value, "w": $0.keywords.flatMap { BlockMatch.terms($0) }.map { $0.lowercased() }, "g": $0.gallery ?? ""] as [String: Any] },
             "selectors": s.hiddenElements.map(\.selector),
             "hideBest": s.hideBestNotice,
             "dockComment": Profile.defaults.object(forKey: "dockComment") as? Bool ?? true,

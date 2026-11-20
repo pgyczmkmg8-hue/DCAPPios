@@ -977,7 +977,7 @@ struct BrowserView: View {
                 if barScrollModel !== model { barScrollModel.noteViewTucked(v) }
             }
             .alert("키워드 차단", isPresented: $showKeywordPrompt) {
-                TextField("차단할 단어", text: $keywordInput)
+                TextField("차단할 단어 (쉼표로 여러 개)", text: $keywordInput)
                 Button("취소", role: .cancel) {}
                 if let g = currentGallery?.id {
                     Button("이 갤러리에서만") {
@@ -994,7 +994,7 @@ struct BrowserView: View {
                     }
                 }
             } message: {
-                Text("이 단어가 들어간 글과 댓글을 가려요.")
+                Text("이 단어가 들어간 글과 댓글을 가려요. 쉼표로 여러 단어를 넣으면 모두 들어간 글·댓글만 가려요.")
             }
             .alert("유저 차단", isPresented: $showUserPrompt) {
                 TextField("아이디, IP 또는 닉네임", text: $userInput)
@@ -2417,7 +2417,7 @@ struct BrowserView: View {
             }
         }
         ForEach(filters.blockedKeywords(in: req.snippet, gallery: currentGallery?.id)) { k in
-            Button("키워드 차단 해제: \(k.word)\(k.gallery == nil ? " · 전체" : " · 이 갤러리")") {
+            Button("키워드 차단 해제: \(k.displayText)\(k.gallery == nil ? " · 전체" : " · 이 갤러리")") {
                 filters.removeKeyword(k)
                 model.showToast("'\(k.word)' 키워드 차단을 풀었어요")
             }

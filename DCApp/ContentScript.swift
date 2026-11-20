@@ -25,6 +25,8 @@ enum ContentScript {
   })();
 
   var cfg = window.__DCAPP_CONFIG__ || {};
+  var voteLast = 'up';   // 마지막으로 누른 추천(up)·비추천(down) — 코드 확인 버튼·Enter가 이것을 다시 누름
+  var voteWait = null;   // 누른 뒤 숫자가 바뀌는지 기다리는 추천·비추천 (성공하면 코드 상자를 접음)
   var runtimeImg = {};   // 사진 생김새(해시)가 차단한 사진과 같다고 알아낸 키 (페이지마다 새로, setConfig에서 비움)
   var imgChecked = {};   // 생김새 확인을 이미 앱에 요청한 키
   var IP_RE = /\((\d{1,3}\.\d{1,3})\)/;
@@ -239,7 +241,14 @@ enum ContentScript {
       '.brick-wid{margin-left:0!important;margin-right:0!important;max-width:none!important;width:auto!important;min-width:0!important}',
       // 홈 순위 아래 좌우 화살표는 필요 없어서 숨김
       '#gallrank_btprev,#gallrank_btnext,#gallhot_btprev,#gallhot_btnext,#livebest_btprev_rank,#livebest_btnext_rank,#livebest_btprev2_rank,#livebest_btnext2_rank{display:none!important}',
+      // 추천·비추천 버튼은 앱의 추천 줄(.dcapp-vote)이 대신함. 디시 추천 영역(코드 칸 포함)은 평소엔 숨기고,
+      // 추천·비추천을 눌러 코드가 필요할 때만 앱이 .dcapp-codeopen을 붙여 펼침 (디시 버튼·숫자는 계속 숨김)
       '.reco-area{display:none!important}',
+      '.reco-area.dcapp-codeopen{display:block!important;margin:0!important;padding:0 12px!important;text-align:left!important}',
+      '.reco-area.dcapp-codeopen > :not(.capcha-code-box):not(.dcapp-vcode-ok){display:none!important}',
+      '.reco-area.dcapp-codeopen > .capcha-code-box{margin:0 0 8px!important}',
+      '.reco-area.dcapp-codeopen .dcapp-vcode-ok{display:block;width:100%;height:40px;margin:0 0 8px;border:0;border-radius:8px;background:#3b4890;color:#fff;font-size:15px;font-weight:700}',
+      '.darkmode .reco-area .capcha-code-lst .ipt::placeholder{color:#8e8e93!important}',
       '.dcapp-vote{display:flex;align-items:center;justify-content:center;flex-wrap:nowrap;gap:5px;margin:10px 0 6px}',
       '.dcapp-vbox{display:flex;align-items:stretch;height:30px;border:1px solid #c9c9cf;border-radius:5px;overflow:hidden;flex:none}',
       '.dcapp-vcell{width:28px;flex:none;border:0;border-right:1px solid #c9c9cf;background:#ececf0;color:#3b4890;display:flex;align-items:center;justify-content:center;padding:0}',
@@ -863,47 +872,85 @@ enum ContentScript {
     return (p[1] === 'board' || p[1] === 'mini' || p[1] === 'person') ? (p[2] || '') : '';
   }
 
+  // ---------- 차단 단어 판정 (쉼표로 나눈 단어 조각은 모두 있어야 함 · 특수문자·공백 끼워넣기 무시 옵션) ----------
+  // Swift BlockMatch와 같은 규칙: 소문자화는 항상. symbols면 글자·결합 문자·숫자·공백만 남기고, spaces면 공백을 뺌
+  function normText(s, symbols, spaces) {
+    var t = String(s || '').toLowerCase();
+    if (spaces) t = t.replace(/\s+/gu, '');
+    if (symbols) t = t.replace(/[^\p{L}\p{M}\p{N}\s]/gu, '');
+    return t;
+  }
+  /// 특수문자가 하나라도 있는지 (글자·결합 문자·숫자·공백이 아닌 문자) — Swift BlockMatch.hasSymbol과 같은 기준
+  function hasSymbol(s) { return /[^\p{L}\p{M}\p{N}\s]/u.test(String(s || '')); }
+  /// 단어 조각들이 모두 들어 있는지 (text는 소문자). 조각마다 따로 판단 — 원문에 있으면 통과,
+  /// 조각에 특수문자가 있으면 그 조각만은 특수문자를 빼지 않고(공백 무시만) 비교 (c++가 c로 넓게 걸리지 않게),
+  /// 그 밖의 조각은 켜진 옵션대로. 정규화하면 빈 조각은 원문 비교만
+  /// norm: 정규화한 본문 캐시 {full: 특수문자·공백 기준, space: 공백만 기준} — 필요할 때 한 번씩만 만듦
+  function termsMatch(terms, text, symbols, spaces, norm) {
+    if (!terms || !terms.length) return false;
+    for (var i = 0; i < terms.length; i++) {
+      var t = terms[i];
+      if (!t || text.indexOf(t) >= 0) continue;
+      var sym = symbols && !hasSymbol(t);
+      if (!sym && !spaces) return false;
+      var nt = normText(t, sym, spaces);
+      if (!nt) return false;
+      var key = sym ? 'full' : 'space';
+      if (norm[key] === null) norm[key] = normText(text, sym, spaces);
+      if (norm[key].indexOf(nt) < 0) return false;
+    }
+    return true;
+  }
+  /// 닉네임이 같은지: 기준은 차단 값(blocked)이 정함 — 차단 값에 특수문자가 있으면 특수문자는 빼지 않고(공백 무시만),
+  /// 없으면 켜진 옵션대로. 작성자 닉네임(actual)도 같은 기준으로 정규화해서 비교. 정규화 결과가 비면 원문 비교
+  function nickEq(actual, blocked, symbols, spaces) {
+    if (!actual || !blocked) return false;
+    if (actual === blocked) return true;
+    var sym = symbols && !hasSymbol(blocked);
+    if (!sym && !spaces) return false;
+    var nb = normText(blocked, sym, spaces);
+    return !!nb && nb === normText(actual, sym, spaces);
+  }
+
   function blockedReason(u, idn, dset) {
     // 디시 자체 차단창으로 막은 사람: 디시는 block-disable 표시만 붙여 흐리게 보여줌 → 앱 차단처럼 가림
     if (u.el.classList.contains('block-disable')) return '디시 차단';
+    var symbols = !!cfg.ignoreSymbols, spaces = !!cfg.ignoreSpaces;
     var users = cfg.users || [], gid = currentGalleryId();
     for (var i = 0; i < users.length; i++) {
       var b = users[i];
       if (b.g && (',' + b.g + ',').indexOf(',' + gid + ',') < 0) continue;                  // 다른 갤러리 전용 차단 (b.g는 쉼표로 이은 여러 갤러리)
       if ((b.k === 'id' && idn.id && idn.id === b.v) ||
           (b.k === 'ip' && idn.ip && idn.ip === b.v) ||
-          (b.k === 'nick' && idn.nick && idn.nick === b.v)) return '차단한 유저';
+          (b.k === 'nick' && nickEq(idn.nick, b.v, symbols, spaces))) return '차단한 유저';
     }
-    // 고급 차단: 작성자가 맞고 + 글·댓글에 그 규칙의 단어가 있을 때만
+    // 칸의 글자 (글이면 본문까지) — 고급 차단·키워드 차단이 같이 쓰고, 필요할 때 한 번만 만듦
+    var bodyLower = null, norm = { full: null, space: null };
+    function bodyText() {
+      if (bodyLower === null) {
+        var t = txt(u.el);
+        if (u.kind === 'article') t += ' ' + txt(articleBody());
+        bodyLower = t.toLowerCase();
+      }
+      return bodyLower;
+    }
+    // 고급 차단: 작성자가 맞고 + 글·댓글에 그 규칙의 단어가 모두 들어 있을 때만
     var adv = cfg.advRules || [];
-    if (adv.length) {
-      var at = null;
-      for (var ai = 0; ai < adv.length; ai++) {
-        var ar = adv[ai];
-        if (ar.g && (',' + ar.g + ',').indexOf(',' + gid + ',') < 0) continue;
-        if (!((ar.k === 'id' && idn.id && idn.id === ar.v) ||
-              (ar.k === 'ip' && idn.ip && idn.ip === ar.v) ||
-              (ar.k === 'nick' && idn.nick && idn.nick === ar.v))) continue;
-        if (at === null) {
-          at = txt(u.el);
-          if (u.kind === 'article') at += ' ' + txt(articleBody());
-          at = at.toLowerCase();
-        }
-        for (var aw = 0; aw < (ar.w || []).length; aw++) {
-          if (ar.w[aw] && at.indexOf(ar.w[aw]) >= 0) return '고급 차단';
-        }
-      }
+    for (var ai = 0; ai < adv.length; ai++) {
+      var ar = adv[ai];
+      if (!ar || !(ar.w && ar.w.length)) continue;
+      if (ar.g && (',' + ar.g + ',').indexOf(',' + gid + ',') < 0) continue;
+      if (!((ar.k === 'id' && idn.id && idn.id === ar.v) ||
+            (ar.k === 'ip' && idn.ip && idn.ip === ar.v) ||
+            (ar.k === 'nick' && nickEq(idn.nick, ar.v, symbols, spaces)))) continue;
+      if (termsMatch(ar.w, bodyText(), symbols, spaces, norm)) return '고급 차단';
     }
+    // 차단 키워드: 쉼표로 나눈 단어가 모두 들어 있을 때만 (다른 갤러리 전용 키워드는 건너뜀)
     var kws = cfg.keywords || [];
-    if (kws.length) {
-      var t = txt(u.el);
-      if (u.kind === 'article') t += ' ' + txt(articleBody());
-      t = t.toLowerCase();
-      for (var j = 0; j < kws.length; j++) {
-        var kj = kws[j];
-        if (!kj || !kj.w || (kj.g && (',' + kj.g + ',').indexOf(',' + gid + ',') < 0)) continue;   // 다른 갤러리 전용 키워드
-        if (t.indexOf(kj.w) >= 0) return '차단 키워드';
-      }
+    for (var j = 0; j < kws.length; j++) {
+      var kj = kws[j];
+      if (!kj || !(kj.t && kj.t.length) || (kj.g && (',' + kj.g + ',').indexOf(',' + gid + ',') < 0)) continue;
+      if (termsMatch(kj.t, bodyText(), symbols, spaces, norm)) return '차단 키워드';
     }
     if (u.kind === 'comment' && dset.size) {
       var media = u.el.querySelectorAll('img, video');
@@ -1863,9 +1910,88 @@ enum ContentScript {
     });
   }
 
+  /// 추천·비추천 누르기 (디시 버튼을 대신 누름). 코드 칸이 있는데 비어 있으면 누르지 않고 코드 상자를 펼쳐 입력칸에 포커스
+  /// (빈 코드로 누르면 디시가 코드를 또 요구해 상자가 쌓임). 코드를 넣었거나 코드가 필요 없으면 디시 버튼을 누름
+  /// 코드 확인 버튼 문구: 마지막으로 누른 추천·비추천에 맞춤
+  function setVoteOkText() {
+    var ok = document.querySelector('.dcapp-vcode-ok');
+    var t = '입력한 코드로 ' + (voteLast === 'down' ? '비추천' : '추천');
+    if (ok && ok.textContent !== t) ok.textContent = t;
+  }
+
+  function voteAction(key) {
+    var map = { up: '#recommend_join', down: '#nonrecommend_join', best: '.reco-icon-lst .sp-bestchucon', pum: '.reco-icon-lst .sp-crosspost', report: '.reco-icon-lst .sp-report' };
+    var area = document.querySelector('.reco-area');
+    if (key === 'up' || key === 'down') {
+      voteLast = key;
+      setVoteOkText();
+      var input = document.getElementById('captcha_codeF') || document.getElementById('captcha_codeR');
+      if (input && !input.value.trim()) {
+        if (area) area.classList.add('dcapp-codeopen');
+        try { input.focus(); input.scrollIntoView({ block: 'center' }); } catch (e) {}
+        return 'code';
+      }
+      voteWait = { key: key, before: textOf(key === 'up' ? '#recomm_btn' : '#nonrecomm_btn') };
+      if (input && area) area.classList.add('dcapp-codeopen');     // 제출하는 동안 상자를 보여 줌 (성공하면 접힘)
+    }
+    var el = map[key] ? document.querySelector(map[key]) : null;
+    if (el) el.click();
+    if (key === 'up' || key === 'down') syncVoteCode();
+    return el ? 'clicked' : 'none';
+  }
+
+  /// 디시가 붙인 추천 코드 상자(#recom_join_box)를 추천 영역 안으로 옮기고 펼침. 추천·비추천 숫자가 바뀌면(성공) 접음
+  function syncVoteCode() {
+    var area = document.querySelector('.reco-area');
+    if (!area) return;
+    var box = document.getElementById('recom_join_box');
+    if (box && !area.contains(box)) area.insertBefore(box, area.firstChild);
+    var done = false;
+    if (voteWait) {
+      var now = textOf(voteWait.key === 'up' ? '#recomm_btn' : '#nonrecomm_btn');
+      if (now !== voteWait.before) { voteWait = null; done = true; }
+    }
+    if (done) {
+      area.classList.remove('dcapp-codeopen');
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+      area.querySelectorAll('.capcha-code-box input[type="text"]').forEach(function (i) { i.value = ''; });
+    } else if (box) {
+      area.classList.add('dcapp-codeopen');
+    }
+  }
+
+  /// 코드 칸 이벤트 (추천 영역마다 한 번만): 입력칸에서 Enter → 확인 버튼과 같게 마지막 추천·비추천 누르기,
+  /// 새로고침 링크 → 코드 그림을 새로 받고 입력칸 비우기 (디시 추천 상자에는 이 동작이 없어서 앱이 함)
+  function attachCodeEvents(area) {
+    if (area.getAttribute('data-dcapp-codeev') === '1') return;
+    area.setAttribute('data-dcapp-codeev', '1');
+    area.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if ((e.key === 'Enter' || e.keyCode === 13) && t && t.tagName === 'INPUT' && t.closest && t.closest('.capcha-code-box')) {
+        e.preventDefault();
+        voteAction(voteLast);
+      }
+    });
+    area.addEventListener('click', function (e) {
+      var r = e.target && e.target.closest ? e.target.closest('.capcha-code-box .sp-reload') : null;
+      if (!r) return;
+      e.preventDefault();
+      var box = r.closest('.capcha-code-box');
+      var img = box ? box.querySelector('img') : null;
+      if (img) img.setAttribute('src', (img.getAttribute('src') || '').split('&v=')[0] + '&v=' + Date.now());
+      var input = box ? box.querySelector('input[type="text"]') : null;
+      if (input) input.value = '';
+    });
+  }
+
   function buildVote() {
+    // 디시가 코드를 또 요구하면 추천 코드 상자가 앞에 새로 붙음 → 가장 새 것 하나만 남기고 지움 (같은 id가 여럿이면 입력 칸이 엇갈림)
+    var codeBoxes = document.querySelectorAll('#recom_join_box');
+    for (var ci = 1; ci < codeBoxes.length; ci++) if (codeBoxes[ci].parentNode) codeBoxes[ci].parentNode.removeChild(codeBoxes[ci]);
     var area = document.querySelector('.reco-area');
     if (!area || !area.parentNode) return;
+    attachCodeEvents(area);
+    syncVoteCode();
     var v = document.querySelector('.dcapp-vote');
     if (!v) {
       var hasMem = !!area.querySelector('.go-ct'), hasDown = !!document.getElementById('nonrecommend_join');
@@ -1887,11 +2013,21 @@ enum ContentScript {
         if (!b) return;
         // 별·X 버튼뿐 아니라 숫자 칸을 눌러도 같은 동작 (숫자 칸에는 data-a가 없으니 상자 종류로 찾음)
         var key = b.getAttribute('data-a') || (b.closest('.dcapp-vbox').classList.contains('up') ? 'up' : 'down');
-        var map = { up: '#recommend_join', down: '#nonrecommend_join', best: '.reco-icon-lst .sp-bestchucon', pum: '.reco-icon-lst .sp-crosspost', report: '.reco-icon-lst .sp-report' };
-        var el = document.querySelector(map[key]);
-        if (el) el.click();
+        voteAction(key);
       });
     }
+    // 코드 칸(디시 추천 영역) 아래 확인 버튼: 입력한 코드로 마지막에 누른 추천·비추천을 다시 누름
+    var okBtn = area.querySelector('.dcapp-vcode-ok');
+    if (!okBtn) {
+      okBtn = document.createElement('button');
+      okBtn.type = 'button';
+      okBtn.className = 'dcapp-vcode-ok';
+      okBtn.addEventListener('click', function (e) { e.preventDefault(); voteAction(voteLast); });
+      area.appendChild(okBtn);
+    } else if (okBtn !== area.lastElementChild) {
+      area.appendChild(okBtn);
+    }
+    setVoteOkText();
     // 수정·삭제: 본인 글 / 유동 글에서만 (오른쪽 끝)
     var editable = !!(postActionButton('modify') && postActionButton('delete'));
     var hasList = !!listButton();
@@ -4151,7 +4287,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v268-nohscroll', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v271-kwand', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
