@@ -48,6 +48,9 @@ enum ContentScript {
       '.dcapp-hide{display:none!important}',
       // 사이트 자체의 우측 하단 버튼 묶음(댓글 바로가기 등) — 앱의 새로고침 버튼으로 대신함
       '.fab-wrap{display:none!important}',
+      // 디시가 조회 수에 따라 붙이는 '디시앱 설치' 배너(목록 맨 아래·댓글 쪽 li)와 30회째 하단 팝업 — 광고 차단과 무관하게 항상 숨김
+      '.app-info-ban{display:none!important}',
+      '#app_down_pop{display:none!important}',
       // 글 아래 목록보기·글쓰기·수정·삭제 버튼 줄 — 앱 컨트롤바/수정·삭제 버튼으로 대신함 (수정·삭제는 숨긴 채로 앱이 대신 누름)
       '#view_btn_area{display:none!important}',
       // 글 화면 맨 아래: 사진(실베·개념·디시미디어·디시이슈 탭) · 다음 검색 · 푸터
@@ -194,6 +197,9 @@ enum ContentScript {
       'html.dcapp-pin body{padding-bottom:84px!important}',
       'html.dcapp-nc .comment-write-btm:not([id^="img_comment_write_div"]){padding:10px 12px!important}',
       'html.dcapp-nc #comment_write .who,html.dcapp-nc #comment_write .btm-wrt-btns,html.dcapp-nc [id^="comment_addDiv"]:not([data-dcapp-show]){height:0!important;overflow:hidden!important;visibility:hidden!important;margin:0!important;padding:0!important;border:0!important;min-height:0!important}',
+      // Cloudflare 체크가 필요해 드러난 답글 칸: 칸은 보이되, 닉네임·입력칸·버튼 줄은 .dcapp-tsx로 숨겨 체크박스만 남김
+      'html.dcapp-nc [id^="comment_addDiv"][data-dcapp-show]{height:auto!important;overflow:visible!important;visibility:visible!important;min-height:0!important}',
+      '.dcapp-tsx{display:none!important}',
       'html.dcapp-nc #comment_write #comment_memo.comment-caption{height:44px!important;min-height:44px!important;border:1px solid #d6d8e2!important;border-radius:22px!important;background:#f2f3f8!important;padding:11px 18px!important;font-size:15px!important;line-height:20px!important;overflow:hidden!important;box-shadow:none!important}',
       'html.darkmode.dcapp-nc #comment_write #comment_memo.comment-caption{background:#2c2c2e!important;border-color:#3d3d40!important}',
       'html.dcapp-nc #txtconBoxComment,html.dcapp-nc #txtconBoxReple,html.dcapp-nc #dcconBoxComment,html.dcapp-nc #dcconBoxReple{position:fixed!important;left:-3000px!important;top:0!important;width:360px!important}',
@@ -340,7 +346,7 @@ enum ContentScript {
   }
   function markReadRows() {
     if (!readSet) return;
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       var a = li.querySelector('a.lt, a[href]');
       var k = a && postKeyOf(a.getAttribute('href'));
       li.classList.toggle('dcapp-read', !!(k && readSet.has(k)));
@@ -383,7 +389,7 @@ enum ContentScript {
   }
   /// 글 목록의 닉네임: 디시가 긴 닉네임을 '가나다..'로 줄여 보냄 → 같은 행의 숨은 정보(blockInfo)에 있는 원래 닉네임으로 되돌려 표시
   function expandListNicks() {
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       var bi = li.querySelector('.blockInfo');
       var full = bi ? (bi.getAttribute('data-name') || '').trim() : '';
       if (!full) return;
@@ -432,7 +438,7 @@ enum ContentScript {
     return n;
   }
   function applyListFilter() {
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       var hide = false;
       if (listFilter && li.querySelector('ul.ginfo')) {
         var f = listFilter;
@@ -672,12 +678,12 @@ enum ContentScript {
       list.push({ el: el, kind: kind });
       if (el.getAttribute('data-dcapp-unit') !== kind) el.setAttribute('data-dcapp-unit', kind);
     }
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       if (/(^|\s)ad/.test(clsOf(li))) return;
       if (!li.querySelector('a')) return;
       add(li, 'post');
     });
-    document.querySelectorAll('ul[class*="comment"] > li, ol[class*="comment"] > li').forEach(function (li) {
+    document.querySelectorAll('ul[class*="comment"] > li:not(.app-info-ban), ol[class*="comment"] > li:not(.app-info-ban)').forEach(function (li) {
       if (li.closest('ul.gall-detail-lst')) return;
       if (!txt(li)) return;
       add(li, 'comment');
@@ -1586,7 +1592,7 @@ enum ContentScript {
   /// 글 목록 맨 위의 'AD' / '설문' 줄 (선택자로 못 잡는 경우 글자로)
   function hideListPromos() {
     if (cfg.adBlock === false) return;
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       if (/^(AD|설문)\s/.test(txt(li))) li.classList.add('dcapp-pinned-off');
     });
     // 광고 칸을 감싼 회색 띠: 광고 말고 다른 내용이 없을 때만 같이 숨김
@@ -1607,7 +1613,7 @@ enum ContentScript {
   }
   /// 글 목록: 오른쪽 회색 칸의 댓글 수를 없애고 제목 옆에 파란 [댓글수]로
   function listCommentCount() {
-    document.querySelectorAll('ul.gall-detail-lst > li').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
       var ct = li.querySelector('.ct');
       if (!ct) return;
       var box = ct.closest('a.rt') || ct.closest('.rt') || ct;
@@ -2959,6 +2965,7 @@ enum ContentScript {
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
     document.documentElement.classList.remove('dcapp-cmtretry');
+    hideAllCheck();                                       // 체크로 드러난 답글 칸도 다시 숨김
     if (wasOn) post('cmtretry', { state: 'stop' });     // 앱의 '댓글을 다는 중' 말풍선을 내리게
   }
   // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
@@ -3030,6 +3037,7 @@ enum ContentScript {
   });
   window.addEventListener('dcapp-cmtwrite', function (ev) {
     var d = ev.detail || {};
+    hideAllCheck();      // 등록 요청에 응답이 왔으니 체크로 드러났던 답글 칸은 다시 숨김 (확인 토큰은 한 번만 쓰임)
     if (d.status === 429) {
       if (!cmtRetry.on) {
         var memo = '';
@@ -3310,10 +3318,60 @@ enum ContentScript {
     }
   }
   function composeSync(p) { var ok = !!composeFill(p); try { setReplyHint(p); } catch (e) {} return ok; }
-  // Cloudflare 체크박스가 필요하면 숨겨 둔 댓글창(대댓글 칸 포함)을 보이게 하고 그 위치로
+  // Cloudflare 체크박스가 필요하면 답글 칸을 드러내되, 체크박스가 든 줄(슬롯과 그 조상)만 남기고 나머지는 숨김
+  // 디시 답글 칸은 .comment-write 안에 닉네임·입력칸·버튼 줄과 확인 칸(.dc-ts-slot)이 형제로 들어 있음
+  var CHECK_LIMIT_MS = 90000, checkWatch = null;
+  function checkBoxOf(form) { return form && form.closest ? form.closest('[id^="comment_addDiv"]') : null; }
+  /// 확인 칸(슬롯)에서 답글 칸 box까지 올라가며, 올라가는 줄의 형제(닉네임·입력칸·버튼 줄)를 .dcapp-tsx로 숨김 (댓글창 nc 모드에서만)
+  function markCheckPath(box) {
+    if (!document.documentElement.classList.contains('dcapp-nc')) return;
+    var slot = box.querySelector('.dc-ts-slot, #dc-turnstile');
+    if (!slot) return;
+    var node = slot;
+    while (node && node !== box) {
+      var parent = node.parentElement;
+      if (!parent) break;
+      Array.prototype.forEach.call(parent.children, function (c) { if (c !== node) c.classList.add('dcapp-tsx'); });
+      node = parent;
+    }
+  }
+  function unmarkCheckPath(box) {
+    box.removeAttribute('data-dcapp-show');
+    box.removeAttribute('data-dcapp-showat');
+    box.querySelectorAll('.dcapp-tsx').forEach(function (el) { el.classList.remove('dcapp-tsx'); });
+  }
+  /// 드러낸 답글 칸을 모두 다시 숨김 (체크가 끝났거나, 댓글이 응답됐거나, 재시도를 멈췄을 때)
+  function hideAllCheck() {
+    document.querySelectorAll('[id^="comment_addDiv"][data-dcapp-show]').forEach(unmarkCheckPath);
+  }
+  /// 보안 확인 토큰이 생겼는지 (통과했음)
+  function tsHasToken() {
+    try {
+      if (typeof window.turnstile === 'undefined' || !window.dcTs || window.dcTs.id === null) return false;
+      return !!window.turnstile.getResponse(window.dcTs.id);
+    } catch (e) { return false; }
+  }
+  /// 드러낸 답글 칸을 지켜보다가 토큰이 나오면, 연결이 끊기면, 제한 시간(90초)이 지나면 다시 숨김
+  function ensureCheckWatch() {
+    if (checkWatch) return;
+    checkWatch = setInterval(function () {
+      var boxes = document.querySelectorAll('[id^="comment_addDiv"][data-dcapp-show]');
+      if (!boxes.length) { clearInterval(checkWatch); checkWatch = null; return; }
+      var now = Date.now(), done = tsHasToken();
+      Array.prototype.forEach.call(boxes, function (b) {
+        var at = parseInt(b.getAttribute('data-dcapp-showat'), 10) || now;
+        if (done || !b.isConnected || now - at >= CHECK_LIMIT_MS) unmarkCheckPath(b);
+      });
+    }, 300);
+  }
   function revealCheck(form) {
-    var box = form.closest ? form.closest('[id^="comment_addDiv"]') : null;
-    if (box) box.setAttribute('data-dcapp-show', '1');
+    var box = checkBoxOf(form);
+    if (box) {
+      box.setAttribute('data-dcapp-show', '1');
+      box.setAttribute('data-dcapp-showat', String(Date.now()));
+      markCheckPath(box);
+      ensureCheckWatch();
+    }
     try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
     return 'check';
   }
@@ -4287,7 +4345,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v271-kwand', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v273-cfreveal', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
