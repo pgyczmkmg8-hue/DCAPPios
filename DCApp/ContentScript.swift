@@ -218,7 +218,10 @@ enum ContentScript {
       'html.darkmode .dcapp-sort button.on svg{color:#9db0ff}',
       // 글 아래 목록: 이전글 1개만 보이고 나머지는 '글목록 더보기'로 접음 / 다음글 1개(없으면 '다음 글 없음')
       // 글 아래 디시 검색창과 '더보기'(⌄) 표시는 숨김
-      'section.grid:has(.con-search-box),.con-search-box,#viewlistMore{display:none!important}',
+      // 관리 내역(탭 줄 .tab-twoline이 있는 섹션)은 섹션째 숨기지 않음 — 삭제 내역 탭에는 검색 상자가 섹션 안에 있어서 빈 화면이 됐음
+      'section.grid:has(.con-search-box):not(:has(.tab-twoline)),.con-search-box,#viewlistMore{display:none!important}',
+      // 관리 내역 '삭제 내역' 탭의 게시물·댓글 검색 상자는 보이게 (위 규칙보다 구체적이라 우선)
+      '#deleteList .con-search-box{display:block!important}',
       'ul#view_next:not(.dcapp-more-open) > li.dcapp-fold{display:none!important}',
       'ul#view_next > li.dcapp-more-li{display:block!important;width:100%!important;box-sizing:border-box!important;padding:10px 16px!important;margin:0!important;border:0!important;background:none!important}',
       '.dcapp-more-btn{display:block;width:100%;box-sizing:border-box;height:40px;padding:0 12px;margin:0;text-align:center;border:1px solid #c9c9cf;border-radius:8px;background:none;color:#3b4890;font-size:14px;font-weight:600;line-height:1}',
@@ -4345,7 +4348,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v273-cfreveal', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v274-mgmtlog', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
