@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import LocalAuthentication
+import Security
 
 /// 앱 잠금(Face ID / Touch ID / 기기 암호) + 앱 전환 화면에서 가리기
 /// 시트(설정 창 등)까지 덮어야 해서, SwiftUI 화면 위가 아니라 별도의 최상단 창(UIWindow)에 가림막을 띄움
@@ -18,6 +19,10 @@ final class AppLock: ObservableObject {
     /// 가림막 바탕으로 쓸, 앱 화면을 찍어 흐리게 만든 그림
     @Published private(set) var blurredSnapshot: UIImage?
     private var authenticating = false
+    /// 마지막 잠금 해제 시도가 실패(취소 포함)한 시각 — 인증 창이 닫히며 생기는 '활성화' 알림으로 바로 다시 묻지 않게 쉬는 시간
+    private var lastFailAt: Date?
+    /// 기기 암호 전용 인증(evaluateAccessControl) 동안 살려 두는 컨텍스트
+    private var accessContext: LAContext?
     private var window: UIWindow?
     /// 가림막이 떠 있는 동안만 도는 안전장치: 앱이 실제로 활성이고 잠겨 있지 않은데 가림막이 남아 있으면 걷어냄
     private var watchdog: Task<Void, Never>?
@@ -63,7 +68,7 @@ final class AppLock: ObservableObject {
         phase = .active
         applyGrace()
         updateOverlay()
-        Task { await unlock() }
+        Task { await autoUnlock() }
     }
 
     /// 실제 앱 상태가 활성인데 phase가 '비활성'에 걸려 가림막이 남는 경우를 풀어 줌
@@ -102,7 +107,7 @@ final class AppLock: ObservableObject {
     func startup() async {
         CoverStore.shared.preload()
         updateOverlay()
-        await unlock()
+        await autoUnlock()
     }
 
     func scenePhaseChanged(_ p: ScenePhase) {
@@ -114,7 +119,7 @@ final class AppLock: ObservableObject {
         }
         if p == .active { applyGrace() }
         updateOverlay()
-        if p == .active { Task { await unlock() } }
+        if p == .active { Task { await autoUnlock() } }
     }
 
     /// 돌아왔을 때: 유예 시간을 넘겼으면 잠그고, 안 넘겼으면 그대로 연 채로 둠
@@ -126,14 +131,19 @@ final class AppLock: ObservableObject {
 
     // MARK: - 잠금 해제
 
-    func unlock() async {
+    /// 앱을 켜거나 돌아왔을 때 자동으로 묻는 잠금 해제 (방금 실패했으면 잠깐 쉬어서 인증 창이 바로 다시 뜨지 않게)
+    private func autoUnlock() async {
+        if let t = lastFailAt, Date().timeIntervalSince(t) < 2 { return }
+        await unlock()
+    }
+
+    /// 잠금 해제. 생체인식 → (취소·실패·사용 불가면) 기기 암호 입력. passcodeOnly면 생체인식 없이 암호 입력부터
+    /// 암호 입력도 취소하면 잠긴 채로 둠 (다시 묻는 것은 가림막의 버튼으로만)
+    func unlock(passcodeOnly: Bool = false) async {
         guard locked, !authenticating else { return }
         guard Self.lockEnabled else { locked = false; updateOverlay(); return }
-        let ctx = LAContext()
-        ctx.localizedFallbackTitle = "암호 입력"
-        var err: NSError?
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else {
-            // 기기에 암호가 없으면 잠글 수 없음 → 그냥 열어 줌
+        // 기기에 암호가 없으면 잠글 수 없음 → 그냥 열어 줌
+        guard LAContext().canEvaluatePolicy(.deviceOwnerAuthentication, error: nil) else {
             locked = false
             updateOverlay()
             resyncSoon()
@@ -141,12 +151,77 @@ final class AppLock: ObservableObject {
         }
         authenticating = true
         defer { authenticating = false }
-        let ok = (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: " ")) ?? false
-        if ok {
+        if await authenticate(passcodeOnly: passcodeOnly) {
+            lastFailAt = nil
             locked = false
             updateOverlay()
             resyncSoon()      // 인증 창이 사라진 뒤 상태가 늦게 바뀌어도 가림막이 남지 않게
+        } else {
+            lastFailAt = Date()
         }
+    }
+
+    /// 실제 인증 단계. 성공하면 true
+    /// 생체인식 장치: 1단계 생체인식 → 취소·실패·사용 불가면 기기 암호 전용 인증. passcodeOnly면 1단계 없이 기기 암호 전용
+    /// 생체인식이 없는 기기: 기존처럼 .deviceOwnerAuthentication 하나 (곧바로 암호를 묻는 정책)
+    private func authenticate(passcodeOnly: Bool) async -> Bool {
+        guard Self.hasBiometry else { return await authenticateDeviceOwner() }
+        if !passcodeOnly {
+            let bio = LAContext()
+            bio.localizedFallbackTitle = "암호 입력"
+            bio.localizedCancelTitle = "암호로 열기"
+            do {
+                return try await bio.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: " ")
+            } catch {
+                // 취소·'암호 입력' 선택·생체인식 잠김·사용 불가·인식 실패 → 생체인식 화면 없이 기기 암호만 묻기
+                // 그 밖(시스템 취소·앱 취소 등)은 멈춤 (돌아오면 다시 묻는다)
+                guard let code = (error as? LAError)?.code,
+                      [LAError.Code.userCancel, .userFallback, .biometryLockout, .biometryNotAvailable,
+                       .biometryNotEnrolled, .authenticationFailed].contains(code) else { return false }
+            }
+        }
+        return await authenticatePasscodeOnly()
+    }
+
+    /// 기기 암호만 묻는 인증: 접근 제어(.devicePasscode)로 평가하면 생체인식 화면 없이 암호 입력 화면만 뜸 (실기기 확인 필요)
+    /// 암호 입력을 취소하거나 실패하면 false (다시 묻지 않음). 접근 제어를 만들 수 없거나 그 밖의 오류면 .deviceOwnerAuthentication으로 한 번 시도
+    private func authenticatePasscodeOnly() async -> Bool {
+        var cfErr: Unmanaged<CFError>?
+        guard let ac = SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                                                       .devicePasscode, &cfErr) else {
+            return await authenticateDeviceOwner()
+        }
+        // 암호 입력 창이 떠 있는 동안 컨텍스트가 해제되지 않도록 속성에 잡아 둠 (응답 뒤 비움)
+        let ctx = LAContext()
+        accessContext = ctx
+        defer { accessContext = nil }
+        let outcome: (ok: Bool, code: LAError.Code?) = await withCheckedContinuation { cont in
+            ctx.evaluateAccessControl(ac, operation: .useItem, localizedReason: " ") { ok, err in
+                cont.resume(returning: (ok, (err as? LAError)?.code))
+            }
+        }
+        if outcome.ok { return true }
+        switch outcome.code {
+        case .userCancel?, .systemCancel?, .appCancel?, .authenticationFailed?:
+            // 취소·인증 실패(암호 오입력)는 멈춤. 여기서 폴백하면 Touch ID가 다시 뜸
+            return false
+        default:
+            return await authenticateDeviceOwner()
+        }
+    }
+
+    /// .deviceOwnerAuthentication (생체인식이 있으면 생체인식을 먼저 묻는 정책) — 생체인식이 없는 기기나 폴백용
+    private func authenticateDeviceOwner() async -> Bool {
+        let ctx = LAContext()
+        ctx.localizedFallbackTitle = "암호 입력"
+        return (try? await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: " ")) ?? false
+    }
+
+    /// 생체인식(Face ID·Touch ID·Optic ID) 장치인지
+    static var hasBiometry: Bool {
+        let ctx = LAContext()
+        _ = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        return ctx.biometryType != .none
     }
 
     /// 설정에서 잠금을 켤 때 한 번 인증해서 확인 (실패하면 켜지 않음)
@@ -264,6 +339,17 @@ struct PrivacyOverlay: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(DCTheme.navy)
+                    if AppLock.hasBiometry {
+                        Button {
+                            Task { await lock.unlock(passcodeOnly: true) }
+                        } label: {
+                            Label("기기 암호로 열기", systemImage: "lock.open")
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(DCTheme.navy)
+                    }
                 }
             }
         }
