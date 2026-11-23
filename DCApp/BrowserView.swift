@@ -270,10 +270,8 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var controlOrderRaw = ""
     /// ⋮ 메뉴를 상단바 오른쪽에 둘지 (켜면 컨트롤바에서는 빠짐)
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
-    /// 듀오: 시계가 옆 세로 줄로 가서 비어 있는 위쪽 띠 안에 상단바(제목·버튼)를 그려 파란 영역을 줄임 (시스템 상단바는 숨김 → 스크롤해도 밀려 올라가지 않음)
+    /// 휴대폰·듀오: 시스템 상단바 대신 위쪽 띠에 낮은 상단바(제목·버튼)를 그림 — 스크롤해도 고정, 높이 최소. 끄면 시스템 상단바
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBarSetting = true
-    @State private var navTopMax: CGFloat = 0
-    @State private var navCollapsed = false
 
     // 글쓰기 화면 → 이 갤러리 자짤 설정 창
     @State private var autoImageGallery: String?
@@ -427,9 +425,10 @@ struct BrowserView: View {
         syncCommentPin()
         // 화면을 돌린 뒤 웹 화면이 새 크기로 다시 그려지지 않고 비어 보이는 일이 있어, 크기가 바뀔 때마다 다시 배치하게 함
         model.nudgeLayout()
-        if model.isDetailPane, top > 20, abs(router.splitTopHeight - top) > 0.5 { router.splitTopHeight = top }
-        lastTopBarBottom = top
-        if !model.isDetailPane, top > 20 { ListBarMetrics.bottom = top }
+        let band = topBandBottom(measured: top)
+        if model.isDetailPane, band > 20, abs(router.splitTopHeight - band) > 0.5 { router.splitTopHeight = band }
+        lastTopBarBottom = band
+        if !model.isDetailPane, band > 20 { ListBarMetrics.bottom = band }
         applySideColumn()
         // 접기·펴기·앱 전환 직후엔 안전 영역 값이 잠깐 0으로 읽힐 때가 있어서 조금 뒤에 한 번 더 읽음
         Task { @MainActor in
@@ -563,7 +562,7 @@ struct BrowserView: View {
     /// 위쪽 띠 안에 상단바를 그릴지 — 듀오(옆 세로 줄이 있는 화면)에서만. 글쓰기 화면은 자기 상단바가 따로 있음
     private var compactRaw: Bool {
         _ = viewSize      // 접기·펴기·회전으로 크기가 바뀌면 다시 계산
-        return compactTopBarSetting && Self.hasSideColumnOnly && !model.isWritePage
+        return compactTopBarSetting && Self.isPhone && !model.isWritePage
     }
     /// 돌리는 도중 안전 영역 값이 잠깐 흔들려도 시스템 상단바가 켜졌다 꺼지지 않게: 값이 0.6초 동안 그대로일 때만 바꿈
     @State private var compactStable: Bool?
@@ -578,24 +577,92 @@ struct BrowserView: View {
         }
     }
 
-    /// 시스템 상단바(듀오에서 약 80pt) 대신 그리는 낮은 상단바: [뒤로] 제목 [필터·⋮]
-    static let compactTopBarHeight: CGFloat = 44
+    /// 상단바 띠 높이 (휴대폰·듀오 공통). 시스템 내비게이션 바(세로 화면 44pt, 가로로 눕힌 휴대폰 32pt)보다 낮거나 같게
+    static let compactTopBarHeight: CGFloat = 34
+    /// 듀오 띠 높이 (0.9.19와 같은 44pt)
+    static let duoTopBarHeight: CGFloat = 44
+    /// 창이 가로(너비 > 높이)인지 — 창 크기로 판별 (분할 화면의 왼쪽 목록은 뷰 폭이 좁아 뷰 크기로는 틀릴 수 있음)
+    static var windowIsLandscape: Bool {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        guard let b = (ws.first(where: \.isKeyWindow) ?? ws.first)?.bounds else { return false }
+        return b.width > b.height
+    }
+    /// 가로(회전)에서는 띠를 상태바 줄(시계·배터리가 있는 맨 위 줄)에 올림: 띠 높이 = 상태바 높이, 상태바가 32pt보다 낮으면 32pt
+    /// 세로: 듀오 68pt, 일반 폰 34pt (변경 없음)
+    private var compactBarHeight: CGFloat {
+        if Self.isDuoLayout { return Self.duoTopBarHeight }
+        if Self.windowIsLandscape { return max(Self.windowTopInset, 32) }
+        if vSizeClass == .compact { return 32 }
+        return Self.compactTopBarHeight
+    }
+    /// 띠가 상태바 줄부터 그려지는지 (가로에서 띠를 쓰는 동안)
+    private var barInStatusRow: Bool { compactTopBar && Self.windowIsLandscape && !Self.isDuoLayout }
+    /// 가로 일반 휴대폰(듀오 같은 큰 화면 제외)에서 시스템 상태바가 안 보이므로 띠 양끝에 시계·배터리를 직접 넣음
+    private var bandShowsClock: Bool { barInStatusRow && Self.isPhone && !Self.isDuoSizedScreen }
+    /// 띠 양끝 시계·배터리 칸 폭 (양쪽 같게 넣어 제목이 가운데 오게)
+    static let bandSideItemWidth: CGFloat = 64
+    /// 듀오 레이아웃 (옆 세로 줄 + 큰 화면). 이 경우 상단바는 0.9.19 값(44pt)과 동작을 그대로 씀
+    static var isDuoLayout: Bool { hasSideColumnOnly && isDuoSizedScreen }
+    /// 듀오 같은 큰 폰 화면인지 (가장 짧은 변 450pt 초과). 가로·세로 모두 판별
+    static var isDuoSizedScreen: Bool {
+        let b = UIScreen.main.bounds
+        return UIDevice.current.userInterfaceIdiom == .phone && min(b.width, b.height) > 450
+    }
+    /// 위쪽 띠 아래 끝의 화면 y: 상태바 줄에 올린 띠는 띠 높이 그대로, 아니면 띠를 쓰는 동안 상태바 + 띠 높이, 그 밖은 측정값
+    /// (시트 높이·글쓰기 상단 높이·듀오 측면 덮개가 이 값을 씀)
+    private func topBandBottom(measured top: CGFloat) -> CGFloat {
+        if Self.isDuoLayout { return top }
+        if barInStatusRow { return compactBarHeight }
+        return compactTopBar ? Self.windowTopInset + compactBarHeight : top
+    }
+    /// 누르는 칸 한 변 (손가락 목표 44pt). 띠보다 커서 위아래로 조금 삐져나가고, 그만큼도 눌림
+    static let compactTouchSize: CGFloat = 44
+    /// 휴대폰(듀오 포함). 아이패드는 시스템 상단바를 그대로 씀
+    static var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    /// 창의 좌우 안전 영역 중 큰 값 (휴대폰을 가로로 눕히면 노치 쪽 여백)
+    static var windowSideInsetMax: CGFloat {
+        let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
+        return max(ws.map(\.safeAreaInsets.left).max() ?? 0, ws.map(\.safeAreaInsets.right).max() ?? 0)
+    }
+    /// 오른쪽에 놓이는 버튼 수 (제목을 가운데에 두려고 왼쪽 칸도 같은 폭으로 맞춤)
+    private var compactRightCount: Int {
+        if showsMenuButton { return (isListPage ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
+        return (currentGallery != nil ? 1 : 0) + 1
+    }
+    private var compactSideWidth: CGFloat {
+        let n = max(compactRightCount, 1)
+        return CGFloat(n) * Self.compactTouchSize + CGFloat(n - 1) * Self.topSlotSpacing
+    }
+    /// 띠 좌우 여백: 듀오는 옆 세로 줄 폭(기존 계산 그대로), 그 밖의 휴대폰은 가로로 눕혔을 때 노치 쪽 여백
+    private var compactSidePad: (leading: CGFloat, trailing: CGFloat) {
+        if Self.isDuoLayout {
+            return (splitListWidth == nil && leftColumn ? trailingInset : 0,
+                    splitListWidth == nil && !leftColumn && fillsTrailing ? trailingInset : 0)
+        }
+        let s = Self.windowSideInsetMax
+        return (s, s)
+    }
+    /// 위쪽 띠: [뒤로] 제목 [필터·⋮ / 즐겨찾기·⋮]. 시스템 상단바의 버튼과 같은 기능
     private var compactTopBarView: some View {
-        HStack(spacing: 6) {
-            Group {
-                if showsTopBack {
-                    backButton { Image(systemName: "arrow.left").frame(width: Self.topSlotWidth, height: Self.topSlotWidth).contentShape(Rectangle()) }
-                } else {
-                    Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                }
+        let side = compactSideWidth
+        let pad = compactSidePad
+        return HStack(spacing: 0) {
+            if bandShowsClock { BandClockText().frame(width: Self.bandSideItemWidth, alignment: .leading) }
+            if showsTopBack {
+                backButton { Image(systemName: "arrow.left").frame(width: Self.compactTouchSize, height: Self.compactTouchSize).contentShape(Rectangle()) }
+                    .frame(width: side, alignment: .leading)
+            } else {
+                Color.clear.frame(width: side, height: 1)
             }
-            topTitle.frame(maxWidth: .infinity, alignment: .center)
-            HStack(spacing: 6) {
+            titleView(logo: 24).frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: Self.topSlotSpacing) {
                 if showsMenuButton {
                     if isListPage {
                         Button { showListFilter = true } label: {
                             Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
                                 .contentShape(Rectangle())
                         }
                         .accessibilityLabel("게시물 필터")
@@ -603,7 +670,7 @@ struct BrowserView: View {
                     if menuInTopBarShown {
                         Menu { moreMenu } label: {
                             Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
                                 .contentShape(Rectangle())
                         }
                     }
@@ -611,27 +678,30 @@ struct BrowserView: View {
                     if currentGallery != nil {
                         Button { toggleFavorite() } label: {
                             Image(systemName: isFavorite ? "star.fill" : "star")
-                                .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
                                 .contentShape(Rectangle())
                         }
                     }
                     Menu { moreMenu } label: {
                         Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                            .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                            .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
                             .contentShape(Rectangle())
                     }
                 }
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .frame(minWidth: Self.topSlotWidth, alignment: .trailing)
+            .frame(width: side, alignment: .trailing)
+            if bandShowsClock { BandBatteryText().frame(width: Self.bandSideItemWidth, alignment: .trailing) }
         }
         .foregroundStyle(.white)
-        // 듀오 옆 세로 줄(시계 자리) 밖으로: 버튼이 줄 밑으로 들어가 가려지지 않게 (분할 화면의 왼쪽 목록 창은 줄이 없음)
-        .padding(.leading, 10 + (splitListWidth == nil && leftColumn ? trailingInset : 0))
-        .padding(.trailing, 10 + (splitListWidth == nil && !leftColumn && fillsTrailing ? trailingInset : 0))
-        .frame(width: splitListWidth, height: Self.compactTopBarHeight)
+        .padding(.leading, 10 + pad.leading)
+        .padding(.trailing, 10 + pad.trailing)
+        .frame(width: splitListWidth, height: compactBarHeight)
         .background(DCTheme.navy)
+        // 가로: 띠를 맨 위(상태바 줄)로 올림. 레이아웃에서는 상태바 아래 띠 높이 - 상태바 높이만 차지해 웹 화면이 띠 아래 끝에서 시작
+        .offset(y: barInStatusRow ? -Self.windowTopInset : 0)
+        .frame(height: barInStatusRow ? compactBarHeight - Self.windowTopInset : compactBarHeight, alignment: .top)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -706,7 +776,6 @@ struct BrowserView: View {
         WebView(model: model)
             .modifier(SplitPane(width: splitListWidth))
             .safeAreaInset(edge: .top, spacing: 0) { if compactTopBar { compactTopBarView } else if splitListWidth != nil { splitTopBar } }   // 듀오: 낮은 상단바 / 분할 화면의 목록: 시스템 내비게이션 바 대신
-            .ignoresSafeArea(.container, edges: stripHidden ? .top : [])   // 상단바 숨김 중엔 웹페이지가 화면 맨 위까지 (남색 띠가 남지 않게)
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
             // 화면을 돌려 세로 줄이 왼쪽에 생기면(듀오) 왼쪽도 같은 방식으로 웹페이지가 줄 아래까지 깔리게 (파란 상단바만 튀어나와 보이지 않게)
@@ -720,7 +789,6 @@ struct BrowserView: View {
                 GeometryReader { g in
                     let top = g.safeAreaInsets.top
                     DCTheme.navy
-                        .opacity(stripHidden ? 0 : 1)
                         .frame(width: g.size.width + g.safeAreaInsets.leading + g.safeAreaInsets.trailing, height: top + 1)   // 듀오 옆 세로 줄 위쪽까지
                         .offset(x: -g.safeAreaInsets.leading, y: -top)
                 }
@@ -729,7 +797,7 @@ struct BrowserView: View {
                 // 예비: 웹페이지 폭만큼은 화면 맨 위까지 (위 방법이 안 먹히는 경우 대비)
                 // 분할 화면: 오른쪽 컨트롤바 띠는 남색이 아니라 글 화면과 어울리는 바탕색으로 (상단바는 따로 남색)
                 if splitListWidth == nil {
-                    DCTheme.navy.opacity(stripHidden ? 0 : 1).ignoresSafeArea(.container, edges: [.top, .trailing])
+                    DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .trailing])
                 }
             }
             .overlay(alignment: .top) { topOverlay }
@@ -820,10 +888,9 @@ struct BrowserView: View {
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { topBar }
-            .toolbar(compactTopBar || navScrollHidden ? .hidden : .automatic, for: .navigationBar)      // 듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림
+            .toolbar(compactTopBar ? .hidden : .automatic, for: .navigationBar)      // 휴대폰·듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림 (스크롤해도 고정)
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
-            .toolbarBackground(stripHidden ? .hidden : .visible, for: .navigationBar)   // 상단바가 접힐 때 상태바 자리에 남는 남색 배경도 같이 걷어냄
             .toolbarColorScheme(.dark, for: .navigationBar)
             // 하단 바: 페이지를 잘라내지 않고 그 위에 띄움 (리퀴드 글래스 너머로 페이지가 비침)
             .overlay(alignment: .bottom) {
@@ -891,21 +958,6 @@ struct BrowserView: View {
     private var layer2: some View {
         // 뷰 타입이 너무 깊게 중첩되면 실행하자마자 스택이 넘쳐 튕김 → 단계마다 AnyView로 끊음
         AnyView(layer1)
-            .background {
-                // 시스템이 스크롤로 상단바를 접으면 위쪽 안전 영역이 줄어듦 → 그걸 감지해 남색 띠도 같이 걷어냄
-                // (웹뷰 안쪽이 아니라 바깥에서 재야, 웹뷰가 맨 위까지 확장돼도 값이 0으로 바뀌지 않음)
-                GeometryReader { g in
-                    let top = g.safeAreaInsets.top
-                    Color.clear
-                        .onAppear { navTopMax = top }
-                        .onChangeCompat(of: g.size) { _, _ in navTopMax = top; navCollapsed = false }
-                        .onChangeCompat(of: top) { _, t in
-                            if t > navTopMax { navTopMax = t }
-                            let c = navTopMax - t > 8 && t > 0
-                            if c != navCollapsed { navCollapsed = c }
-                        }
-                }
-            }
             .confirmationDialog(model.blockRequest.map { blockDialogTitle($0) } ?? "차단/메모/갤로그",
                                 isPresented: Binding(get: { model.blockRequest != nil },
                                                      set: { if !$0 { model.blockRequest = nil } }),
@@ -1414,20 +1466,25 @@ struct BrowserView: View {
     // MARK: - 상단바 (남색): 제목만 (메인 화면). 설정 안에서 연 화면은 오른쪽에 ☆ ⋮
 
     /// 상단바 제목 (홈은 dcAPP, 갤러리 안이면 이름 + 배지)
-    private var topTitle: some View {
-        HStack(spacing: 6) {
+    private var topTitle: some View { titleView(logo: 36) }
+
+    /// 제목 한 줄 (logo: 홈 로고 높이 — 낮은 상단바 띠 안에 들어가도록 줄일 수 있게 인자로 받음)
+    private func titleView(logo: CGFloat) -> some View {
+        return HStack(spacing: 6) {
             if isHomeScreen {
                 // 홈: 페이지 제목(connecting… 등) 대신 앱 이름 (글자 옆에 로고 그림)
                 // 로고 폭을 정해 둠 (폭이 정해지지 않으면 아이패드에서 처음 열 때 글자가 'dcA…'로 잘림)
                 Image("HomeLogo")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 34, height: 36)
+                    .frame(width: logo * 34 / 36, height: logo)
                 Text("dcAPP").fontWeight(.heavy).italic()
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             } else {
-                Text(titleParts.name).lineLimit(1)
+                Text(titleParts.name)
+                    .lineLimit(1)
+                    .minimumScaleFactor(BrowserView.windowIsLandscape ? 0.8 : 1)   // 가로의 낮은 띠에서 이름이 길면 조금 줄여서 한 줄에
                 if let b = titleParts.badge { badgeView(b) }
             }
         }
@@ -1652,9 +1709,6 @@ struct BrowserView: View {
     }
 
     private var isPostPage: Bool { model.url.flatMap(SavedPostStore.postInfo) != nil }
-    /// 글 읽으며 스크롤 중이라 상단바(와 그 위 남색 띠)를 걷어낸 상태
-    private var stripHidden: Bool { (navScrollHidden || (navCollapsed && !compactTopBar && splitListWidth == nil)) }
-    private var navScrollHidden: Bool { isPostPage && !compactTopBar && splitListWidth == nil && model.navHiddenByScroll }
 
     /// 갤러리 글 목록 화면인지 (model.url을 읽어 주소가 바뀌면 다시 그림)
     private var isListPage: Bool {
@@ -2839,6 +2893,40 @@ private struct SplitBottom: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+/// 가로 띠 왼쪽 끝의 시계 (TimelineView로 1분마다 다시 그림)
+private struct BandClockText: View {
+    var body: some View {
+        TimelineView(.everyMinute) { ctx in
+            Text(ctx.date, style: .time)
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
+}
+
+/// 가로 띠 오른쪽 끝의 배터리 (배터리 값이 바뀌면 알림으로 갱신)
+private struct BandBatteryText: View {
+    @State private var level: Float = UIDevice.current.batteryLevel
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "battery.100")
+            Text(level < 0 ? "--" : "\(Int((level * 100).rounded()))%")
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .onAppear {
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            level = UIDevice.current.batteryLevel
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.batteryLevelDidChangeNotification)) { _ in
+            level = UIDevice.current.batteryLevel
         }
     }
 }

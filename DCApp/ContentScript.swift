@@ -97,6 +97,7 @@ enum ContentScript {
       '.dcapp-home-off{display:none!important}',
       'html.dcapp-home-wait body{opacity:0!important}',
       'html.dcapp-cmtretry .loading-box{display:none!important}',
+      'html.dcapp-tscheck .loading-box{display:none!important}',
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       // 닉네임·디시콘만 길게 누르기 메뉴를 쓰므로 iOS 기본 메뉴(복사 등)를 막고, 나머지 글자는 평소처럼 선택·복사 가능
@@ -200,6 +201,13 @@ enum ContentScript {
       // Cloudflare 체크가 필요해 드러난 답글 칸: 칸은 보이되, 닉네임·입력칸·버튼 줄은 .dcapp-tsx로 숨겨 체크박스만 남김
       'html.dcapp-nc [id^="comment_addDiv"][data-dcapp-show]{height:auto!important;overflow:visible!important;visibility:visible!important;min-height:0!important}',
       '.dcapp-tsx{display:none!important}',
+      '#dcapp-tsaux{position:fixed!important;left:50%!important;bottom:calc(env(safe-area-inset-bottom) + 112px)!important;transform:translateX(-50%)!important;width:min(340px,calc(100vw - 32px))!important;box-sizing:border-box!important;padding:14px 14px 12px!important;border-radius:16px!important;background:#fff!important;color:#222!important;box-shadow:0 8px 28px rgba(0,0,0,.25)!important;text-align:center!important;z-index:2147483000!important;font-size:14px!important;line-height:1.4!important;margin:0!important}',
+      'html.darkmode #dcapp-tsaux{background:#2c2c2e!important;color:#eee!important}',
+      '#dcapp-tsaux .dcapp-tsaux-tit{font-size:15px!important;font-weight:700!important;margin:0 0 2px!important;padding:0!important}',
+      '#dcapp-tsaux .dcapp-tsaux-sub{font-size:13px!important;opacity:.75!important;margin:0 0 8px!important;padding:0!important}',
+      '#dcapp-tsaux .dcapp-tsaux-slot{min-height:65px!important;display:flex!important;justify-content:center!important;align-items:center!important;margin:0!important;padding:0!important}',
+      '#dcapp-tsaux .dcapp-tsaux-x{position:absolute!important;top:4px!important;right:6px!important;width:32px!important;height:32px!important;border:0!important;background:transparent!important;color:inherit!important;font-size:22px!important;line-height:1!important;opacity:.6!important;padding:0!important;margin:0!important}',
+      '[data-dcapp-unclip]{overflow:visible!important;height:auto!important;max-height:none!important;min-height:0!important;visibility:visible!important}',
       'html.dcapp-nc #comment_write #comment_memo.comment-caption{height:44px!important;min-height:44px!important;border:1px solid #d6d8e2!important;border-radius:22px!important;background:#f2f3f8!important;padding:11px 18px!important;font-size:15px!important;line-height:20px!important;overflow:hidden!important;box-shadow:none!important}',
       'html.darkmode.dcapp-nc #comment_write #comment_memo.comment-caption{background:#2c2c2e!important;border-color:#3d3d40!important}',
       'html.dcapp-nc #txtconBoxComment,html.dcapp-nc #txtconBoxReple,html.dcapp-nc #dcconBoxComment,html.dcapp-nc #dcconBoxReple{position:fixed!important;left:-3000px!important;top:0!important;width:360px!important}',
@@ -513,9 +521,28 @@ enum ContentScript {
     var base = new URL(links.length ? links[0].href : location.href);
     if (!(cur > 0)) cur = parseInt(new URL(location.href).searchParams.get('page'), 10) || 1;
     var prev = pg.querySelector('a.prev'), next = pg.querySelector('a.next');
-    function isSearchJump(a) { return !!a && /[?&]s_pos=/.test(a.getAttribute('href') || '') && !/[?&]s_pos=/.test(base.search); }
-    // 일반 목록: 디시 '다음'이 있으면 뒤 페이지가 더 있음. 없으면 보이는 마지막 번호가 끝
-    var hasMore = !!next && !isSearchJump(next);
+    // 검색 구간(s_pos): 디시는 검색 결과를 1만 개 단위 구간으로 나누고 주소에 s_pos를 붙여 다님. 구간을 옮기는 링크(다음/이전 검색)는
+    // s_pos 값이 지금 주소의 값과 다름. 주소에 s_pos가 이미 있는 구간 페이지에서도 이 기준으로 봐야 함
+    var inSearch = /[?&](serval|s_pos)=/.test(location.search);
+    function sPosOf(href) {
+      try { var sp = new URL(href, location.href).searchParams; return sp.has('s_pos') ? sp.get('s_pos') : null; } catch (e) { return null; }
+    }
+    var curSPos = sPosOf(location.href) || '';
+    function isSearchJump(a) {
+      var p = a ? sPosOf(a.getAttribute('href') || '') : null;   // s_pos가 없는 링크는 구간 이동이 아님
+      return p !== null && p !== curSPos;
+    }
+    // 뒤 페이지가 더 있나. 일반 목록: 디시 '다음'이 있으면 있음 (기존 그대로). 검색: 같은 구간에서 page가 지금보다 큰 '다음'일 때만 있음
+    var hasMore = false;
+    if (next && !isSearchJump(next)) {
+      if (!inSearch) hasMore = true;
+      else {
+        var np = 0;
+        try { np = parseInt(new URL(next.getAttribute('href') || '', location.href).searchParams.get('page'), 10); } catch (e) {}
+        hasMore = np > cur;
+      }
+    }
+    // 뒤가 더 있으면 끝을 모름(무한). 없으면 보이는 번호 중 가장 큰 번호가 끝 (검색 구간의 마지막 페이지)
     var last = hasMore ? Infinity : Math.max(cur, nums.length ? Math.max.apply(null, nums) : cur);
     function pageURL(n) { var u = new URL(base.toString()); u.searchParams.set('page', String(n)); u.hash = ''; return u.toString(); }
     function btn(label, href, cls, aria) {
@@ -540,7 +567,9 @@ enum ContentScript {
       e.preventDefault();
       var v = window.prompt('이동할 페이지 번호 (지금 ' + cur + '페이지)', '');
       var to = parseInt((v || '').replace(/[^0-9]/g, ''), 10);
-      if (to > 0 && to !== cur) location.href = pageURL(isFinite(last) ? Math.min(to, last) : to);
+      if (!(to > 0) || to === cur) return;
+      if (!hasMore && to > last) { window.alert('이동할 페이지가 없습니다. 마지막 페이지는 ' + last + '페이지예요.'); return; }
+      location.href = pageURL(to);
     });
     row.appendChild(go);
     var box = document.createElement('div');
@@ -552,13 +581,13 @@ enum ContentScript {
     if (isSearchJump(prev) || isSearchJump(next) || /[?&]s_pos=/.test(base.search)) {
       var sub = document.createElement('div');
       sub.className = 'dcapp-pg-row dcapp-pg-sub';
-      if (prev && /[?&]s_pos=/.test(prev.getAttribute('href') || '')) sub.appendChild(btn('이전 검색', prev.href));
+      if (isSearchJump(prev)) sub.appendChild(btn('이전 검색', prev.href));
       if (dateBtn) {
         var d = btn('날짜로 이동', 'javascript:void(0)');
         d.addEventListener('click', function (e) { e.preventDefault(); dateBtn.click(); });
         sub.appendChild(d);
       }
-      if (next && /[?&]s_pos=/.test(next.getAttribute('href') || '')) sub.appendChild(btn('다음 검색', next.href));
+      if (isSearchJump(next)) sub.appendChild(btn('다음 검색', next.href));
       if (sub.children.length) box.appendChild(sub);
     }
     if (bar) bar.parentNode.removeChild(bar);
@@ -793,13 +822,18 @@ enum ContentScript {
       return ('p:' + u.host + u.pathname + u.search).toLowerCase();
     } catch (e) { return ''; }
   }
-  /// 차단할 수 있는 본문 사진·움짤 (디시콘, 스포일러 경고 칸 안, 40px 이하 작은 사진은 제외)
-  function imgEligible(m) {
+  /// 본문 사진·움짤로서 차단 대상이 될 수 있는지 (디시콘, 스포일러 경고 칸 안은 제외). 로딩 중인지·크기는 따지지 않음
+  function imgBlockable(m) {
     if (!m || !m.tagName) return false;
     var body = articleBody();
     if (!body || !body.contains(m) || (m.closest && m.closest('#spoiler'))) return false;
     if (m.tagName === 'VIDEO') return m.classList.contains('dc_mv') && !!galleryMediaURL(m);
-    if (m.tagName !== 'IMG' || dcconKey(m)) return false;
+    return m.tagName === 'IMG' && !dcconKey(m);
+  }
+  /// 차단할 수 있는 본문 사진·움짤 (디시콘, 스포일러 경고 칸 안, 40px 이하 작은 사진은 제외)
+  function imgEligible(m) {
+    if (!imgBlockable(m)) return false;
+    if (m.tagName === 'VIDEO') return true;
     if (!m.complete) return false;      // 아직 안 받은 사진은 크기를 모름 → 받으면(load) 다시 판단
     return (m.naturalWidth || m.width || 0) > 40;
   }
@@ -859,17 +893,20 @@ enum ContentScript {
     var style = cfg.imgStyle === 'gray' ? 'gray' : 'blur';
     Array.prototype.slice.call(body.querySelectorAll('img, video.dc_mv')).forEach(function (m) {
       var wrap = m.parentNode && m.parentNode.classList && m.parentNode.classList.contains('dcapp-imgblk') ? m.parentNode : null;
-      if (!enabled || !imgEligible(m)) { if (wrap) unwrapImg(wrap); return; }
+      if (!enabled || !imgBlockable(m)) { if (wrap) unwrapImg(wrap); return; }
       var url = galleryMediaURL(m);
       var key = imgBlockKey(url);
       if (!key) return;
       if (listed[key] || runtimeImg[key]) {
+        // 다 받은 작은 사진(40px 이하)은 가리지 않음 — 아직 안 받은 사진은 크기를 몰라도 바로 가림 (원본이 잠깐 보이는 것 방지)
+        if (m.tagName === 'IMG' && m.complete && (m.naturalWidth || m.width || 0) <= 40) { if (wrap) unwrapImg(wrap); return; }
         if (!wrap) wrap = wrapImg(m);
         wrap.setAttribute('data-dcapp-blocked', '1');
         wrap.setAttribute('data-dcapp-style', style);
         return;
       }
       if (wrap) unwrapImg(wrap);
+      if (!imgEligible(m)) return;      // 생김새 확인은 크기를 알고 나서(받은 뒤) 함
       if (hasHashes && !imgChecked[key]) { imgChecked[key] = true; post('checkimg', { key: key, url: url }); }
     });
   }
@@ -2968,7 +3005,8 @@ enum ContentScript {
     clearTimeout(cmtRetry.timer); clearTimeout(cmtRetry.watchdog);
     cmtRetry.timer = cmtRetry.watchdog = null;
     document.documentElement.classList.remove('dcapp-cmtretry');
-    hideAllCheck();                                       // 체크로 드러난 답글 칸도 다시 숨김
+    cmtRetry.askedCheck = false;
+    hideAllCheck();                                       // 체크로 드러난 칸도 다시 숨김
     if (wasOn) post('cmtretry', { state: 'stop' });     // 앱의 '댓글을 다는 중' 말풍선을 내리게
   }
   // 다음 누르기 예약 (한 줄로만 — 디시가 연달아 보낸 429가 와도 겹치지 않게)
@@ -3088,18 +3126,22 @@ enum ContentScript {
     }
     // Cloudflare 체크박스가 뜬 상태 → 사용자가 체크할 때까지 누르지 않고 기다림 (체크되면 바로 이어서 누름)
     if (tsNeedsCheck()) {
+      var nowC = Date.now();
       if (!cmtRetry.askedCheck) {
-        cmtRetry.askedCheck = true;
+        cmtRetry.askedCheck = true; cmtRetry.checkAt = nowC; cmtRetry.revealAt = nowC;
         try { revealCheck(f); } catch (e) {}
-        try { dcTs.host.scrollIntoView({ block: 'center' }); } catch (e) {}
         post('cmtretry', { state: 'check' });
+      } else if (nowC - cmtRetry.checkAt < CHECK_LIMIT_MS && nowC - cmtRetry.revealAt >= 1000 && tsShown(tsHost()) === 'hidden') {
+        // 체크박스가 가려졌거나 다른 칸으로 옮겨졌으면 다시 찾아 드러냄 (처음 체크를 요청한 뒤 90초 안에서만)
+        cmtRetry.revealAt = nowC;
+        try { revealCheck(f); } catch (e) {}
       }
       clearTimeout(cmtRetry.watchdog);
       cmtRetry.timer = setTimeout(function () { cmtRetry.timer = null; retryCommentOnce(); }, 100);
       return;
     }
     var resumed = cmtRetry.askedCheck;      // Cloudflare 체크를 기다리다 끝난 것 → 앱 말풍선을 다시 켬
-    cmtRetry.askedCheck = false;
+    cmtRetry.askedCheck = false; cmtRetry.checkAt = 0; cmtRetry.revealAt = 0;
     if (resumed) post('cmtretry', { state: 'start' });
     // 다시 누르기 전에 댓글 목록을 먼저 새로 받고, 그 목록이 화면에 반영된 뒤 등록 (답글 양식은 목록 안에 있어 새로 받으면 사라지므로 그대로 누름)
     if (!cmtRetry.refreshed && !f.closest('.all-comment-lst, [id^="comment_addDiv"]')) {
@@ -3200,6 +3242,8 @@ enum ContentScript {
     };
   }
   function composeFor(ta) {
+    // 체크박스를 눌러야 하는 동안에는 입력창을 열지 않음 (입력창이 체크박스를 가림). 대신 안내만 다시 띄움
+    if (tsCheckActive()) { post('cmtcheckhint', {}); return; }      // 안내만 (쓰던 입력창은 건드리지 않음)
     composeTarget = ta;
     composeInfo(ta).then(function (info) { if (composeTarget === ta) post('cmtcompose', info); });
   }
@@ -3321,10 +3365,11 @@ enum ContentScript {
     }
   }
   function composeSync(p) { var ok = !!composeFill(p); try { setReplyHint(p); } catch (e) {} return ok; }
-  // Cloudflare 체크박스가 필요하면 답글 칸을 드러내되, 체크박스가 든 줄(슬롯과 그 조상)만 남기고 나머지는 숨김
-  // 디시 답글 칸은 .comment-write 안에 닉네임·입력칸·버튼 줄과 확인 칸(.dc-ts-slot)이 형제로 들어 있음
-  var CHECK_LIMIT_MS = 90000, checkWatch = null;
-  function checkBoxOf(form) { return form && form.closest ? form.closest('[id^="comment_addDiv"]') : null; }
+  // Cloudflare 체크박스가 필요하면 체크박스가 실제로 화면에 보이게 드러냄 (기준: 디시 확인 위젯 dcTs.host)
+  // 위젯은 디시가 마지막으로 누른 양식의 확인 칸으로 옮겨지므로, 제출하는 양식과 다른 칸(숨은 답글 칸 등)에 있을 수 있음
+  // → 위젯이 숨은 칸이면 제출하는 양식의 칸으로 옮기고(토큰이 없을 때만), 답글 칸이면 칸을 드러내고(닉네임·입력칸·버튼 줄 숨김), 그 밖의 잘림·숨김은 조상 요소를 풀어서 해결
+  var CHECK_LIMIT_MS = 90000, checkWatch = null, checkStartAt = 0;
+  function tsHost() { return (window.dcTs && dcTs.host && dcTs.host.isConnected) ? dcTs.host : null; }
   /// 확인 칸(슬롯)에서 답글 칸 box까지 올라가며, 올라가는 줄의 형제(닉네임·입력칸·버튼 줄)를 .dcapp-tsx로 숨김 (댓글창 nc 모드에서만)
   function markCheckPath(box) {
     if (!document.documentElement.classList.contains('dcapp-nc')) return;
@@ -3340,12 +3385,7 @@ enum ContentScript {
   }
   function unmarkCheckPath(box) {
     box.removeAttribute('data-dcapp-show');
-    box.removeAttribute('data-dcapp-showat');
     box.querySelectorAll('.dcapp-tsx').forEach(function (el) { el.classList.remove('dcapp-tsx'); });
-  }
-  /// 드러낸 답글 칸을 모두 다시 숨김 (체크가 끝났거나, 댓글이 응답됐거나, 재시도를 멈췄을 때)
-  function hideAllCheck() {
-    document.querySelectorAll('[id^="comment_addDiv"][data-dcapp-show]').forEach(unmarkCheckPath);
   }
   /// 보안 확인 토큰이 생겼는지 (통과했음)
   function tsHasToken() {
@@ -3354,29 +3394,148 @@ enum ContentScript {
       return !!window.turnstile.getResponse(window.dcTs.id);
     } catch (e) { return false; }
   }
-  /// 드러낸 답글 칸을 지켜보다가 토큰이 나오면, 연결이 끊기면, 제한 시간(90초)이 지나면 다시 숨김
+  /// 체크박스가 지금 눌릴 수 있는지: 'ok' 보임 / 'off' 화면 밖(스크롤하면 보임) / 'hidden' 숨김·잘림·다른 것에 가려짐
+  function tsShown(h) {
+    if (!h || !h.isConnected) return 'hidden';
+    var el = h.querySelector('iframe') || h;
+    var r = el.getBoundingClientRect();
+    if (r.width < 20 || r.height < 20 || getComputedStyle(el).visibility === 'hidden') return 'hidden';
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) return 'off';
+    var top = document.elementFromPoint(cx, cy);
+    return top && (top === el || h.contains(top)) ? 'ok' : 'hidden';
+  }
+  /// 체크박스를 가리거나 잘라 내는 조상(overflow 잘림, visibility 숨김)에 표시를 달아 CSS로 풀어 둠 (체크가 끝나면 hideAllCheck가 되돌림)
+  function unclipAncestors(h) {
+    var el = h.querySelector('iframe') || h;
+    var r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    for (var n = h.parentElement, k = 0; n && n !== document.body && k < 12; n = n.parentElement, k++) {
+      var cs = getComputedStyle(n), a = n.getBoundingClientRect();
+      var clips = cs.overflowY !== 'visible' && (cy < a.top || cy > a.bottom || cx < a.left || cx > a.right);
+      if (clips || cs.visibility === 'hidden') n.setAttribute('data-dcapp-unclip', '1');
+    }
+  }
+  /// 드러낸 답글 칸과 풀어 둔 조상을 모두 되돌림 (체크가 끝났거나, 댓글이 응답됐거나, 재시도를 멈췄을 때)
+  function hideAllCheck() {
+    document.querySelectorAll('[id^="comment_addDiv"][data-dcapp-show]').forEach(unmarkCheckPath);
+    document.querySelectorAll('[data-dcapp-unclip]').forEach(function (n) { n.removeAttribute('data-dcapp-unclip'); });
+  }
+  /// 드러낸 칸을 지켜보다가 토큰이 나오거나 90초가 지나면 다시 숨김
   function ensureCheckWatch() {
     if (checkWatch) return;
     checkWatch = setInterval(function () {
-      var boxes = document.querySelectorAll('[id^="comment_addDiv"][data-dcapp-show]');
-      if (!boxes.length) { clearInterval(checkWatch); checkWatch = null; return; }
-      var now = Date.now(), done = tsHasToken();
-      Array.prototype.forEach.call(boxes, function (b) {
-        var at = parseInt(b.getAttribute('data-dcapp-showat'), 10) || now;
-        if (done || !b.isConnected || now - at >= CHECK_LIMIT_MS) unmarkCheckPath(b);
-      });
+      if (!document.querySelector('[data-dcapp-show], [data-dcapp-unclip]')) { clearInterval(checkWatch); checkWatch = null; return; }
+      if (tsHasToken() || Date.now() - checkStartAt >= CHECK_LIMIT_MS) hideAllCheck();
     }, 300);
   }
-  function revealCheck(form) {
-    var box = checkBoxOf(form);
-    if (box) {
-      box.setAttribute('data-dcapp-show', '1');
-      box.setAttribute('data-dcapp-showat', String(Date.now()));
-      markCheckPath(box);
-      ensureCheckWatch();
+  // 체크 상태: 위젯이 '클릭해 주세요'(interactive) 상태가 되고 토큰이 없으면 체크가 시작됨. 토큰이 생기거나 90초가 지나면 끝
+  // 위젯이 다시 그려져 잠깐 대기(pending) 상태가 되어도 체크는 이어지는 것으로 봄 (입력창·가림막을 그 사이에 되돌리지 않게)
+  var tsEp = { active: false, done: false, since: 0 }, tsCheckLast = false, checkSignalAt = 0;
+  function tsInteractive() { return !!(window.dcTs && dcTs.state === 'interactive'); }
+  function tsCheckActive() {
+    if (tsHasToken()) return false;
+    return tsEp.active || (!tsEp.done && tsInteractive());
+  }
+  /// 체크가 필요한 동안 로딩 가림막(.loading-box)을 숨김 (반투명 전체 화면이라 체크박스 위를 덮음). 상태가 바뀔 때만 앱에 알림
+  function syncTsCheckClass() {
+    if (tsHasToken()) { tsEp.active = false; tsEp.done = false; }
+    else {
+      if (!tsEp.active && !tsEp.done && tsInteractive()) { tsEp.active = true; tsEp.since = Date.now(); checkSignalAt = tsEp.since; }
+      if (tsEp.active && Date.now() - tsEp.since >= CHECK_LIMIT_MS) { tsEp.active = false; tsEp.done = true; }
+      if (tsEp.done && !tsInteractive()) tsEp.done = false;
     }
-    try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
+    var on = tsEp.active;
+    document.documentElement.classList.toggle('dcapp-tscheck', on);
+    if (on !== tsCheckLast) { tsCheckLast = on; post('tscheck', { on: on }); }
+    tsAuxSync();
+  }
+  setInterval(syncTsCheckClass, 300);
+  /// 보조 칸: 체크를 눌러야 하는데 위젯이 화면에서 눌릴 수 없는 자리(숨은 칸·가려짐)에 있으면, 화면 아래쪽 카드에 위젯을 다시 그림
+  /// 체크 한 번에 한 번만 띄우고, 닫기 버튼으로 닫으면 그 체크 동안은 다시 띄우지 않음. 토큰이 생기거나 90초가 지나면 없앰
+  var tsAux = { el: null, uses: 0, closed: false };
+  function tsAuxSync() {
+    if (!tsEp.active) { removeTsAux(); tsAux.closed = false; return; }
+    if (tsAux.closed || tsAux.el) return;
+    if (Date.now() - tsEp.since < 800) return;
+    if (tsShown(tsHost()) === 'hidden') ensureTsAux();
+  }
+  function ensureTsAux() {
+    var box = document.createElement('div');
+    box.id = 'dcapp-tsaux';
+    box.innerHTML = '<div class="dcapp-tsaux-tit">Cloudflare 확인</div>' +
+      '<div class="dcapp-tsaux-sub">체크박스를 누르면 이어서 등록해요</div>' +
+      '<div class="dc-ts-slot dcapp-tsaux-slot"></div>' +
+      '<button type="button" class="dcapp-tsaux-x" aria-label="닫기">×</button>';
+    (document.body || document.documentElement).appendChild(box);
+    tsAux.el = box; tsAux.uses++;
+    box.querySelector('.dcapp-tsaux-x').addEventListener('click', function () { tsAux.closed = true; removeTsAux(); });
+    try { var rd = window.__dcappOrigTsRender || window.dcTsRender; if (typeof rd === 'function') rd(box.querySelector('.dc-ts-slot')); } catch (e) {}
+  }
+  function removeTsAux() {
+    if (!tsAux.el) return;
+    if (tsAux.el.parentNode) tsAux.el.parentNode.removeChild(tsAux.el);
+    tsAux.el = null;
+  }
+  function tsAuxDiag() {
+    var age = checkSignalAt ? Math.round((Date.now() - checkSignalAt) / 1000) : -1;
+    return ' 체크중=' + (tsCheckActive() ? 'Y' : 'N') + ' 체크신호=' + (age < 0 ? '없음' : age + '초 전') +
+      ' 보조칸=' + (tsAux.el ? '떠 있음' : (tsAux.closed ? '닫음' : '없음')) + '(' + tsAux.uses + '회)';
+  }
+  /// 체크박스를 드러냄. 반환 'check'는 앱이 '체크해 주세요' 안내를 띄울 때 쓰는 신호
+  function revealCheck(form) {
+    syncTsCheckClass();
+    var h = tsHost();
+    // 위젯이 숨은 칸(다른 답글 칸 등)에 있으면 제출하는 양식의 확인 칸으로 옮김 — 토큰이 아직 없을 때만, 화면에 보이는 칸은 옮기지 않음
+    var moveTs = window.__dcappOrigTsUse || window.dcTsUse;     // 숨은 칸에서 꺼낼 때는 디시 원래 함수 (가드가 막지 않게)
+    if (form && tsShown(h) === 'hidden' && !tsHasToken() && !(h && form.contains(h)) &&
+        typeof moveTs === 'function' && form.querySelector('#dc-turnstile, .dc-ts-slot')) {
+      try { moveTs.call(window, form); } catch (e) {}
+      h = tsHost();
+    }
+    if (h) {
+      if (!document.querySelector('[data-dcapp-show], [data-dcapp-unclip]')) checkStartAt = Date.now();
+      var box = h.closest('[id^="comment_addDiv"]');
+      if (box && !box.hasAttribute('data-dcapp-show')) { box.setAttribute('data-dcapp-show', '1'); markCheckPath(box); }
+      // 화면 밖이면 먼저 화면 안으로 가져온 뒤에 가려짐을 판단 (스크롤 전에는 잘린 것이 안 보이는 경우가 있음)
+      if (tsShown(h) === 'off') { try { h.scrollIntoView({ block: 'center' }); } catch (e) {} }
+      if (tsShown(h) === 'hidden') unclipAncestors(h);
+    } else if (form) {
+      try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
+    }
+    ensureCheckWatch();
     return 'check';
+  }
+  function tsDescOf(n) {
+    return n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') +
+      (typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/)[0] : '');
+  }
+  /// 진단: 체크박스(확인 위젯) 위치 한 줄 — 어느 양식인지, 칸 좌표·크기, 가리는 조상, 화면에 보이는지, 로딩 가림막 상태
+  function tsHostDiag() {
+    try {
+      var lb = document.querySelector('.loading-box');
+      var lbs = lb ? getComputedStyle(lb).display + (document.documentElement.classList.contains('dcapp-tscheck') ? '/가림해제' : '') : '없음';
+      var st = (window.dcTs && dcTs.state) || '-';
+      var h = tsHost();
+      if (!h) return 'cfhost: 칸 연결 없음 state=' + st + ' 로딩가림막=' + lbs + tsAuxDiag();
+      var box = h.closest('[id^="comment_addDiv"]'), form = h.closest('form');
+      var where = box ? box.id : (form ? (form.id || '양식') : '양식 밖');
+      var r = h.getBoundingClientRect(), fr = h.querySelector('iframe'), ir = fr ? fr.getBoundingClientRect() : null;
+      var hid = [];
+      for (var n = h.parentElement, k = 0; n && n !== document.body && k < 20 && hid.length < 6; n = n.parentElement, k++) {
+        var cs = getComputedStyle(n), why = [];
+        if (cs.display === 'none') why.push('display:none');
+        if (cs.visibility === 'hidden') why.push('visibility');
+        if (cs.overflowY !== 'visible' && n.getBoundingClientRect().height < r.height) why.push('overflow');
+        if (why.length) hid.push(tsDescOf(n) + '(' + why.join(',') + ')');
+      }
+      return 'cfhost: 위치=' + where + ' 상태=' + tsShown(h) +
+        ' 칸=' + [r.left, r.top, r.width, r.height].map(Math.round).join(',') +
+        ' iframe=' + (ir ? Math.round(ir.width) + 'x' + Math.round(ir.height) : '없음') +
+        ' 가림=' + (hid.join(' < ') || '없음') +
+        ' 드러냄=' + document.querySelectorAll('[data-dcapp-show]').length +
+        ' 풀어둠=' + document.querySelectorAll('[data-dcapp-unclip]').length +
+        ' 로딩가림막=' + lbs + ' state=' + st + tsAuxDiag();
+    } catch (e) { return 'cfhost: 진단 실패 ' + e.message; }
   }
   // 코드 새로고침: 디시 댓글 양식의 새로고침 버튼을 눌러 새 그림을 받아 돌려줌
   async function cmtRefreshCode(p) {
@@ -3580,7 +3739,8 @@ enum ContentScript {
     var st = dcTs.state || '';
     if (tsRefocus.prev === 'interactive' && st !== 'interactive' && /^ok/.test(st)) {
       var el = tsRefocus.el;
-      if (el && document.body.contains(el) && document.activeElement !== el) {
+      // 재시도 루프가 이어서 등록하는 중이면 입력창을 다시 열지 않음 (루프가 바로 등록함)
+      if (!cmtRetry.on && el && document.body.contains(el) && document.activeElement !== el) {
         replyFocusTarget = el;
         focusReply();
         if (!nativeCmtOn()) post('wantfocus', {});
@@ -3627,6 +3787,20 @@ enum ContentScript {
     guarded.__dcappGuard = true;
     window.dcTsReset = guarded;
   })();
+  // 디시는 댓글 칸에 포커스가 가거나 답글 칸을 열 때 위젯을 그 양식의 칸으로 옮김 → 위젯이 새로 그려져 챌린지가 처음부터 돌고 체크박스가 사라짐
+  // 체크박스를 눌러야 하는 동안에는 옮기지 않음. 디시 원래 함수는 __dcappOrigTsUse로 보관 (숨은 칸에서 꺼낼 때 revealCheck가 씀)
+  (function guardTsUse() {
+    var orig = window.dcTsUse;
+    if (typeof orig !== 'function' || orig.__dcappGuard) return;
+    window.__dcappOrigTsUse = orig;
+    var guarded = function () {
+      if (tsCheckActive()) return;
+      return orig.apply(this, arguments);
+    };
+    guarded.__dcappGuard = true;
+    window.dcTsUse = guarded;
+  })();
+  window.__dcappOrigTsRender = window.dcTsRender;     // 보조 칸이 위젯을 그릴 때 쓰는 디시 함수
   // 진단: 보안 확인 상태 한 줄 (스크립트 로드 여부, 위젯 생성 여부, 디시가 기록한 오류)
   function tsDiag() {
     try {
@@ -4348,8 +4522,9 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v274-mgmtlog', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v278-cfbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
+    out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
       var probe = document.createElement('div');
@@ -4610,6 +4785,18 @@ enum ContentScript {
     setTimeout(function () { scheduled = false; try { apply(); } catch (e) {} }, 80);
   }
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  // 본문에 새로 들어온 사진은 80ms 디바운스를 기다리면 그 사이에 원본이 보이므로, 변화가 생기는 즉시(그리기 전에) 차단 칸을 씌움
+  new MutationObserver(function (muts) {
+    var hit = false;
+    for (var i = 0; i < muts.length && !hit; i++) {
+      var added = muts[i].addedNodes;
+      for (var j = 0; j < added.length && !hit; j++) {
+        var n = added[j];
+        if (n.nodeType === 1 && (/^(IMG|VIDEO)$/.test(n.tagName) || (n.querySelector && n.querySelector('img, video')))) hit = true;
+      }
+    }
+    if (hit) { try { applyImageBlocks(cfg.enabled !== false); } catch (e) {} }
+  }).observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener('load', function (e) {
     var t = e.target, body = articleBody();
     if (t && t.tagName === 'IMG' && body && body.contains(t)) schedule();

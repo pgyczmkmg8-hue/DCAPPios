@@ -1252,9 +1252,9 @@ struct ControlBarOrderView: View {
                 Text("가로: 화면 아래쪽에 가로로. 세로: 화면 오른쪽 가운데에 세로로.\n휴대폰을 가로로 쓸 때 세로 막대는 아이콘만 보여요.")
             }
             Section {
-                Toggle("상단바 줄이기 (듀오)", isOn: $compactTopBar)
+                Toggle("상단바 줄이기", isOn: $compactTopBar)
             } footer: {
-                Text("듀오처럼 시계가 옆 세로 줄에 있는 화면에서, 제목·버튼을 위쪽 빈 띠 안에 그려 파란 영역을 줄여요. 스크롤해도 상단바가 위로 밀려 올라가지 않아요.")
+                Text("일반 아이폰에서 상단바를 화면 위에 고정해요. 세로는 낮게, 가로는 상단 줄에 시계·배터리와 제목을 같이 둬요. 스크롤해도 위로 밀려 올라가지 않아요. 끄면 시스템 상단바를 써요.")
             }
             Section {
                 Toggle("좌우반전", isOn: $mirrored)

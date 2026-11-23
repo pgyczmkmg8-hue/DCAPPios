@@ -103,8 +103,6 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var writeToolbarHeight: CGFloat = 0
     /// 페이지를 스크롤하는 동안 true → 컨트롤바를 화면 밖으로 넣음, 멈추면 다시 false
     @Published var isScrolling = false
-    /// 글 읽으며 아래로 스크롤하는 중이면 true (상단바 숨김용). 위로 올리거나 맨 위 근처면 false
-    @Published var navHiddenByScroll = false
     /// 컨트롤바 '내리면 숨기기' 방식: 아래로 스크롤하면 true(멈춰도 유지), 위로 올리거나 맨 위 근처면 false
     @Published var barHiddenByDirection = false
     /// 댓글 영역이 화면에 걸쳐 있는지 (페이지 스크립트가 알려줌). 걸쳐 있는 동안 컨트롤바를 다시 보여 줌 (지나쳐 내려가면 다시 숨김)
@@ -114,11 +112,6 @@ final class WebViewModel: NSObject, ObservableObject {
     private var barRefY: CGFloat = 0
     /// 댓글 영역에 닿아 컨트롤바를 꺼낸 직후 이 시각까지는 다시 숨기지 않음 (관성으로 곧바로 숨어 깜빡이는 것 방지)
     private var barHoldUntil = Date.distantPast
-    private var lastScrollY: CGFloat = 0
-    private var scrollAnchorY: CGFloat = 0
-    private var scrollDirDown = true
-    /// 앱이 상단바를 켜고 끈 시각 — 그 직후 0.5초는 상단바 변화로 생기는 흔들림이라 방향을 세지 않음
-    private var navToggleAt = Date.distantPast
     /// 직전 화면 폭 (회전으로 폭이 바뀌었는지 보려고)
     private var lastViewWidth: CGFloat = -1
     /// 마지막으로 손가락·관성 스크롤 샘플이 온 시각 (그 직후 0.3초 안의 '손가락 아님' 샘플은 깃발이 잠깐 꺼진 것으로 보고 이어서 셈)
@@ -149,6 +142,10 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var toast: String?
     /// 429로 막힌 댓글을 자동으로 다시 누르는 중 ('댓글을 다는 중입니다' 말풍선)
     @Published var isRetryingComment = false
+    /// 페이지가 Cloudflare 체크를 기다리는 중인지 (JS 'tscheck' 신호). 진단·재시도 중 새로고침 판단에 씀
+    private(set) var tsCheckOn = false
+    private(set) var tsCheckCount = 0
+    private(set) var lastCheckSignalAt: Date?
     private var toastTask: Task<Void, Never>?
 
     private var cancellables = Set<AnyCancellable>()
@@ -308,33 +305,11 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.load(URLRequest(url: url))
     }
 
-    private func updateNavHidden(_ sv: UIScrollView) {
-        let off = sv.contentOffset.y
-        let y = off + sv.adjustedContentInset.top
-        defer { lastScrollY = off }
-        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { scrollAnchorY = off; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
-        let dy = off - lastScrollY
-        if dy == 0 { return }
-        if (dy > 0) != (scrollDirDown) { scrollDirDown = dy > 0; scrollAnchorY = lastScrollY }   // 방향이 바뀌면 기준점 새로
-        let moved = off - scrollAnchorY      // 같은 방향으로 움직인 누적 거리
-        if y < 40 { if navHiddenByScroll { setNavHidden(false) }; return }
-        if moved > 30, y > 100, !navHiddenByScroll { setNavHidden(true) }
-        else if moved < -30, navHiddenByScroll { setNavHidden(false) }
-    }
-
-    /// 상단바(와 그 위 남색 띠)를 접고 펴기: 애니메이션 트랜잭션 안에서 바꿔야 시스템 상단바·웹뷰 안전 영역·남색 띠가 휙 바뀌지 않고 같은 곡선으로 움직임
-    /// (전환 중 생기는 오프셋 흔들림은 navToggleAt의 0.5초 무시 구간이 덮음)
-    private func setNavHidden(_ hidden: Bool) {
-        navToggleAt = Date()
-        withAnimation(.easeInOut(duration: 0.25)) { navHiddenByScroll = hidden }
-    }
-
     /// 아래로 24pt 스크롤하면 컨트롤바를 숨기고, 위로 24pt 올리면 다시 보임 (멈춰도 그대로)
     /// 방향이 바뀔 때마다 기준점을 새로 잡던 방식은 손가락 떨림(−1pt 한 번)에도 누적이 0으로 돌아가 숨김이 안 먹혔음
     /// → 보이는 동안은 가장 위로 올라간 곳(barRefY)을, 숨은 동안은 가장 아래로 내려간 곳을 기준으로 삼아 거기서 24pt 되돌아와야 바뀜
     private func updateBarHiddenByDirection(_ sv: UIScrollView) {
         let off = sv.contentOffset.y
-        guard Date().timeIntervalSince(navToggleAt) > 0.5 else { barRefY = off; barStats.windowSkip += 1; return }   // 상단바가 바뀌며 생기는 흔들림은 무시
         let y = off + sv.adjustedContentInset.top
         if y < 40 {      // 맨 위 근처는 늘 보임
             if barHiddenByDirection { setBarHidden(false, at: off) }
@@ -368,7 +343,7 @@ final class WebViewModel: NSObject, ObservableObject {
         lastViewWidth = sv.bounds.width
         if widthChanged {
             barStats.widthChanges += 1
-            lastScrollY = off; scrollAnchorY = off; barRefY = off
+            barRefY = off
             if barHiddenByDirection { setBarHidden(false, at: off) }
             return
         }
@@ -378,12 +353,11 @@ final class WebViewModel: NSObject, ObservableObject {
         guard userDriven || recentUser else {
             // 손가락과 상관없는 움직임(회전 뒤 자리 맞춤·로딩·키보드·페이지가 스스로 옮김): 세지 않고 기준점만 지금 위치로
             barStats.idle += 1
-            lastScrollY = off; barRefY = off
+            barRefY = off
             return
         }
         if userDriven { lastUserSampleAt = now; barStats.user += 1 } else { barStats.flap += 1 }
         updateBarHiddenByDirection(sv)
-        updateNavHidden(sv)
         if !isScrolling { isScrolling = true }
         scrollStopTask?.cancel()
         scrollStopTask = Task { @MainActor [weak self] in
@@ -478,12 +452,22 @@ final class WebViewModel: NSObject, ObservableObject {
                 showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
             case "check":
                 showToast("Cloudflare 체크박스를 누른 뒤 아래 '등록'을 눌러 주세요")
-                commentCompose = nil
+                closeComposerForCheck(clearDraft: false)
             default:
                 s.sending = false
                 showToast("댓글 칸을 못 찾았어요. 댓글을 다시 눌러 주세요")
             }
         }
+    }
+
+    /// Cloudflare 체크를 눌러야 할 때: 앱 입력창을 내리고 키보드도 내려서 페이지의 체크박스가 가려지지 않게 함
+    /// clearDraft: 쓰던 글이 디시 댓글 칸에 이미 옮겨져 있어 보관본을 지워도 될 때 (등록을 누른 뒤)
+    func closeComposerForCheck(clearDraft: Bool) {
+        guard commentCompose != nil else { return }
+        if clearDraft, let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
+        commentCarry = nil
+        withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     /// 입력창 닫기 (내용은 디시 댓글 칸에 채워 둠)
@@ -560,7 +544,7 @@ final class WebViewModel: NSObject, ObservableObject {
             showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
         case "check":
             showToast("Cloudflare 체크박스를 누른 뒤 글자콘을 다시 등록해 주세요")
-            commentCompose = nil
+            closeComposerForCheck(clearDraft: false)
         default:
             s.sending = false
             showToast("글자콘을 올리지 못했어요")
@@ -591,7 +575,7 @@ final class WebViewModel: NSObject, ObservableObject {
             showToast("댓글 기능을 아직 준비 중이에요. 잠시 뒤 다시 눌러 주세요")
         case "check":
             showToast("Cloudflare 체크박스를 누른 뒤 디시콘을 다시 골라 주세요")
-            commentCompose = nil
+            closeComposerForCheck(clearDraft: false)
         default:
             s.sending = false
             showToast("디시콘을 올리지 못했어요")
@@ -1167,6 +1151,22 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 댓글 새로고침
 
     /// 디시의 댓글 ⟳ 버튼을 대신 누르고, 못 찾으면 페이지를 새로고침한 뒤 댓글 위치로 이동
+    /// 알림으로 지금 보는 글과 같은 글이 열릴 때: 주소를 바꿔 불러오면 WebKit이 새로 받지 않아 아무 일도 안 일어나므로 다시 받아 옴
+    /// 댓글 알림이면 댓글 자리로. 보내는 중·체크 대기·재시도 중이면 댓글 등록이 끊기므로 새로고침하지 않고 알림만
+    func reloadPost(commentsAnchor: Bool) {
+        if commentCompose?.sending == true || tsCheckOn || isRetryingComment {
+            showToast("댓글을 등록하는 중이라 새로고침은 등록이 끝난 뒤에 할게요")
+            return
+        }
+        if let s = commentCompose {
+            // 쓰던 댓글은 보관해 두고 입력창을 내림 (같은 칸을 다시 누르면 이어서 쓸 수 있음)
+            if !s.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { CommentDraftStore.save(s) }
+            withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil }
+        }
+        if commentsAnchor { scrollToCommentsAfterLoad = true }
+        reload()
+    }
+
     func refreshComments() {
         // 댓글만 다시 받으면 다른 기기에서 쓴 새 댓글이 안 보여서, 글을 다시 불러온 뒤 댓글 쪽으로 이동
         scrollToCommentsAfterLoad = true
@@ -1996,7 +1996,19 @@ final class WebViewModel: NSObject, ObservableObject {
     func diagnose() async -> String {
         let page = (await call("return window.__dcapp ? window.__dcapp.diagnose() : '스크립트가 로드되지 않았어요: ' + location.href;") as? String)
             ?? "진단 정보를 가져오지 못했어요."
-        return StatusBarStyler.diagnostics() + "\n" + barHideDiagnostics() + "\n" + page
+        return StatusBarStyler.diagnostics() + "\n" + barHideDiagnostics() + "\n" + commentDiagnostics() + "\n" + page
+    }
+
+    /// 진단: 앱 댓글 입력창 상태 (열림·등록 중), 체크 대기 여부, 재시도 말풍선, 체크 신호 횟수와 마지막 시각
+    func commentDiagnostics() -> String {
+        let box = commentCompose.map { $0.sending ? "열림(등록 중)" : "열림" } ?? "없음"
+        let last = lastCheckSignalAt.map { "\(Int(Date().timeIntervalSince($0)))초 전" } ?? "없음"
+        return "comment: 앱 입력창=\(box) 체크대기=\(tsCheckOn ? "Y" : "N") 재시도말풍선=\(isRetryingComment ? "Y" : "N") 체크신호=\(tsCheckCount)회 마지막=\(last)"
+    }
+
+    private func noteCheckSignal() {
+        tsCheckCount += 1
+        lastCheckSignalAt = Date()
     }
 
     /// 컨트롤바 숨김 판정에 쓰는 값 (실기기에서 숨김이 안 먹힐 때 이 줄들로 원인을 좁힘)
@@ -2011,10 +2023,10 @@ final class WebViewModel: NSObject, ObservableObject {
         return [
             "--- 컨트롤바 숨김 ---",
             "autoHideBar=\(autoHide) autoHideStyle=\(style)",
-            "barHiddenByDirection=\(barHiddenByDirection) commentsInView=\(commentsInView) isScrolling=\(isScrolling) navHiddenByScroll=\(navHiddenByScroll)",
+            "barHiddenByDirection=\(barHiddenByDirection) commentsInView=\(commentsInView) isScrolling=\(isScrolling)",
             "off=\(Int(sv.contentOffset.y)) insetTop=\(Int(sv.adjustedContentInset.top)) bounds=\(Int(sv.bounds.width))x\(Int(sv.bounds.height)) barRefY=\(Int(barRefY))",
             "samples: user=\(st.user) flap=\(st.flap) idle=\(st.idle) windowSkip=\(st.windowSkip) widthChg=\(st.widthChanges)",
-            "toggles: hide=\(st.hide) show=\(st.show) cmtShow=\(st.cmtShow) last=\(st.lastToggle) \(ago) ago | navReset=\(st.navResets) | navToggleAgo=\(String(format: "%.0f", Date().timeIntervalSince(navToggleAt)))s",
+            "toggles: hide=\(st.hide) show=\(st.show) cmtShow=\(st.cmtShow) last=\(st.lastToggle) \(ago) ago | navReset=\(st.navResets)",
             "view: tucked=\(viewTucked) tuckCount=\(viewTuckCount) changedAgo=\(viewTuckChangedAt == .distantPast ? "-" : String(format: "%.0fs", Date().timeIntervalSince(viewTuckChangedAt)))",
             "tracking=\(sv.isTracking) dragging=\(sv.isDragging) decelerating=\(sv.isDecelerating)",
         ].joined(separator: "\n")
@@ -2206,16 +2218,28 @@ extension WebViewModel: WKScriptMessageHandler {
             case "start": isRetryingComment = true
             case "check":      // Cloudflare 체크가 필요: 말풍선은 내리고 안내 (체크가 끝나면 페이지가 start를 다시 보냄)
                 isRetryingComment = false
+                noteCheckSignal()
                 showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)", seconds: 8)
-                if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
-                commentCarry = nil
-                if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
+                closeComposerForCheck(clearDraft: true)
             case "done":
                 isRetryingComment = false
                 showToast("댓글이 등록됐어요 (\((body["tries"] as? NSNumber)?.intValue ?? 0)번 다시 눌렀어요)")
             case "stop": isRetryingComment = false
             default: break
             }
+        case "tscheck":   // 페이지가 Cloudflare 체크를 기다리기 시작/끝남 — 기다리기 시작하면 등록 중이던 입력창은 내려서 체크박스가 보이게 함
+            let on = (body["on"] as? Bool) ?? false
+            tsCheckOn = on
+            if on {
+                noteCheckSignal()
+                // 체크박스가 가려지지 않게 입력창을 내림. 보내는 중이면 글은 디시 칸에 있고, 쓰던 중이면 보관해 둠 (같은 칸을 다시 누르면 이어 씀)
+                if let s = commentCompose {
+                    if !s.sending, !s.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { CommentDraftStore.save(s) }
+                    closeComposerForCheck(clearDraft: false)
+                }
+            }
+        case "cmtcheckhint":   // 체크가 끝나기 전에 댓글 칸을 누름 → 입력창은 열지 않고 안내만
+            showToast("Cloudflare 체크박스를 눌러주세요 (누르면 이어서 등록해요)", seconds: 8)
         case "cmtcompose":   // 댓글·대댓글 칸을 누름 → 앱 댓글 입력창
             if let s = commentCompose, s.sameTarget(body) { break }
             let ns = CommentComposeSession(info: body, gallery: currentGalleryID)
@@ -2374,6 +2398,7 @@ extension WebViewModel: WKNavigationDelegate {
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
+        tsCheckOn = false            // 새 페이지는 체크 상태도 새로 시작
         isRetryingComment = false    // 새 페이지로 가면 댓글 재시도 말풍선도 내림 (남아 있으면 영구히 떠 있게 됨)
         barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임
         barRefY = webView.scrollView.contentOffset.y

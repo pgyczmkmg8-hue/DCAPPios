@@ -110,11 +110,15 @@ final class AppRouter: ObservableObject {
 
     func open(_ url: URL) {
         sheet = nil
-        if splitActive, PostKey.from(url) != nil {
-            detailBrowser.load(url)
-        } else {
-            primaryBrowser.load(url)
+        let key = PostKey.from(url)
+        // 글 주소는 분할이면 오른쪽(글) 화면, 아니면 지금 화면에서 연다 (기존과 같음)
+        let target = (splitActive && key != nil) ? detailBrowser : primaryBrowser
+        // 그 화면에 이미 같은 글이 떠 있으면 주소만 바꿔 불러서는 아무 일도 안 일어남 (WebKit이 새로 받지 않음) → 다시 받아 옴
+        if let key, let cur = target.url, PostKey.from(cur) == key {
+            target.reloadPost(commentsAnchor: url.fragment == "comment_box")
+            return
         }
+        target.load(url)
     }
 
     /// 분할 화면인데 왼쪽에 글이 떠 있으면 → 글은 오른쪽으로, 왼쪽은 목록으로 (뒤로 갈 곳이 없으면 그 갤러리 목록)
