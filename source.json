@@ -1,0 +1,50 @@
+{
+  "name": "DCApp",
+  "identifier": "MACHU.DCApp.source",
+  "subtitle": "디시인사이드 모바일 개인용 앱",
+  "sourceURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/source.json",
+  "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/DCApp/Assets.xcassets/AppIcon-1.%20BOOMCAT.appiconset/Icon-iOS-Default-1024@1x.png",
+  "tintColor": "#3B4890",
+  "apps": [
+    {
+      "name": "DCApp",
+      "bundleIdentifier": "MACHU.DCApp",
+      "developerName": "DCApp",
+      "subtitle": "디시인사이드 모바일을 더 편하게",
+      "localizedDescription": "디시인사이드 모바일을 더 편하게 보도록 만든 개인용 앱이에요. 글 목록 말머리 · 필터, 자동 이어 불러오기, 차단·메모, 식별코드·IP 작성글 찾기, 글쓰기, 다중 계정, 앱 잠금 등을 제공해요.",
+      "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/DCApp/Assets.xcassets/AppIcon-1.%20BOOMCAT.appiconset/Icon-iOS-Default-1024@1x.png",
+      "tintColor": "#3B4890",
+      "category": "social",
+      "versions": [
+        {
+          "version": "0.10.2",
+          "buildVersion": "0",
+          "date": "2026-11-24",
+          "localizedDescription": "튜토리얼 개편, 듀오 가로 바 화면 사용 개선, 댓글 입력칸 고정 수정, 자동 이어 불러오기 복구, 말머리 줄 필터 고정, 목록 광고 줄 정리",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.10.2.0/DCApp.0.10.2.0.ipa",
+          "size": 30951504,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.10.1",
+          "buildVersion": "0",
+          "date": "2026-11-24",
+          "localizedDescription": "글 목록 페이지 구분선과 자동 이어 불러오기, 말머리별 필터, 댓글수 캡슐, 추천 자동 재시도, 듀오 안전 영역 정렬",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.10.1.0/DCApp.0.10.1.0.ipa",
+          "size": 30935301,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.9.19",
+          "buildVersion": "5",
+          "date": "2026-11-24",
+          "localizedDescription": "듀오 상단 띠 0.9.19 기준 복원, 일반 아이폰 상단바 고정, 글 제목 폭 수정",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.9.19.5/DCApp.0.9.19.5.ipa",
+          "size": 30915180,
+          "minOSVersion": "16.0"
+        }
+      ]
+    }
+  ],
+  "news": []
+}
