@@ -89,6 +89,53 @@ struct WriteHead: Identifiable, Hashable {
 }
 
 @MainActor
+/// 디시 금지어가 있는 자리: 제목, 또는 글자 칸(블록) 안의 UTF-16 범위
+enum BannedWordSpot {
+    case title(NSRange)
+    case body(UUID, NSRange)
+}
+
+/// 금지어 범위를 입력칸에서 선택하고 화면에 보이게 하는 도우미 (제목 UITextField · 본문 UITextView 모두 UITextInput)
+enum NativeTextSelect {
+    /// 키보드 포커스를 가진 제목 칸(UITextField)
+    @MainActor static func focusedTextField() -> UITextField? {
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            for w in scene.windows {
+                if let f = firstResponder(in: w) as? UITextField { return f }
+            }
+        }
+        return nil
+    }
+
+    @MainActor private static func firstResponder(in v: UIView) -> UIView? {
+        if v.isFirstResponder { return v }
+        for s in v.subviews {
+            if let f = firstResponder(in: s) { return f }
+        }
+        return nil
+    }
+
+    /// UTF-16 범위를 입력칸의 선택으로 (디시 bwFocusWord의 setSelectionRange와 같은 자리)
+    @MainActor static func select(_ r: NSRange, in input: UITextInput) {
+        guard let start = input.position(from: input.beginningOfDocument, offset: r.location),
+              let end = input.position(from: start, offset: r.length),
+              let range = input.textRange(from: start, to: end) else { return }
+        input.selectedTextRange = range
+    }
+
+    /// 선택한 자리가 글쓰기 화면의 바깥 스크롤 안에서 보이도록 스크롤 (위·아래 여유를 줘서 키보드 뒤로 숨지 않게)
+    @MainActor static func revealSelection(in view: UIView) {
+        guard let input = view as? UITextInput, let range = input.selectedTextRange else { return }
+        let caret = input.firstRect(for: range)
+        guard !caret.isNull, !caret.isEmpty else { return }
+        var v: UIView? = view.superview
+        while let s = v, !(s is UIScrollView) { v = s.superview }
+        guard let sv = v as? UIScrollView else { return }
+        let rect = view.convert(caret, to: sv).insetBy(dx: -8, dy: -120)
+        sv.scrollRectToVisible(rect, animated: true)
+    }
+}
+
 final class NativeWriteSession: ObservableObject {
     let galleryID: String
     @Published var galleryName = ""
@@ -138,6 +185,38 @@ final class NativeWriteSession: ObservableObject {
     var activeBlockID: UUID?
     private var textViews: [UUID: WeakTextView] = [:]
     private struct WeakTextView { weak var view: UITextView? }
+
+    /// 디시 금지어 위치 표시 요청 (바뀔 때마다 bannedTick이 올라가 화면이 그 자리를 선택함)
+    var bannedSpot: BannedWordSpot?
+    @Published var bannedTick = 0
+
+    /// 디시 금지어 위치: 제목 → 본문 글자 칸 순(디시 웹 bwFocusWord와 같은 순서)으로 처음 나오는 곳. 없으면 nil
+    func locateBannedWord(_ word: String) -> BannedWordSpot? {
+        // 디시가 주는 단어의 역슬래시 이스케이프는 떼고 찾음 (디시 bwFocusWord와 같은 처리)
+        let w = word.replacingOccurrences(of: "\\", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !w.isEmpty else { return nil }
+        let t = NSString(string: title).range(of: w, options: .caseInsensitive)
+        if t.location != NSNotFound { return .title(t) }
+        for b in blocks where b.image == nil {
+            let r = NSString(string: b.rich.string).range(of: w, options: .caseInsensitive)
+            if r.location != NSNotFound { return .body(b.id, r) }
+        }
+        return nil
+    }
+
+    /// 금지어 자리를 찾아 선택 요청을 올림. 찾았으면 true
+    func showBannedWord(_ word: String) -> Bool {
+        guard let spot = locateBannedWord(word) else { return false }
+        bannedSpot = spot
+        bannedTick += 1
+        return true
+    }
+
+    /// 화면에 붙어 있는 글자 칸 (선택·포커스용)
+    func registeredTextView(of id: UUID) -> UITextView? {
+        guard let tv = textViews[id]?.view, tv.window != nil else { return nil }
+        return tv
+    }
 
     func register(_ tv: UITextView, for id: UUID) { textViews[id] = WeakTextView(view: tv) }
     private var activeTextView: UITextView? {
@@ -508,6 +587,8 @@ struct NativeWriteView: View {
         }
         // 안내 문구 (브라우저 화면의 안내는 이 화면에 가려서 여기서도 띄움)
         .overlay(alignment: .bottom) { NativeWriteToast(model: model).padding(.bottom, 70) }
+        // 디시 금지어로 등록이 막히면 그 단어 자리를 선택해 둠 (안내창을 닫은 뒤에 옴)
+        .onChangeCompat(of: session.bannedTick) { _, _ in applyBannedSpot() }
         // .current: 사진 앱에 있는 원본 파일 그대로 받음 (HEIC 등은 올리기 전에 JPEG로 바꿈)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItems, maxSelectionCount: 20,
                       matching: .images, preferredItemEncoding: .current, photoLibrary: .shared())
@@ -1135,6 +1216,30 @@ struct NativeWriteView: View {
         Button(action: action) { toolIcon(icon, on: on) }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
+    }
+
+    /// 금지어 자리로 가서 그 글자만 선택: 제목이면 제목 칸, 본문이면 그 글자 칸. 키보드가 올라오는 시간을 조금 기다린 뒤 선택
+    private func applyBannedSpot() {
+        guard let spot = session.bannedSpot else { return }
+        switch spot {
+        case .title(let r):
+            focus = .title
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                guard let tf = NativeTextSelect.focusedTextField() else { return }
+                NativeTextSelect.select(r, in: tf)
+                NativeTextSelect.revealSelection(in: tf)
+            }
+        case .body(let id, let r):
+            focus = nil
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                guard let tv = session.registeredTextView(of: id) else { return }
+                tv.becomeFirstResponder()
+                NativeTextSelect.select(r, in: tv)
+                NativeTextSelect.revealSelection(in: tv)
+            }
+        }
     }
 
     private var submittingCover: some View {

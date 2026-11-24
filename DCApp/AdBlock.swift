@@ -61,6 +61,10 @@ enum AdBlock {
     static func apply(to controller: WKUserContentController) {
         controller.removeAllContentRuleLists()
         guard active else { return }
+        // 원격 필터(애드가드 디시 필터)의 차단 목록: 캐시가 있고 컴파일이 끝난 조각만 붙임 (기본 규칙과 함께 동작)
+        for list in AdFilterStore.shared.ruleLists {
+            controller.add(list)
+        }
         if let compiled {
             controller.add(compiled)
             return

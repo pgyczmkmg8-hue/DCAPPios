@@ -130,7 +130,8 @@ struct HeadTab: Hashable, Identifiable {
     var id: String { name }
 }
 
-/// 갤러리 내 검색 창 (말머리 / 검색 범위 / 개념글만 / 최근 검색어)
+/// 갤러리 안 검색 창: 검색어 입력칸 하나(공통) + 상단 세그먼트(갤러리 내 글 검색 ↔ 통합검색)
+/// 입력칸은 탭과 무관하게 같은 자리에 있어서, 탭을 바꿔도 키보드가 내려가지 않고 검색어도 그대로 남음
 struct GallerySearchSheet: View {
     let gallery: Gallery
     var heads: [HeadTab] = []
@@ -140,76 +141,71 @@ struct GallerySearchSheet: View {
     @State private var head: HeadTab?
     @Environment(\.dismiss) private var dismiss
     @AppStorage("gallerySearchType", store: Profile.defaults) private var typeRaw = GallerySearchType.subjectMemo.rawValue
+    /// 공통 검색어 (두 탭이 같이 씀)
     @State private var keyword = ""
     @State private var recommendOnly = false
     @State private var recent: [String] = Profile.defaults.stringArray(forKey: "gallerySearchRecent") ?? []
     @FocusState private var focused: Bool
 
+    /// 상단 세그먼트
+    private enum SearchTab: String { case gallery, all }
+    @State private var tab: SearchTab = .gallery
+
     private var type: GallerySearchType { GallerySearchType(rawValue: typeRaw) ?? .subjectMemo }
+    private var keywordEmpty: Bool { keyword.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// 검색창 placeholder: 이름에 이미 '갤러리'가 있으면 한 번만 붙임
+    private var galleryPlaceholder: String {
+        gallery.name.contains("갤러리") ? "\(gallery.name) 글 검색" : "\(gallery.name) 갤러리 글 검색"
+    }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField("검색어", text: $keyword)
-                            .focused($focused)
-                            .submitLabel(.search)
-                            .onSubmit { search(keyword) }
-                    }
-                    if !heads.isEmpty {
-                        Picker("말머리", selection: $head) {
-                            Text("전체 말머리").tag(HeadTab?.none)
-                            ForEach(heads) { Text($0.name).tag(HeadTab?.some($0)) }
+            VStack(spacing: 0) {
+                // 공통 입력칸: 여기는 탭 전환에 따라 다시 만들어지지 않음 (키보드 유지)
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField(tab == .gallery ? galleryPlaceholder : "갤러리 & 통합검색", text: $keyword)
+                        .focused($focused)
+                        .submitLabel(.search)
+                        .onSubmit { submit() }
+                    if !keywordEmpty {
+                        Button { keyword = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                         }
-                    }
-                    Picker("검색 범위", selection: $typeRaw) {
-                        ForEach(GallerySearchType.allCases) { Text($0.label).tag($0.rawValue) }
-                    }
-                    Toggle("개념글에서만 검색", isOn: $recommendOnly)
-                } header: {
-                    Text("\(gallery.name)에서 검색")
-                }
-
-                if let onIdSearch {
-                    Section {
-                        Button {
-                            let k = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-                            dismiss()
-                            onIdSearch(k)
-                        } label: {
-                            Label("식별코드·IP로 작성글 찾기", systemImage: "person.text.rectangle")
-                        }
-                    } footer: {
-                        Text("디시는 식별코드 검색이 없어서, 목록을 여러 쪽 받아 같은 식별코드의 글만 모아요. 위 검색창에 식별코드를 적고 누르면 그대로 넘어가요.")
+                        .buttonStyle(.plain)
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color(uiColor: .secondarySystemBackground), in: Capsule())   // 메뉴 탭 검색창과 같은 둥근 알약 모양
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
 
-                if !recent.isEmpty {
-                    Section {
-                        ForEach(recent, id: \.self) { w in
-                            Button { search(w) } label: {
-                                Label(w, systemImage: "clock.arrow.circlepath").foregroundStyle(.primary)
-                            }
-                        }
-                        .onDelete { recent.remove(atOffsets: $0); saveRecent() }
-                    } header: {
-                        HStack {
-                            Text("최근 검색어")
-                            Spacer()
-                            Button("전체 삭제") { recent.removeAll(); saveRecent() }.font(.caption)
-                        }
+                Picker("검색 종류", selection: $tab) {
+                    Text("갤러리 내 글 검색").tag(SearchTab.gallery)
+                    Text("통합검색").tag(SearchTab.all)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
+                // 탭별 내용만 바뀜
+                if tab == .gallery {
+                    galleryForm
+                } else {
+                    SearchPanel(query: $keyword) { url in
+                        onSearch(url)      // 지금 화면에서 열고 창을 닫음
+                        dismiss()
                     }
                 }
             }
-            .navigationTitle("갤러리 검색")
+            .navigationTitle("검색")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("검색") { search(keyword) }
-                        .disabled(keyword.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("검색") { submit() }
+                        .disabled(keywordEmpty)
                 }
             }
             .onAppear {
@@ -217,6 +213,74 @@ struct GallerySearchSheet: View {
             }
         }
         .sheetUnderBlueBar(medium: true)
+    }
+
+    /// '갤러리 내 글 검색' 탭 내용 (말머리 · 검색 범위 · 개념글 · 최근 검색어 · 식별코드 작성글)
+    @ViewBuilder
+    private var galleryForm: some View {
+        Form {
+            Section {
+                if !heads.isEmpty {
+                    Picker("말머리", selection: $head) {
+                        Text("전체 말머리").tag(HeadTab?.none)
+                        ForEach(heads) { Text($0.name).tag(HeadTab?.some($0)) }
+                    }
+                }
+                Picker("검색 범위", selection: $typeRaw) {
+                    ForEach(GallerySearchType.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                Toggle("개념글에서만 검색", isOn: $recommendOnly)
+            } header: {
+                // 이름에 이미 '갤러리'가 있으면(예: 퓨처스리그 마이너 갤러리) 한 번만 붙임
+                Text(gallery.name.contains("갤러리") ? "\(gallery.name)에서 검색" : "\(gallery.name) 갤러리에서 검색")
+            }
+
+            if let onIdSearch {
+                Section {
+                    Button {
+                        let k = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+                        dismiss()
+                        onIdSearch(k)
+                    } label: {
+                        Label("식별코드·IP로 작성글 찾기", systemImage: "person.text.rectangle")
+                    }
+                } footer: {
+                    Text("디시는 식별코드 검색이 없어서, 목록을 여러 쪽 받아 같은 식별코드의 글만 모아요. 위 검색창에 식별코드를 적고 누르면 그대로 넘어가요.")
+                }
+            }
+
+            if !recent.isEmpty {
+                Section {
+                    ForEach(recent, id: \.self) { w in
+                        Button { search(w) } label: {
+                            Label(w, systemImage: "clock.arrow.circlepath").foregroundStyle(.primary)
+                        }
+                    }
+                    .onDelete { recent.remove(atOffsets: $0); saveRecent() }
+                } header: {
+                    HStack {
+                        Text("최근 검색어")
+                        Spacer()
+                        Button("전체 삭제") { recent.removeAll(); saveRecent() }.font(.caption)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 엔터·검색 버튼: 지금 탭에 맞는 검색
+    private func submit() {
+        guard !keywordEmpty else { return }
+        switch tab {
+        case .gallery:
+            search(keyword)
+        case .all:
+            SearchRouting.run(keyword) { url in
+                onSearch(url)
+                dismiss()
+            }
+            keyword = ""
+        }
     }
 
     private func search(_ text: String) {
@@ -887,8 +951,8 @@ struct BrowserView: View {
                         }
                     } else if collapsedInColumn && !keyboardVisible {
                         collapsedColumnButton      // 듀오: 가로 막대를 접은 버튼도 세로 막대를 접었을 때처럼 옆 세로 줄 한가운데
-                    } else if showsMenuButton && showsRefresh && !keyboardVisible && !barCollapsed {
-                        refreshButtonPlaced        // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침
+                    } else if showsMenuButton && showsRefresh && !keyboardVisible && !barCollapsed && !Self.duoHorizontalBarNow {
+                        refreshButtonPlaced        // 글 볼 때: 댓글 새로고침 / 글 목록: 페이지 새로고침 (듀오 가로 바에서는 바 안의 새로고침을 씀)
                     }
                 }
                 // 스크롤하는 동안 오른쪽(좌우반전이면 왼쪽) 밖으로 들어갔다가 멈추면 다시 나옴 (숨겨진 동안은 터치도 받지 않음)
@@ -903,12 +967,7 @@ struct BrowserView: View {
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                topBar
-                ToolbarItem(placement: .topBarTrailing) {
-                    if model.isLoading && !compactTopBar {
-                        ProgressView().controlSize(.small).tint(.white)
-                    }
-                }
+                topBar   // 로딩 스피너는 제목 옆(titleView overlay) 한 곳에만 그림 — 오른쪽 리퀴드 글래스 원의 중복 스피너는 제거
             }
             .toolbar(compactTopBar ? .hidden : .automatic, for: .navigationBar)      // 휴대폰·듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림 (스크롤해도 고정)
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
@@ -935,6 +994,8 @@ struct BrowserView: View {
                                 .onChangeCompat(of: g.size.height) { _, h in bottomBarHeight = h }
                         }
                     }
+                    // 듀오 가로 바: 안전 영역 안에 갇히지 않게 좌우 끝까지 (아래에서 바 양옆에 12pt 여백)
+                    .ignoresSafeArea(.container, edges: Self.duoHorizontalBarNow ? [.leading, .trailing] : [])
                     .modifier(SplitBottom(listWidth: splitListWidth, totalWidth: viewSize.width, mirrored: barMirrored))
                     .transition(.opacity)
                 }
@@ -1250,6 +1311,19 @@ struct BrowserView: View {
             .sheet(isPresented: $showListFilter) {
                 ListFilterSheet(headNames: model.headNames, gallery: model.galleryFilterKey) { model.applyListFilter() }
                     .sheetUnderBlueBar(medium: true)
+            }
+            // 나무위키 검색어 입력 → 확인하면 입력 시트를 닫고 인앱 사파리로 검색 결과를 연다 (닫으면 디시 화면 그대로)
+            .sheet(isPresented: $showNamuSearch) {
+                NamuSearchInputSheet { url in
+                    Task { @MainActor in
+                        // 입력 시트가 완전히 닫힌 뒤에 나무위키 시트를 띄움 (겹쳐 띄우면 무시될 때가 있음)
+                        try? await Task.sleep(for: .milliseconds(450))
+                        namuTarget = NamuTarget(url: url)
+                    }
+                }
+            }
+            .sheet(item: $namuTarget) { target in
+                NamuWebSheet(model: target.model)
             }
             .onChangeCompat(of: model.listFilterTick) { _, _ in showListFilter = true }   // 말머리 줄 깔때기 버튼 (웹)
             .onChangeCompat(of: verticalInLandscape) { _, _ in applySideColumn() }   // 컨트롤바 가로/세로 바꾸면 웹 여백도 바로
@@ -1847,6 +1921,9 @@ struct BrowserView: View {
     @AppStorage(ControlBarItem.collapsedKey, store: Profile.defaults) private var barCollapsed = false
     /// 가로 막대: 설정 ⋮만 보이는 상태
     @State private var barMenuMode = false
+    /// 나무위키 검색: 검색어 입력 시트 / 인앱 사파리로 열 주소
+    @State private var showNamuSearch = false
+    @State private var namuTarget: NamuTarget?
     @State private var barMenuChangedAt = Date.distantPast
     @State private var barMenuIdleSince = Date.distantPast
     @State private var galleryBarWidth: CGFloat = 0
@@ -2000,6 +2077,7 @@ struct BrowserView: View {
             .disabled(barGestureActive)
             .padding(6)
             .glassBar()
+            .padding(.horizontal, Self.duoHorizontalBarNow ? 12 : 0)   // 듀오 가로 바: 양옆 12pt 여백 (화면 끝까지 뻗되 캡슐이 끝에 붙지 않게)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { galleryBarWidth = $0 }
             // 그냥 밀기: 오른쪽→왼쪽 = 설정 ⋮만 보기 / 그 상태에서 왼쪽→오른쪽 = 원래대로
             //           평소에 왼쪽→오른쪽으로 막대 길이 30% 이상 쓸면 접기
@@ -2174,6 +2252,11 @@ struct BrowserView: View {
                 ForEach(horizontal ? all.filter { $0 != .menu } : all) { item in
                     controlItem(item)
                 }
+                // 듀오 가로 바: 따로 떠 있던 새로고침을 바 안으로 (글 보기: 댓글 / 글 목록: 페이지)
+                // 둘째 칸의 빈 자리 새로고침은 글 보기·글 목록이 아닐 때만 나와서 겹치지 않음. 세로 막대(sideBar)는 자체 새로고침이 있어 제외
+                if horizontal && Self.duoHorizontalBarNow && !usesSideBar && showsRefresh {
+                    barItem("arrow.clockwise", "arrow.clockwise", "새로고침", selected: false) { refreshTapped() }
+                }
             }
         }
     }
@@ -2216,11 +2299,16 @@ struct BrowserView: View {
                 model.reload()
             }
         }
-        barItem("magnifyingglass.circle", "magnifyingglass.circle.fill", "전체 검색", selected: false) {
-            router.sheet = .search                   // 홈 화면의 검색과 같은 전체 검색
+        barItem("text.book.closed", "text.book.closed.fill", "나무위키", selected: false) {
+            showNamuSearch = true                    // 검색어 입력 → 인앱 사파리로 나무위키 검색
         }
         barItem("link", "link", "링크 공유", selected: false, enabled: model.url != nil) {
             if let url = shareTarget { model.share(url) }
+        }
+        // 듀오 가로 바: 첫째 칸(새로고침 포함 6개)과 폭을 맞추려고 둘째 칸에도 새로고침
+        // 빈 자리 새로고침(model.reload)은 갤러리 주소가 아닐 때만 나오고, 이 버튼은 글 보기·글 목록에서만 나와서 겹치지 않음
+        if Self.duoHorizontalBarNow && !usesSideBar && showsRefresh {
+            barItem("arrow.clockwise", "arrow.clockwise", "새로고침", selected: false) { refreshTapped() }
         }
     }
 
@@ -2245,8 +2333,13 @@ struct BrowserView: View {
                 }
             }
         case .recommend:
+            // 글 보기 + 가로 바 + 분할 화면 아님 → 개념글 자리에 댓글작성 (앱 댓글 입력창)
+            if isPostPage && !usesSideBar && !router.splitActive && splitListWidth == nil {
+                barItem("text.bubble", "text.bubble", "댓글작성", selected: false) {
+                    model.openCommentComposer()
+                }
             // 전체글 보는 중 → "개념글" / 개념글 보는 중 → "전체글"(≡)로 바뀜
-            if section == .recommend {
+            } else if section == .recommend {
                 barItem("line.3.horizontal", "line.3.horizontal", "전체글", selected: true, enabled: g != nil) {
                     if let g { model.load(g.url) }
                 }

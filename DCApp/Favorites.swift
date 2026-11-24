@@ -495,6 +495,8 @@ struct GalleryFindResults: View {
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var visited = VisitedStore.shared
+    /// 디시 갤러리 실시간 검색 (타이핑 중 디바운스, 이전 요청 취소)
+    @StateObject private var live = GalleryLiveSearch()
 
     private var q: String { query.trimmingCharacters(in: .whitespaces) }
 
@@ -536,6 +538,8 @@ struct GalleryFindResults: View {
                     }
                 }
             }
+            GalleryLiveResults(live: live, excluded: Set(localMatches.map { DCGalleryID.bare($0.galleryID) }), open: { router.open($0) })
+
             Section {
                 Button { router.open(DC.search(q)) } label: {
                     Label("'\(q)' 디시에서 갤러리 찾기", systemImage: "magnifyingglass")
@@ -551,5 +555,8 @@ struct GalleryFindResults: View {
                 Text("디시 통합검색 결과에서 갤러리를 고르면 그 갤러리로 가요.")
             }
         }
+        .onAppear { live.update(query) }
+        .onChangeCompat(of: query) { _, q in live.update(q) }
+        .onDisappear { live.cancel() }
     }
 }

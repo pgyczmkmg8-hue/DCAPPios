@@ -217,9 +217,12 @@ struct DCApp: App {
                 .environmentObject(router)
                 .overlay { LockCover() }                    // 잠겨 있으면 첫 화면부터 가림 (가림막 창이 뜨기 전 깜빡임 방지)
                 .task { await AppLock.shared.startup() }    // 잠금이 켜져 있으면 켜자마자 인증
+                // 광고차단 원격 자료(디시 필터·NamuLink)는 백그라운드로 받아 캐시 (시작을 기다리지 않음, 6시간 간격)
+                .task { AdFilterUpdater.refreshIfNeeded() }
                 // 백그라운드로 갈 때 알림 확인 예약 → iOS가 깨우면 디시 알림 확인
                 .onChangeCompat(of: scenePhase) { _, phase in
                     if phase == .background { DCNotify.schedule() }
+                    if phase == .active { AdFilterUpdater.refreshIfNeeded() }
                     AppLock.shared.scenePhaseChanged(phase)      // 앱 잠금 / 전환 화면 가리기
                 }
         }

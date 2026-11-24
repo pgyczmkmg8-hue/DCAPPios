@@ -587,6 +587,11 @@ final class WebViewModel: NSObject, ObservableObject {
         return false
     }
 
+    /// 컨트롤바 '댓글작성': 글 아래 댓글 칸을 누른 것과 같이 앱 댓글 입력창을 연다
+    func openCommentComposer() {
+        Task { _ = await call("return window.__dcapp ? window.__dcapp.focusCommentInput() : false;") }
+    }
+
     func replyToPendingComment() {
         commentLink = nil
         Task { _ = await call("return window.__dcapp ? window.__dcapp.replyPending() : false;") }
@@ -830,6 +835,7 @@ final class WebViewModel: NSObject, ObservableObject {
         controller.addUserScript(WKUserScript(source: Self.viewportFitCover, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         // 앱 자체 광고 차단 (광고 서버 요청 막기)
         AdBlock.apply(to: controller)
+        appliedFilterVersion = AdFilterStore.shared.version      // 원격 필터가 바뀌면 다음 페이지 시작 때 다시 붙임
     }
 
     private static let viewportFitCover = #"""
@@ -1187,6 +1193,8 @@ final class WebViewModel: NSObject, ObservableObject {
     // MARK: - 댓글 등록 중 광고 차단 잠시 끄기
 
     private var adResumeTask: Task<Void, Never>?
+    /// 마지막으로 차단 규칙을 붙일 때의 원격 필터 버전
+    private var appliedFilterVersion = -1
 
     private func pauseAdBlock() {
         guard AdBlock.enabled else { return }
@@ -1705,6 +1713,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 디시가 글·댓글을 막으며 띄우는 안내 문구인지 (사용자가 직접 한 차단·해제 안내는 제외)
     nonisolated static func looksLikeBan(_ message: String) -> Bool {
+        // 금지어 안내(등록 문구만 막힘)는 글쓰기를 닫지 않음 — 금지어 자리를 선택해 보여 주기 위해
+        if message.contains("금지어") || message.contains("금칙어") || message.contains("금지 단어") || message.contains("금칙") { return false }
         guard message.contains("차단") || message.contains("이용 제한") || message.contains("이용제한") else { return false }
         let own = ["차단 등록", "차단 해제", "차단이 해제", "숨김 적용", "차단 및 삭제", "일일 차단", "차단 기간", "차단 사유", "차단할", "고정닉", "이미지 차단", "차단하시"]
         return !own.contains { message.contains($0) }
@@ -2275,6 +2285,11 @@ extension WebViewModel: WKScriptMessageHandler {
             }
             commentCarry = nil
             withAnimation(.easeOut(duration: 0.2)) { commentCompose = ns }
+        case "banword":   // 글 등록이 디시 금지어로 막힘 (안내창을 닫은 뒤) → 앱 글쓰기에서 금지어 자리를 선택해 둠
+            // 디시 웹 글쓰기 화면이면 디시 스크립트가 그 자리를 직접 잡으므로 여기서는 하지 않음
+            if let s = nativeWrite, !s.showingWeb {
+                if !s.showBannedWord(body["word"] as? String ?? "") { showToast("금지어가 있는 자리를 찾지 못했어요") }
+            }
         case "banned":   // 디시가 등록을 막는 안내 창(차단된 IP·매니저 차단)을 띄움 → 웹 안내는 숨기고, 같은 문구를 앱이 띄우고 이전 화면으로
             let msg = body["msg"] as? String ?? ""
             commentCompose = nil
@@ -2411,6 +2426,11 @@ extension WebViewModel: WKNavigationDelegate {
 
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        // 원격 필터(백그라운드 갱신)가 새로 적용됐으면 이 웹뷰에도 새 차단 규칙을 붙임
+        if AdFilterStore.shared.version != appliedFilterVersion {
+            appliedFilterVersion = AdFilterStore.shared.version
+            AdBlock.apply(to: webView.configuration.userContentController)
+        }
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
         headNames = []               // 새 페이지의 말머리는 그 페이지가 다시 알려 줌 (이전 갤러리 말머리가 남지 않게)
         tsCheckOn = false            // 새 페이지는 체크 상태도 새로 시작

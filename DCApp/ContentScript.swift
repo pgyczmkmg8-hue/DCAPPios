@@ -224,6 +224,12 @@ enum ContentScript {
       'html,body{overflow-x:hidden!important;max-width:100%!important}',
       '.thum-txtin{font-size:16px!important;line-height:1.7!important;word-break:keep-all}',
       'li.comment .txt,li.comment-add .txt{font-size:14px!important}',
+      // 대댓글 앞 표시: 디시 파란 'ㄴ' 스프라이트(contents.css .all-comment-lst .comment-add::before) 대신 작은 직각 └ 헤어라인 (닉네임 줄 높이, 1px 회색)
+      'li.comment-add::before{content:""!important;display:block!important;position:absolute!important;left:20px!important;top:9px!important;width:8px!important;height:8px!important;box-sizing:border-box!important;background:none!important;border:0!important;border-left:1px solid rgba(0,0,0,.2)!important;border-bottom:1px solid rgba(0,0,0,.2)!important;border-radius:0!important}',
+      'html.darkmode li.comment-add::before{border-left-color:rgba(255,255,255,.26)!important;border-bottom-color:rgba(255,255,255,.26)!important}',
+      // 고닉·반고닉·매니저 아이콘 축소 (힛갤로콘 아이콘 제외): transform은 그려지는 모양만 줄이고 스프라이트 background-position은 건드리지 않음.
+      // 레이아웃 박스(14px)는 그대로라 오른쪽 여백만 음수 margin으로 줄여 옆 글자와의 간격이 남지 않게 함 (14 × 0.75 = 10.5)
+      '.sp-nick:not(.sp_hitnickcon),.gonick:not(.sp_hitnickcon),.nogonick:not(.sp_hitnickcon),.m-gonick:not(.sp_hitnickcon),.m-nogonick:not(.sp_hitnickcon),.sub-gonick:not(.sp_hitnickcon),.sub-nogonick:not(.sp_hitnickcon){transform:scale(.75)!important;transform-origin:left center!important;margin-right:-3.5px!important}',
       // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
       '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
@@ -281,6 +287,8 @@ enum ContentScript {
       'html.darkmode .dcapp-cmtin{border-color:#55565c;color:#9db0ff}',
       '#comment_box .all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
       '.dcapp-sort{display:flex;align-items:center;gap:15px}',
+      // 듀오 안전 영역의 터치 차단막(z 2147483646)이 정렬 줄(답글순)을 덮을 때만 정렬 줄을 위로 (다른 상태의 디시 팝업은 그대로)
+      'html.dcapp-duocol .dcapp-sort,html.dcapp-duoflip .dcapp-sort{position:relative;z-index:2147483647}',
       '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:6px 0;font-size:16px;color:#8a8a90}',
       '.dcapp-sort button.on{color:#222;font-weight:600}',
       '.dcapp-sort svg{width:24px;height:24px;flex:none;color:#b5b5bb}',
@@ -813,6 +821,25 @@ enum ContentScript {
       };
       wrapped.__dcapp = true;
       window.write_submit = wrapped;
+    }, 250);
+  })();
+
+  // 글 등록 전 금지어 검사(/ajax/w_filter)가 막으면 → 금지어 단어를 앱에 넘김 (앱 글쓰기에서 그 위치를 선택하려고)
+  // jQuery의 ajaxComplete는 디시가 띄우는 안내창(alert)을 확인한 뒤에 불리므로, 앱은 안내를 닫은 다음에 위치를 잡음
+  (function hookBannedWord() {
+    if (!/\/write/.test(location.pathname)) return;
+    var tries = 0;
+    var t = setInterval(function () {
+      if (++tries > 40) { clearInterval(t); return; }
+      if (!window.jQuery) return;
+      clearInterval(t);
+      window.jQuery(document).ajaxComplete(function (e, xhr, opts) {
+        if (!opts || !/\/ajax\/w_filter/.test(opts.url || '')) return;
+        var j = null;
+        try { j = JSON.parse(xhr.responseText); } catch (err) { return; }
+        if (!j || j.result !== false || !j.word) return;
+        post('banword', { word: String(j.word), cause: String(j.cause || '') });
+      });
     }, 250);
   })();
 
@@ -1870,6 +1897,34 @@ enum ContentScript {
     st.textContent = AD_SELECTORS.map(function (s) { return s + '{display:none!important}'; }).join('\n');
     (document.head || document.documentElement).appendChild(st);
   }
+  // 원격 필터(애드가드 디시 필터)의 숨김 규칙: 앱이 골라 보낸 cfg.adFilterCSS (한 줄에 규칙 하나). 광고차단이 꺼지면 뺌
+  // 글·목록·댓글·입력 영역을 잡는 규칙은 지금 페이지에서 확인해 빼고 넣음 (새 필터가 와도 글이 가려지지 않게)
+  var AD_FILTER_KEEP = 'ul.gall-detail-lst,#comment_box,.thum-txt,.gallview-tit-box,#pagination_div,#textbox,.note-editable,#subject,#view_btn_area,.btm-btns-both,.reco-icon-lst,#dcapp-headbar,#dcapp-pgwrap,#dcapp-pgbar,form,textarea,input,article';
+  function adFilterCSS() {
+    var css = cfg.adBlock === false ? '' : String(cfg.adFilterCSS || '');
+    var st = document.getElementById('dcapp-adfilter');
+    if (!css) { if (st) st.parentNode.removeChild(st); return; }
+    if (!document.body || (st && st.__dcappSrc === css)) return;
+    var keep = [];
+    css.split('\n').forEach(function (rule) {
+      if (!rule) return;
+      var sel = rule.replace(/\{display:none!important\}$/, '');
+      try {
+        var hit = false;
+        document.querySelectorAll(sel).forEach(function (el) {
+          if (el.matches(AD_FILTER_KEEP) || el.querySelector(AD_FILTER_KEEP)) hit = true;
+        });
+        if (!hit) keep.push(rule);
+      } catch (e) {}
+    });
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'dcapp-adfilter';
+      (document.head || document.documentElement).appendChild(st);
+    }
+    st.textContent = keep.join('\n');
+    st.__dcappSrc = css;
+  }
 
   // ---------- 글 아래 수정·삭제 버튼 (본인 글 / 유동 글에만 디시가 보여 줌) → 개추/비추 줄에 앱 버튼으로 ----------
   function postActionButton(kind) {
@@ -1945,7 +2000,29 @@ enum ContentScript {
   function rebuildCommentHeader() {
     try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
   }
+  // 듀오 안전 영역 막이 정렬 버튼 위에 있으면, 탭이 막(html 요소)에 떨어져 click의 대상이 html이 됨.
+  // 그때 좌표가 정렬 버튼 안이면 그 버튼을 눌러 줌. 버튼을 직접 누른 경우(대상이 버튼)에는 아무것도 하지 않아 중복 호출이 없음
+  function installSortTapGuard() {
+    if (window.__dcappSortGuard) return;
+    window.__dcappSortGuard = true;
+    document.addEventListener('click', function (e) {
+      var de = document.documentElement;
+      if (e.target !== de && e.target !== document) return;
+      if (!/(^|\s)dcapp-duo(col|flip)(\s|$)/.test(de.className || '')) return;
+      var btns = document.querySelectorAll('.dcapp-sort button');
+      for (var i = 0; i < btns.length; i++) {
+        var r = btns[i].getBoundingClientRect();
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          e.preventDefault();
+          e.stopPropagation();
+          btns[i].click();
+          return;
+        }
+      }
+    }, true);
+  }
   function buildCommentSort() {
+    installSortTapGuard();
     var hdr = commentHeader();
     var sel = hdr && hdr.querySelector('select.sel');
     var rt = hdr && hdr.querySelector('.rt');
@@ -2341,7 +2418,7 @@ enum ContentScript {
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
     try { buildCommentSort(); buildCommentInputBtn(); } catch (e) {}
     try { cacheListIds(); buildNextPrev(); } catch (e) {}
-    try { adBlockCSS(); hideListPromos(); } catch (e) {}
+    try { adBlockCSS(); adFilterCSS(); hideListPromos(); } catch (e) {}
     try { listCommentCount(); } catch (e) {}
     try { markReadRows(); } catch (e) {}
     try { expandListNicks(); } catch (e) {}
@@ -4791,7 +4868,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v291-automore', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v298-adfilter','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
@@ -4815,6 +4892,18 @@ enum ContentScript {
           ' padding=' + cs.paddingLeft + '/' + cs.paddingRight + ' bg=' + cs.backgroundColor + ' maxW=' + cs.maxWidth);
       });
     } catch (e) { out.push('layout diag error: ' + e.message); }
+    // 뒤로가기 흰 공백 진단: 헤드바 위치·스크롤, 헤드바 바로 앞 형제 요소의 태그·클래스·높이
+    try {
+      var hb = document.getElementById('dcapp-headbar');
+      if (!hb) out.push('headbar: (없음)');
+      else {
+        var hr = hb.getBoundingClientRect();
+        var hps = hb.previousElementSibling;
+        var hpr = hps ? hps.getBoundingClientRect() : null;
+        out.push('headbar: top=' + Math.round(hr.top) + ' scrollY=' + Math.round(window.scrollY) +
+          ' prev=' + (hps ? hps.tagName + '.' + clsOf(hps) + ' top=' + Math.round(hpr.top) + ' bottom=' + Math.round(hpr.bottom) + ' h=' + Math.round(hpr.height) : '(없음)'));
+      }
+    } catch (e) { out.push('headbar diag error: ' + e.message); }
     var units = findUnits();
     var counts = {};
     units.forEach(function (u) { counts[u.kind] = (counts[u.kind] || 0) + 1; });
@@ -5136,6 +5225,8 @@ enum ContentScript {
     writeInfo: writeInfo,
     refreshCaptcha: refreshCaptcha,
     nativeSubmit: nativeSubmit,
+    // 컨트롤바 '댓글작성': 글 아래 댓글 칸을 누른 것과 같이 앱 댓글 입력창을 연다
+    focusCommentInput: function () { focusCommentInput(); return true; },
     setReadPosts: setReadPosts,
     setListFilter: setListFilter,
     articleIdentity: articleIdentity,

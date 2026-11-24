@@ -102,6 +102,24 @@ struct AboutView: View {
         .frame(maxWidth: 420)
     }
 
+    /// 외부 스크립트 고지: 나무위키 화면에서 실행하는 NamuLink (MPL-2.0). 앱에는 넣지 않고 실행할 때 CDN에서 받음
+    private var noticeBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("외부 스크립트 고지")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text("나무위키 화면에서 NamuLink 스크립트(MPL-2.0, 저작자 PiQuark6046 외 기여자)를 실행해요. 앱에는 포함하지 않고 CDN에서 받아 써요. 디시 갤러리 필터(애드가드 형식)도 CDN에서 받아 적용해요.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Link("NamuLink 저장소 열기", destination: URL(string: "https://github.com/FilteringDev/NamuLink")!)
+                .font(.footnote)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: 420)
+    }
+
     private func repoRow(_ title: String) -> some View {
         HStack {
             Label(title, systemImage: "chevron.left.forwardslash.chevron.right")
@@ -202,6 +220,7 @@ struct AboutView: View {
 
                 updateBox
                 repoBox
+                noticeBox
                 if hiddenUnlocked { hiddenBox }
 
             }

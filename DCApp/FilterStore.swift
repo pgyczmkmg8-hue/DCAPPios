@@ -445,6 +445,7 @@ final class FilterStore: ObservableObject {
             "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
+            "adFilterCSS": AdBlock.enabled ? AdFilterStore.shared.cssText : "",   // 원격 필터(애드가드 디시 필터)의 숨김 규칙 — 광고차단이 켜졌을 때만
             "floatBar": Profile.defaults.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
             "memos": MemoStore.shared.memos.map { ["k": $0.kind.rawValue, "v": $0.value, "t": $0.text, "g": $0.gallery ?? ""] },   // 유저 메모
             "autoMemo": AutoMemo.scriptValue,   // 자동메모 ("" 꺼짐 / all / gallery / selected)
