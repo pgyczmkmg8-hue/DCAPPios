@@ -628,7 +628,7 @@ struct BrowserView: View {
     }
     /// 오른쪽에 놓이는 버튼 수 (제목을 가운데에 두려고 왼쪽 칸도 같은 폭으로 맞춤)
     private var compactRightCount: Int {
-        if showsMenuButton { return (isListPage ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
+        if showsMenuButton { return (showsListFilterInBar ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
         return (currentGallery != nil ? 1 : 0) + 1
     }
     private var compactSideWidth: CGFloat {
@@ -663,9 +663,9 @@ struct BrowserView: View {
             titleView(logo: logo).frame(maxWidth: .infinity, alignment: .center)
             HStack(spacing: duo ? 6 : Self.topSlotSpacing) {
                 if showsMenuButton {
-                    if isListPage {
+                    if showsListFilterInBar {
                         Button { showListFilter = true } label: {
-                            Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                            Image(systemName: listFilter.filter.activeIn(model.galleryFilterKey) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                                 .frame(width: slot, height: slot)
                                 .contentShape(Rectangle())
                         }
@@ -713,18 +713,16 @@ struct BrowserView: View {
         HStack(spacing: 8) {
             Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
             topTitle.frame(maxWidth: .infinity, alignment: .center)
-            Group {
-                if isListPage {
-                    Button { showListFilter = true } label: {
-                        Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                            .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("게시물 필터")
-                } else {
-                    Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+            if showsListFilterInBar {
+                Button { showListFilter = true } label: {
+                    Image(systemName: listFilter.filter.activeIn(model.galleryFilterKey) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("게시물 필터")
+            } else {
+                Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
             }
         }
         .foregroundStyle(.white)
@@ -779,6 +777,8 @@ struct BrowserView: View {
     private var layer1: some View {
         WebView(model: model)
             .modifier(SplitPane(width: splitListWidth))
+            // 로딩 게이지(topOverlay)는 상단바 안쪽에 붙여서, 상단바 제일 아래(웹뷰 맨 위)에 나오게 함
+            .overlay(alignment: .top) { topOverlay }
             .safeAreaInset(edge: .top, spacing: 0) { if compactTopBar { compactTopBarView } else if splitListWidth != nil { splitTopBar } }   // 듀오: 낮은 상단바 / 분할 화면의 목록: 시스템 내비게이션 바 대신
             .ignoresSafeArea(.keyboard, edges: .bottom)   // 키보드 처리는 웹뷰(WebKit)에 맡김
             // 하단 바 뒤 화면 아래 끝까지 웹페이지가 쓰도록. 좌우 안전 영역(듀오의 시계·카메라 줄)은 사파리처럼 비워 둠
@@ -804,7 +804,6 @@ struct BrowserView: View {
                     DCTheme.navy.ignoresSafeArea(.container, edges: [.top, .trailing])
                 }
             }
-            .overlay(alignment: .top) { topOverlay }
             .overlay {
                 // 화면 크기가 바뀔 때마다(접기·펴기·회전) 오른쪽 안전 영역 폭을 다시 읽음
                 GeometryReader { g in
@@ -891,7 +890,14 @@ struct BrowserView: View {
             // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
             .navigationTitle(splitListWidth != nil || (duoTopBar && !model.isDetailPane && !(showsMenuButton && model.isWritePage)) ? "" : titleText)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { topBar }
+            .toolbar {
+                topBar
+                ToolbarItem(placement: .topBarTrailing) {
+                    if model.isLoading && !compactTopBar {
+                        ProgressView().controlSize(.small).tint(.white)
+                    }
+                }
+            }
             .toolbar(compactTopBar ? .hidden : .automatic, for: .navigationBar)      // 휴대폰·듀오: 시스템 상단바는 숨기고 위쪽 띠에 직접 그림 (스크롤해도 고정)
             .keepsTopStatusBar()   // 듀오: 시계·버튼을 오른쪽 세로 줄로 보내지 않고 위쪽 가로로
             .toolbarBackground(DCTheme.navy, for: .navigationBar)
@@ -1230,9 +1236,10 @@ struct BrowserView: View {
                 }
             }
             .sheet(isPresented: $showListFilter) {
-                ListFilterSheet { model.applyListFilter() }
+                ListFilterSheet(headNames: model.headNames, gallery: model.galleryFilterKey) { model.applyListFilter() }
                     .sheetUnderBlueBar(medium: true)
             }
+            .onChangeCompat(of: model.listFilterTick) { _, _ in showListFilter = true }   // 말머리 줄 깔때기 버튼 (웹)
             .sheet(isPresented: $showDraftPicker) {
                 DraftPickerSheet(galleryID: model.url.flatMap(AutoImageStore.writeGalleryID)) { d in
                     model.restoreDraft(d)
@@ -1328,9 +1335,6 @@ struct BrowserView: View {
 
     private var topOverlayItems: some View {
         VStack(spacing: 0) {
-            if model.isLoading {
-                ProgressView(value: model.progress).progressViewStyle(.linear)
-            }
             if model.isCapturing {
                 HStack(spacing: 8) {
                     ProgressView()
@@ -1501,6 +1505,11 @@ struct BrowserView: View {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 compactMode.toggle()
             }
+            .overlay(alignment: .trailing) {
+                if model.isLoading {
+                    ProgressView().controlSize(.small).tint(.white).offset(x: 22)   // 페이지 불러오는 동안 제목 오른쪽 옆에 작게
+                }
+            }
     }
 
     @ToolbarContentBuilder
@@ -1582,10 +1591,10 @@ struct BrowserView: View {
                                 Color.clear.frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                                     .accessibilityHidden(true)
                             }
-                            // 글 목록: 게시물 필터 (깔때기) — 켜져 있으면 색이 들어감
-                            if isListPage {
+                            // 글 목록(말머리 줄이 없을 때): 게시물 필터 깔때기
+                            if showsListFilterInBar {
                                 Button { showListFilter = true } label: {
-                                    Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                    Image(systemName: listFilter.filter.activeIn(model.galleryFilterKey) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                                         .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
                                         .contentShape(Rectangle())
                                 }
@@ -1729,7 +1738,9 @@ struct BrowserView: View {
     static let topSlotSpacing: CGFloat = 14
     /// ⋮를 실제로 상단바에 놓는지 — 설정이 켜져 있어도, 듀오처럼 옆 세로 줄(시계)이 상단바 오른쪽을 가리는 화면에서는 보이지 않으므로 컨트롤바에 둠
     private var menuInTopBarShown: Bool { menuInTopBar && !fillsTrailing }
-    private var topTrailingCount: Int { (isListPage ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
+    /// 게시물 필터 깔때기를 상단바 우측에 둘지: 글 목록이고 말머리 줄이 없을 때 (말머리가 있으면 말머리 줄 맨 왼쪽)
+    private var showsListFilterInBar: Bool { isListPage && model.headNames.isEmpty }
+    private var topTrailingCount: Int { (showsListFilterInBar ? 1 : 0) + (menuInTopBarShown ? 1 : 0) }
     /// 하드웨어 키보드(트랙패드)용 뒤로가기 버튼 — 아이패드만. 아이폰(듀오 포함)은 키보드를 연결해도 쓸어서 뒤로가기만
     private var showsKeyboardBack: Bool {
         hwKeyboard.connected && UIDevice.current.userInterfaceIdiom != .phone

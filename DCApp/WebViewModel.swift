@@ -59,6 +59,10 @@ final class WebViewModel: NSObject, ObservableObject {
 
     @Published var title: String = ""
     @Published var url: URL?
+    /// 글 목록 말머리 이름들 (말머리 줄에서 읽음) — 필터 시트의 말머리 고르기에 씀
+    @Published var headNames: [String] = []
+    /// 말머리 줄 깔때기 버튼을 누를 때마다 바뀜 → 필터 시트 열기
+    @Published var listFilterTick = 0
     @Published var canGoBack = false
     @Published var canGoForward = false
     /// 지금 보는 글에 디시의 수정·삭제 버튼이 있음 (로그인 계정 본인 글 / 유동 글) → 앱 버튼으로 대신 누름
@@ -1861,10 +1865,17 @@ final class WebViewModel: NSObject, ObservableObject {
         }
     }
 
-    /// 게시물 필터를 지금 글 목록에 적용 (상단바 깔때기)
+    /// 지금 글 목록의 갤러리 키 (읽은 글과 같은 형식: 미니 mi$, 인물 pr$) — 말머리 필터는 갤러리마다 따로 둠
+    var galleryFilterKey: String? {
+        guard let u = webView.url, let g = Gallery.parse(u) else { return nil }
+        return (g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")) + g.id
+    }
+
+    /// 게시물 필터를 지금 글 목록에 적용 (말머리 줄 깔때기)
     func applyListFilter() {
         let f = ListFilterStore.shared.filter
-        let arg: Any = f.isActive ? f.script : NSNull()
+        let key = galleryFilterKey
+        let arg: Any = f.activeIn(key) ? f.script(for: key) : NSNull()
         Task { await call("if (window.__dcapp) window.__dcapp.setListFilter(f); return true;", ["f": arg]) }
     }
 
@@ -2147,6 +2158,10 @@ extension WebViewModel: WKScriptMessageHandler {
                 guard FilterStore.shared.imageHashBlocked(h) else { return }
                 await call("if (window.__dcapp) window.__dcapp.markBlockedImageKey(k); return true;", ["k": key])
             }
+        case "listfilter":   // 말머리 줄 맨 왼쪽 깔때기 버튼 → 게시물 필터 시트
+            listFilterTick += 1
+        case "headnames":   // 글 목록 말머리 이름들 → 필터 시트의 말머리 고르기
+            headNames = (body["names"] as? [String]) ?? []
         case "gotolist":   // 분할 화면 오른쪽 글 화면의 '글목록' 버튼
             if let u = webView.url, let g = Gallery.parse(u) {
                 showListInMain?(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
@@ -2398,6 +2413,7 @@ extension WebViewModel: WKNavigationDelegate {
     /// 다른 페이지로 가거나 새로고침 시작 → 꺼 둔 광고 차단 다시 켜기 (새 페이지는 차단된 채로 불러옴)
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
+        headNames = []               // 새 페이지의 말머리는 그 페이지가 다시 알려 줌 (이전 갤러리 말머리가 남지 않게)
         tsCheckOn = false            // 새 페이지는 체크 상태도 새로 시작
         isRetryingComment = false    // 새 페이지로 가면 댓글 재시도 말풍선도 내림 (남아 있으면 영구히 떠 있게 됨)
         barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임

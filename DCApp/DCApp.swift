@@ -46,8 +46,10 @@ final class AppRouter: ObservableObject {
     @Published private(set) var splitActive = false
     /// 한 화면으로 접었을 때 오른쪽(글) 화면이 보던 글을 새로고침 없이 그대로 이어 보려고, 그 화면을 한 화면 자리에 보여 주는 중인지
     @Published private(set) var singleUsesDetail = false
+    /// 접는 판단을 기다리는 동안(900ms) 글 화면을 미리 한 화면 자리에 보여 주는 중인지 (글목록이 먼저 떴다가 글로 바뀌는 깜빡임 방지)
+    @Published private(set) var foldPreview = false
     /// 지금 한 화면(또는 분할의 왼쪽) 자리에 보이는 브라우저 — 주소 열기·계정 전환 등은 이 화면으로
-    var primaryBrowser: WebViewModel { singleUsesDetail ? detailBrowser : mainBrowser }
+    var primaryBrowser: WebViewModel { (singleUsesDetail || foldPreview) ? detailBrowser : mainBrowser }
     /// 분할 화면 오른쪽(글) 화면의 상단바 높이 — 왼쪽(목록) 상단바를 같은 높이로 맞추는 데 씀
     @Published var splitTopHeight: CGFloat = 0
     /// 세로 컨트롤바가 화면 위에 떠서 가리는 폭 (분할 화면이면 오른쪽 글 화면이 이 값을 씀) / 컨트롤바가 왼쪽에 있는지
@@ -137,8 +139,23 @@ final class AppRouter: ObservableObject {
         detailBrowser.load(URL(string: "about:blank")!)
     }
 
+    /// 접기가 시작됐을 때(분할 → 한 화면) 글이 있으면 글 화면을 바로 한 화면 자리에 보여 줌. 실제 접기는 scheduleSplit의 대기 뒤에 확정
+    func previewFold() {
+        guard splitActive, !foldPreview, let u = detailBrowser.url, PostKey.from(u) != nil else { return }
+        foldPreview = true
+        detailBrowser.isDetailPane = false
+    }
+
+    /// 접기 취소 (대기 중에 다시 분할로 돌아옴): 미리 보여 주던 것을 되돌림
+    func cancelFoldPreview() {
+        guard foldPreview else { return }
+        foldPreview = false
+        detailBrowser.isDetailPane = true
+    }
+
     /// 분할 화면 켜기/끄기 (화면이 가로로 넓어지거나 좁아질 때)
     func setSplit(_ on: Bool) {
+        if on { cancelFoldPreview() }
         guard on != splitActive else { return }
         splitActive = on
         if on {
@@ -155,10 +172,13 @@ final class AppRouter: ObservableObject {
                 // 글을 보던 중이었으면 그 글은 오른쪽으로 옮기고 왼쪽은 목록으로 돌아감
                 movePostToDetail(u)
             }
-        } else if let u = detailBrowser.url, PostKey.from(u) != nil {
-            // 접으면 오른쪽 글 화면을 그대로 한 화면 자리에 보여 줌 (새로 불러오지 않아 스크롤·입력 중이던 것이 유지됨)
-            singleUsesDetail = true
-            detailBrowser.isDetailPane = false
+        } else {
+            foldPreview = false
+            if let u = detailBrowser.url, PostKey.from(u) != nil {
+                // 접으면 오른쪽 글 화면을 그대로 한 화면 자리에 보여 줌 (새로 불러오지 않아 스크롤·입력 중이던 것이 유지됨)
+                singleUsesDetail = true
+                detailBrowser.isDetailPane = false
+            }
         }
         // 분할이 바뀐 뒤 두 웹 화면을 새 자리 크기에 맞춰 다시 배치 (전환 중 빈 화면으로 남지 않게)
         DispatchQueue.main.async { [mainBrowser, detailBrowser] in
@@ -260,9 +280,12 @@ struct RootView: View {
         if isSplit {
             router.setSplit(true)
         } else {
+            // 접기 시작: 글이 있으면 글 화면을 바로 보여 줌 (목록이 잠깐 떴다가 글로 바뀌는 깜빡임 없음)
+            router.previewFold()
             splitTask = Task {
                 try? await Task.sleep(for: .milliseconds(900))
-                if !Task.isCancelled, !isSplit { router.setSplit(false) }
+                guard !Task.isCancelled else { return }
+                if !isSplit { router.setSplit(false) } else { router.cancelFoldPreview() }
             }
         }
     }
@@ -320,7 +343,7 @@ struct RootView: View {
                             BrowserView(model: router.primaryBrowser, fallbackTitle: "홈", showsMenuButton: true)
                         }
                         .keepsTopStatusBar()   // 듀오: 시계가 옆 세로 줄로 가며 뒤로가기가 컨트롤바 위로 겹치지 않게 NavigationStack 바깥에서도 가로 고정
-                        .id("\(themeRaw)-\(router.singleUsesDetail)")
+                        .id("\(themeRaw)-\(router.singleUsesDetail || router.foldPreview)")
                     }
                 }
                 .frame(width: total, height: geo.size.height, alignment: .topLeading)

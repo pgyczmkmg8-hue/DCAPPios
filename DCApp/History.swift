@@ -381,11 +381,18 @@ struct ListFilter: Codable, Equatable {
     var recOn = false, rec = 3
     var cmtOn = false, cmt = 3
     var viewOn = false, view = 30
+    /// 갤러리 키(미니 mi$·인물 pr$ 접두어 포함) → 그 갤러리에서 고른 말머리들. 없거나 비면 말머리로 거르지 않음
+    var heads: [String: [String]]? = nil
 
-    var isActive: Bool { read != .all || recOn || cmtOn || viewOn }
-    /// 페이지로 넘길 값 (켠 조건만)
-    var script: [String: Any] {
-        ["read": read.rawValue, "rec": recOn ? rec : -1, "cmt": cmtOn ? cmt : -1, "view": viewOn ? view : -1]
+    /// 어느 갤러리에서든 걸린 필터가 있는지 (필터 끄기 표시용)
+    var isActive: Bool { read != .all || recOn || cmtOn || viewOn || (heads?.values.contains { !$0.isEmpty } ?? false) }
+    /// 이 갤러리 목록에 걸린 필터가 있는지 (말머리는 이 갤러리 것만)
+    func activeIn(_ gallery: String?) -> Bool { read != .all || recOn || cmtOn || viewOn || !headsFor(gallery).isEmpty }
+    /// 이 갤러리에서 고른 말머리들
+    func headsFor(_ gallery: String?) -> [String] { gallery.flatMap { heads?[$0] } ?? [] }
+    /// 페이지로 넘길 값 (켠 조건만, 말머리는 이 갤러리 것)
+    func script(for gallery: String?) -> [String: Any] {
+        ["read": read.rawValue, "rec": recOn ? rec : -1, "cmt": cmtOn ? cmt : -1, "view": viewOn ? view : -1, "heads": headsFor(gallery)]
     }
 }
 
@@ -402,9 +409,14 @@ final class ListFilterStore: ObservableObject {
 }
 
 struct ListFilterSheet: View {
+    /// 지금 글 목록의 말머리 이름들 (말머리 줄에서 읽음). 비어 있으면 말머리 고르기 칸을 숨김
+    let headNames: [String]
+    /// 지금 갤러리 키 (말머리 고른 값은 갤러리마다 따로 저장)
+    let gallery: String?
     let onSave: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var f = ListFilterStore.shared.filter
+    @State private var picked: Set<String> = []
 
     var body: some View {
         NavigationStack {
@@ -417,6 +429,21 @@ struct ListFilterSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                if !headNames.isEmpty {
+                    Section {
+                        ForEach(headNames, id: \.self) { name in
+                            Toggle(isOn: Binding(
+                                get: { picked.contains(name) },
+                                set: { on in if on { picked.insert(name) } else { picked.remove(name) } }
+                            )) { Text(name) }
+                            .toggleStyle(CheckToggleStyle())
+                        }
+                    } header: {
+                        Text("말머리")
+                    } footer: {
+                        Text("고른 말머리의 글만 보여요. 아무것도 고르지 않으면 모든 말머리를 보여요.")
+                    }
+                }
                 Section {
                     row("추천 수", on: $f.recOn, value: $f.rec)
                     row("댓글 수", on: $f.cmtOn, value: $f.cmt)
@@ -426,7 +453,7 @@ struct ListFilterSheet: View {
                 }
                 if f.isActive {
                     Section {
-                        Button("필터 끄기", role: .destructive) { f = ListFilter() }
+                        Button("필터 끄기", role: .destructive) { f = ListFilter(); picked = [] }
                     }
                 }
             }
@@ -436,13 +463,21 @@ struct ListFilterSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("저장") {
-                        ListFilterStore.shared.filter = f
+                        var out = f
+                        var h = out.heads ?? [:]
+                        if let g = gallery {
+                            let names = headNames.filter { picked.contains($0) }
+                            h[g] = names.isEmpty ? nil : names
+                        }
+                        out.heads = h.isEmpty ? nil : h
+                        ListFilterStore.shared.filter = out
                         onSave()
                         dismiss()
                     }
                 }
             }
         }
+        .onAppear { picked = Set(f.headsFor(gallery)) }
         .sheetUnderBlueBar(medium: true)
     }
 

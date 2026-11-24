@@ -65,25 +65,89 @@ enum ContentScript {
       // 디시 웹 알림 배너(새글·실베 등) — 앱 알림이 대신함
       '.alarm-popup{display:none!important}',
       // 앱 말머리 탭
-      '#dcapp-headbar{display:flex;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:0 6px;margin:0;width:auto;background:#fff;border-bottom:1px solid rgb(223,225,238)}',
+      '#dcapp-headbar{display:flex;gap:0;overflow:visible;padding:0 6px;margin:0;width:auto;background:#fff;border-bottom:1px solid rgba(0,0,0,.06)}',
       '#dcapp-headbar::-webkit-scrollbar{display:none}',
-      'html.darkmode #dcapp-headbar{background:#272729;border-bottom-color:#3d3d41}',
+      '#dcapp-headbar .dcapp-hfix{display:flex;align-items:center;flex:0 0 auto}',
+      '#dcapp-headbar .dcapp-hscroll{display:flex;align-items:center;flex:1 1 auto;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}',
+      '#dcapp-headbar .dcapp-hscroll::-webkit-scrollbar{display:none}',
+      'html.darkmode #dcapp-headbar{background:#272729;border-bottom-color:rgba(255,255,255,.08)}',
       'html.darkmode #dcapp-headbar button{color:#ddd}',
-      'html.darkmode #dcapp-headbar button.on{color:#a9b4f0;border-bottom-color:#a9b4f0}',
-      // 말머리 탭: 공식 앱처럼 글자 탭 + 고른 탭 밑줄
-      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:0;padding:13px 14px 10px;border-radius:0;font-size:14px;line-height:1.2;font-weight:400;color:#222;background:transparent;border-bottom:3px solid transparent;-webkit-appearance:none}',
-      '#dcapp-headbar button.on{color:#3b4890;font-weight:600;border-bottom-color:#3b4890}',
+      'html.darkmode #dcapp-headbar button.on{color:#a9b4f0;background:rgba(169,180,240,.16)}',
+      // 말머리 탭: 고른 탭은 둥근 알약 배경으로 표시 (밑줄 없음)
+      '#dcapp-headbar button{flex:0 0 auto;border:0;margin:6px 2px;padding:6px 13px;border-radius:999px;font-size:14px;line-height:1.2;font-weight:400;color:#222;background:transparent;-webkit-appearance:none}',
+      '#dcapp-headbar button.on{color:#3b4890;font-weight:600;background:rgba(59,72,144,.10)}',
       // 글 목록 한 줄: 글자 글 아이콘은 빼고(사진 글만 아이콘), 정보 줄은 닉네임·조회·추천 → 오른쪽 끝에 말머리·시간
-      'ul.gall-detail-lst > li .sp-lst-txt{display:none!important}',
       'ul.gall-detail-lst > li.dcapp-filtered{display:none!important}',
       // 글자 글은 아이콘 자리(왼쪽 여백)도 없애고, 맨 끝으로 옮긴 시간 뒤의 구분선은 숨김
-      'ul.gall-detail-lst > li:has(.sp-lst-txt) .subject-add{padding-left:0!important}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::after, ul.gall-detail-lst > li ul.ginfo > li.dcapp-time::before{display:none!important}',
       'ul.gall-detail-lst > li ul.ginfo{display:flex!important;flex-wrap:nowrap!important;align-items:center}',
-      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head{order:9;margin-left:auto}',
+      'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head{order:-1;margin-left:0}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time{order:10}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time:not(.dcapp-after-head){margin-left:auto}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head-default{display:none!important}',
+      // 페이지 구분선(더보기·당기기로 이어 붙인 페이지 앞): "N페이지 ───" 한 줄, 글자 12px 회색, 다크모드·듀오 안전 영역 대응
+      'ul.gall-detail-lst > li.dcapp-pg-sep{display:flex!important;align-items:center;gap:8px;list-style:none!important;margin:0!important;padding:8px 12px!important;border:0!important;background:transparent!important;color:#8a8f99!important;font-size:12px!important;line-height:1.2!important;box-sizing:border-box!important;min-height:0!important;height:auto!important}',
+      'ul.gall-detail-lst > li.dcapp-pg-sep > span{flex:0 0 auto;font-weight:600}',
+      'ul.gall-detail-lst > li.dcapp-pg-sep::after{content:"";flex:1 1 auto;height:1px;background:var(--dcapp-hl)}',
+      'html.darkmode ul.gall-detail-lst > li.dcapp-pg-sep{color:#9aa0ab!important}',
+      // 듀오: 글자(N페이지)는 왼쪽 안전 영역 안쪽, 선은 안전 영역을 지나 오른쪽 16px 여백까지
+      'html.dcapp-duocol ul.gall-detail-lst > li.dcapp-pg-sep,html.dcapp-duoflip ul.gall-detail-lst > li.dcapp-pg-sep{padding-left:calc(12px + env(safe-area-inset-left))!important;padding-right:16px!important}',
+      // 목록 톤 변수 (다크모드·듀오 안전 영역은 값만 바꿈). 행 구분선은 양끝 16px을 비운 헤어라인
+      'html{--dcapp-hl:rgba(0,0,0,.06);--dcapp-hl-l:16px;--dcapp-hl-r:16px}',
+      'html.darkmode{--dcapp-hl:rgba(255,255,255,.08)}',
+      'ul.gall-detail-lst > li{border-top-color:transparent!important;background-image:linear-gradient(to right,transparent var(--dcapp-hl-l),var(--dcapp-hl) var(--dcapp-hl-l),var(--dcapp-hl) calc(100% - var(--dcapp-hl-r)),transparent calc(100% - var(--dcapp-hl-r)))!important;background-size:100% 1px!important;background-repeat:no-repeat!important;background-position:0 0!important}',
+      'ul.gall-detail-lst + ul.gall-detail-lst,.detail-sel-box + .gall-detail-lst{border-top-color:transparent!important}',
+      'ul.gall-detail-lst{border-bottom:0!important}',
+      // 글 종류 아이콘: 이미지 없는 글은 문서, 사진·영상 글은 단색 사진·영상 (디시 초록 스프라이트 대신). 색은 글자색을 따라감
+      'ul.gall-detail-lst > li .sp-lst-txt,ul.gall-detail-lst > li .sp-lst-recotxt{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTQgMS43NWg1LjFMMTIuNzUgNS40VjEzLjVhLjc1Ljc1IDAgMCAxLS43NS43NUg0YS43NS43NSAwIDAgMS0uNzUtLjc1VjIuNUEuNzUuNzUgMCAwIDEgNCAxLjc1WiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik02IDguMjVoNE02IDEwLjc1aDQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==)}',
+      'ul.gall-detail-lst > li .sp-lst-img,ul.gall-detail-lst > li .sp-lst-recoimg{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48Y2lyY2xlIGN4PSI1LjYiIGN5PSI2LjIiIHI9IjEuMjUiIGZpbGw9IiMwMDAiLz48cGF0aCBkPSJNMi42IDEyLjJsMy40LTMuMyAyLjIgMi4xIDEuNi0xLjUgMy42IDIuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==)}',
+      'ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-recoplay,ul.gall-detail-lst > li .sp-lst-mov,ul.gall-detail-lst > li .sp-lst-recommov{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48cGF0aCBkPSJNNi42IDUuNnY0LjhsMy45LTIuNHoiIGZpbGw9IiMwMDAiLz48L3N2Zz4=)}',
+      'ul.gall-detail-lst > li .sp-lst-txt,ul.gall-detail-lst > li .sp-lst-recotxt,ul.gall-detail-lst > li .sp-lst-img,ul.gall-detail-lst > li .sp-lst-recoimg,ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-recoplay,ul.gall-detail-lst > li .sp-lst-mov,ul.gall-detail-lst > li .sp-lst-recommov{background:none!important;display:block!important;width:14px!important;height:14px!important;font-size:0!important;line-height:0!important;overflow:hidden!important;color:#7a808c!important;top:50%!important;transform:translateY(-50%)!important}',
+      'ul.gall-detail-lst > li .sp-lst-txt::before,ul.gall-detail-lst > li .sp-lst-recotxt::before,ul.gall-detail-lst > li .sp-lst-img::before,ul.gall-detail-lst > li .sp-lst-recoimg::before,ul.gall-detail-lst > li .sp-lst-play::before,ul.gall-detail-lst > li .sp-lst-recoplay::before,ul.gall-detail-lst > li .sp-lst-mov::before,ul.gall-detail-lst > li .sp-lst-recommov::before{content:"";display:block;width:100%;height:100%;background:currentColor;-webkit-mask:var(--dcapp-ico) center/contain no-repeat;mask:var(--dcapp-ico) center/contain no-repeat}',
+      'html.darkmode ul.gall-detail-lst > li .sp-lst-txt,html.darkmode ul.gall-detail-lst > li .sp-lst-recotxt,html.darkmode ul.gall-detail-lst > li .sp-lst-img,html.darkmode ul.gall-detail-lst > li .sp-lst-recoimg,html.darkmode ul.gall-detail-lst > li .sp-lst-play,html.darkmode ul.gall-detail-lst > li .sp-lst-recoplay,html.darkmode ul.gall-detail-lst > li .sp-lst-mov,html.darkmode ul.gall-detail-lst > li .sp-lst-recommov{color:#a3a9b6!important}',
+      '#dcapp-headbar #dcapp-filterbtn{flex:0 0 auto;border:0;margin:6px 4px 6px 0;padding:0 7px;height:30px;border-radius:999px;background:transparent;color:#5b6170;display:flex;align-items:center;justify-content:center;-webkit-appearance:none}',
+      '#dcapp-headbar #dcapp-filterbtn svg{width:19px;height:19px;display:block}',
+      '#dcapp-headbar #dcapp-filterbtn.dcapp-on{background:rgba(59,72,144,.12);color:#3b4890}',
+      'html.darkmode #dcapp-headbar #dcapp-filterbtn{color:#c9ccd4}',
+      'html.darkmode #dcapp-headbar #dcapp-filterbtn.dcapp-on{background:rgba(169,180,240,.16);color:#a9b4f0}',
+      // 댓글 수: 행 오른쪽 위 캡슐(말풍선 아이콘 + 숫자), 작성시간: 행 오른쪽 아래. 두 개가 같은 오른쪽 끝선에 맞음. 제목은 캡슐을 피해 줄어듦
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li{position:relative}',
+      // 댓글 배지·작성시간은 같은 기준(행 li)에 맞춤: 1페이지 .gall-detail-lnktb도 static (2페이지+ 배지는 li 바로 아래라 기준이 li와 같아야 함)
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .gall-detail-lnktb{position:static!important}',
+      // 제목 줄은 행 전체 폭을 씀 (오른쪽 댓글 배지·작성시간과는 .subject-add 오른쪽 여백 72px로만 떨어뜨림). 디시 기본 .lt 폭 제한을 풂
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt{display:block!important;width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important;box-sizing:border-box!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .gall-detail-lnktb,ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .gall-detail-lnk{width:100%!important;max-width:none!important;box-sizing:border-box!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .subject-add{max-width:100%!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .subjectin{max-width:100%!important;box-sizing:border-box!important;flex:1 1 auto!important;min-width:0!important}',
+      'svg.dcapp-cmt-ico{width:12px!important;height:12px!important;flex:none!important;display:block!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt .subject-add{padding-right:72px!important;box-sizing:border-box!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{position:absolute!important;top:6px!important;right:12px!important;display:block!important;width:auto!important;min-width:0!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;text-align:right!important;white-space:nowrap!important;line-height:1!important;vertical-align:middle!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{position:absolute!important;right:12px!important;bottom:5px!important;margin:0!important;line-height:1.2!important;white-space:nowrap!important}',
+      // 듀오 외부 화면: 안전 영역(시계·독 쪽) 안쪽으로 같은 오른쪽 끝선 (dcapp-duoflip은 안전 영역이 왼쪽에 있어 left 기준)
+      'html.dcapp-duocol ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{right:calc(12px + env(safe-area-inset-right))!important}',
+      'html.dcapp-duocol ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{right:calc(12px + env(safe-area-inset-right))!important}',
+      'html.dcapp-duoflip ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{right:calc(12px + env(safe-area-inset-left))!important}',
+      'html.dcapp-duoflip ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{right:calc(12px + env(safe-area-inset-left))!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge .ct{display:inline-flex!important;align-items:center;justify-content:center;gap:3px;height:20px;box-sizing:border-box;padding:0 7px 0 6px!important;margin:0!important;border-radius:999px;background:rgba(59,72,144,.09)!important;color:#3b4890!important;font-size:12px!important;font-weight:600!important;line-height:1!important;vertical-align:middle}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge .ct svg{width:12px;height:12px;flex:none;display:block}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge.dcapp-cmt-zero .ct{background:rgba(0,0,0,.04)!important;color:#9aa0ab!important;font-weight:400!important}',
+      'html.darkmode ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge .ct{background:rgba(169,180,240,.14)!important;color:#a9b4f0!important}',
+      'html.darkmode ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge.dcapp-cmt-zero .ct{background:rgba(255,255,255,.06)!important;color:#7d8290!important}',
+      // 목록 상단 고정: 말머리 목록(sticky)과 지나온 페이지 표시줄. html·body·.sec-wrap의 overflow(앱 기본 hidden, 디시 hidden)가 sticky를 막아, 목록 페이지에서만 x축을 clip으로 바꾸고 y축은 풀어 둠 (clip은 스크롤 상자가 되지 않음)
+      '#dcapp-headbar{position:sticky!important;top:0;z-index:21}',
+      'html:has(ul.gall-detail-lst),body:has(ul.gall-detail-lst),.sec-wrap:has(ul.gall-detail-lst),.sec-wrap-sub:has(ul.gall-detail-lst){overflow-x:clip!important;overflow-y:visible!important}',
+      '#dcapp-pgwrap{position:sticky;top:0;height:0;z-index:20}',
+      '#dcapp-pgbar{display:none;position:absolute;left:0;right:0;top:0;height:30px;box-sizing:border-box;align-items:center;gap:8px;padding:0 12px;background:#fff;color:#3b4890;font-size:12px;font-weight:600;line-height:1;box-shadow:0 1px 0 var(--dcapp-hl)}',
+      '#dcapp-pgbar.dcapp-on{display:flex}',
+      '#dcapp-pgbar::after{content:"";flex:1 1 auto;height:1px;background:var(--dcapp-hl)}',
+      'html.darkmode #dcapp-pgbar{background:#272729;color:#a9b4f0}',
+      'html.dcapp-duocol #dcapp-pgbar{padding-left:calc(12px + env(safe-area-inset-left))!important;padding-right:16px!important}',
+      'html.dcapp-duoflip #dcapp-pgbar{padding-left:calc(12px + env(safe-area-inset-left))!important;padding-right:16px!important}',
+      // 말머리 줄: 투명 테두리로 잘리던 것을 없애고 여백으로. 맨 왼쪽 버튼은 왼쪽 안전 영역 안에서 시작, 끝 스페이서로 마지막 버튼까지 스크롤
+      'html.dcapp-duocol #dcapp-headbar,html.dcapp-duoflip #dcapp-headbar{padding-left:calc(6px + env(safe-area-inset-left))!important}',
+      '#dcapp-headbar .dcapp-hscroll::after{content:"";flex:0 0 6px}',
+      'html.dcapp-duocol #dcapp-headbar .dcapp-hscroll::after{flex:0 0 calc(6px + env(safe-area-inset-right))}',
+      'html.dcapp-duoflip #dcapp-headbar .dcapp-hscroll::after{flex:0 0 calc(6px + env(safe-area-inset-left))}',
       '.dcapp-cmt{margin-left:.3em;color:rgb(41,121,255)!important;font-weight:600;white-space:nowrap}',
       // 오른쪽 댓글 칸을 없앤 자리까지 제목이 쓰도록
       '.gall-detail-lnk:has(> .rt.dcapp-hide) > .lt{width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important}',
@@ -132,7 +196,7 @@ enum ContentScript {
       '.gallview-tit-box{padding-right:max(12px,env(safe-area-inset-right))!important;padding-left:max(12px,env(safe-area-inset-left))!important}',
       // 듀오 옆 세로 줄(시계·배터리)이 있을 때: 글자는 줄 안쪽으로 (사진·영상은 줄 아래까지 그대로 깔림)
       // 박스(배경)는 화면 끝까지 채우고 글자만 줄 안쪽으로: 투명 테두리를 줄 폭만큼 둠 (배경은 테두리 밑까지 깔리고, 원래 안쪽 여백은 그대로)
-      'html.dcapp-duocol .gall-detail-lnktb,html.dcapp-duocol .thum-txtin,html.dcapp-duocol li.comment,html.dcapp-duocol li.comment-add,html.dcapp-duocol #dcapp-headbar{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
+      'html.dcapp-duocol .gall-detail-lnktb,html.dcapp-duocol .thum-txtin,html.dcapp-duocol li.comment,html.dcapp-duocol li.comment-add{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
       // 글 목록: 제목이 줄어들어도(…) [댓글수]는 항상 보이게, 시간은 줄 안쪽 끝에 (위의 테두리로 줄 폭만큼 안쪽에서 끝남)
       // 글 목록 줄은 display:table;width:100% 라서 테두리를 더하면 폭이 그만큼 커져 오른쪽으로 밀림 → 테두리를 폭 안에 포함
       'html.dcapp-duocol ul.gall-detail-lst > li .gall-detail-lnktb{box-sizing:border-box!important;width:100%!important}',
@@ -142,7 +206,7 @@ enum ContentScript {
       'html.dcapp-duocol::before{content:"";position:fixed;top:0;bottom:0;right:0;width:env(safe-area-inset-right);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol::after{content:"";position:fixed;top:0;bottom:0;left:0;width:env(safe-area-inset-left);z-index:2147483646;touch-action:none;pointer-events:auto}',
       // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
-      'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add,html.dcapp-duoflip #dcapp-headbar{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
       // 글 아래 목록보기·수정·삭제 버튼 줄: 오른쪽 끝(삭제)이 세로 줄 터치 차단막 밑에 깔려 안 눌림 → 다른 글자칸처럼 줄 밖으로
       'html.dcapp-duocol .btn-justify-area{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
       'html.dcapp-duoflip .btn-justify-area{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
@@ -357,7 +421,7 @@ enum ContentScript {
   }
   function markReadRows() {
     if (!readSet) return;
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       var a = li.querySelector('a.lt, a[href]');
       var k = a && postKeyOf(a.getAttribute('href'));
       li.classList.toggle('dcapp-read', !!(k && readSet.has(k)));
@@ -400,7 +464,7 @@ enum ContentScript {
   }
   /// 글 목록의 닉네임: 디시가 긴 닉네임을 '가나다..'로 줄여 보냄 → 같은 행의 숨은 정보(blockInfo)에 있는 원래 닉네임으로 되돌려 표시
   function expandListNicks() {
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       var bi = li.querySelector('.blockInfo');
       var full = bi ? (bi.getAttribute('data-name') || '').trim() : '';
       if (!full) return;
@@ -448,8 +512,13 @@ enum ContentScript {
     });
     return n;
   }
+  /// 행의 말머리 이름 (메타 줄 맨 앞 칸, 없으면 빈 문자열)
+  function headNameOf(li) {
+    var h = li.querySelector('ul.ginfo > li.dcapp-head');
+    return h ? txt(h) : '';
+  }
   function applyListFilter() {
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       var hide = false;
       if (listFilter && li.querySelector('ul.ginfo')) {
         var f = listFilter;
@@ -465,45 +534,110 @@ enum ContentScript {
           var c = ct ? parseInt((ct.textContent || '').replace(/[^0-9]/g, '') || '0', 10) : 0;
           if (c < f.cmt) hide = true;
         }
+        if (f.heads && f.heads.length && f.heads.indexOf(headNameOf(li)) < 0) hide = true;   // 고른 말머리만
       }
       li.classList.toggle('dcapp-filtered', hide);
     });
+    var fbtn = document.getElementById('dcapp-filterbtn');
+    if (fbtn) fbtn.classList.toggle('dcapp-on', !!listFilter);
+  }
+
+  /// 글목록을 '더보기'나 당기기로 이어 붙이면 디시는 페이지마다 <ul id="listthumN">을 새로 만든다(N = 그 페이지 번호).
+  /// 각 목록 맨 앞에 "N페이지" 구분선(li.dcapp-pg-sep)을 한 번만 넣는다. 첫 목록(id 없음)은 처음 열린 주소의 page 값을 쓴다.
+  /// 주소는 더보기 뒤 pushState로 바뀌므로 첫 페이지 번호는 처음 한 번만 읽는다.
+  var pgBase = null;
+  function pageSeparators() {
+    if (!document.getElementById('pagination_div')) return;
+    if (pgBase === null) pgBase = parseInt(new URL(location.href).searchParams.get('page'), 10) || 1;
+    document.querySelectorAll('ul.gall-detail-lst:not(#view_next):not(.sch-comment):not(.thum)').forEach(function (ul) {
+      if (ul.querySelector(':scope > li.dcapp-pg-sep')) return;
+      if (!ul.querySelector(':scope > li:not(.dcapp-pg-sep):not(.app-info-ban)')) return;   // 행이 아직 안 채워졌으면 다음 변화 때
+      var m = /^listthum(\d+)$/.exec(ul.id || '');
+      var pg = m ? parseInt(m[1], 10) : pgBase;
+      var sep = document.createElement('li');
+      sep.className = 'dcapp-pg-sep';
+      sep.setAttribute('data-page', String(pg));
+      var label = document.createElement('span');
+      label.textContent = pg + '페이지';
+      sep.appendChild(label);
+      ul.insertBefore(sep, ul.firstChild);
+    });
   }
   // ---------- 글 목록 맨 아래에서 위로 더 당기면 → 디시 '더보기'(v) 눌러 다음 글 이어 붙이기 ----------
-  (function pullForMore() {
-    var base = null, armed = false, tip = null;
+  /// 말머리 목록 아래에 지나온 페이지 표시줄(#dcapp-pgwrap > #dcapp-pgbar)을 둠. 목록을 내리다 페이지 구분선을 지나면 그 페이지 번호를 위에 띄우고,
+  /// 구분선이 다시 보이면 숨김. 표시줄은 absolute라 보이고 숨겨도 목록이 밀리지 않음
+  var pgTick = false;
+  function pageStickyBar() {
+    var lst = document.querySelector('ul.gall-detail-lst:not(#view_next):not(.sch-comment):not(.thum)');
+    var wrap = document.getElementById('dcapp-pgwrap');
+    if (!lst || !document.getElementById('pagination_div')) {
+      if (wrap) wrap.parentNode.removeChild(wrap);
+      return;
+    }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'dcapp-pgwrap';
+      var pb = document.createElement('div');
+      pb.id = 'dcapp-pgbar';
+      wrap.appendChild(pb);
+    }
+    if (wrap.nextElementSibling !== lst) lst.parentNode.insertBefore(wrap, lst);
+    var head = document.getElementById('dcapp-headbar');
+    var t = (head ? head.offsetHeight : 0) + 'px';
+    if (wrap.style.top !== t) wrap.style.top = t;
+    pageStickyUpdate();
+  }
+  function pageStickyUpdate() {
+    var pb = document.getElementById('dcapp-pgbar');
+    if (!pb) return;
+    var head = document.getElementById('dcapp-headbar');
+    var line = head ? head.offsetHeight : 0;
+    var seps = document.querySelectorAll('ul.gall-detail-lst:not(#view_next):not(.sch-comment):not(.thum) > li.dcapp-pg-sep');
+    var pick = null;
+    for (var i = 0; i < seps.length; i++) {
+      if (seps[i].getBoundingClientRect().bottom <= line) pick = seps[i]; else break;
+    }
+    if (!pick) { pb.classList.remove('dcapp-on'); return; }
+    var label = (pick.textContent || '').trim();
+    if (pb.textContent !== label) pb.textContent = label;
+    pb.classList.add('dcapp-on');
+  }
+  document.addEventListener('scroll', function () {
+    if (pgTick) return;
+    pgTick = true;
+    requestAnimationFrame(function () { pgTick = false; try { pageStickyUpdate(); } catch (e) {} });
+  }, { capture: true, passive: true });
+
+  /// 글목록 자동 이어 불러오기: 맨 아래에서 350px 남은 지점에 닿으면 당기기·손 떼기 없이 다음 페이지를 불러옴.
+  /// 중복 방지: 로딩 중(#listMore에 스피너)이면 부르지 않고, 목록 수가 늘지 않은 채 4초가 지나야 다시 부름. 부른 뒤 8초 동안 짧게 다시 확인(짧은 페이지도 이어짐)
+  (function autoMore() {
+    var NEAR = 350, COOL = 4000, lastFire = 0, lastFireCount = -1, tick = false;
     function moreBtn() {
       var b = document.getElementById('listMore');
       return b && b.offsetParent !== null && document.querySelector('ul.gall-detail-lst') ? b : null;
     }
-    function atBottom() {
-      var se = document.scrollingElement || document.documentElement;
-      return window.scrollY + window.innerHeight >= se.scrollHeight - 4;
-    }
-    function showTip(on) {
-      if (on && !tip) {
-        tip = document.createElement('div');
-        tip.textContent = '놓으면 다음 글 불러오기';
-        tip.style.cssText = 'position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:2147483000;padding:8px 14px;border-radius:999px;background:rgba(59,72,144,.92);color:#fff;font-size:14px;pointer-events:none';
-        document.body.appendChild(tip);
-      } else if (!on && tip) { tip.remove(); tip = null; }
-    }
-    document.addEventListener('touchstart', function () { base = null; armed = false; }, { passive: true });
-    document.addEventListener('touchmove', function (e) {
-      if (!moreBtn() || e.touches.length !== 1) return;
-      var y = e.touches[0].clientY;
-      if (!atBottom()) { base = null; if (armed) { armed = false; showTip(false); } return; }
-      if (base === null) base = y;                 // 맨 아래에 닿은 순간부터 잰 당긴 거리
-      var pulled = base - y > 90;
-      if (pulled !== armed) { armed = pulled; showTip(armed); }
-    }, { passive: true });
-    document.addEventListener('touchend', function () {
-      showTip(false);
-      if (!armed) return;
-      armed = false; base = null;
+    function check() {
+      tick = false;
       var b = moreBtn();
-      if (b) { if (typeof window.list_more === 'function') window.list_more(); else b.click(); }
-    }, { passive: true });
+      if (!b || b.querySelector('.dc-spinner')) return;
+      var se = document.scrollingElement || document.documentElement;
+      if (window.scrollY + window.innerHeight < se.scrollHeight - NEAR) return;
+      var now = Date.now(), n = document.querySelectorAll('ul.gall-detail-lst').length;
+      if (n <= lastFireCount && now - lastFire < COOL) return;
+      lastFire = now;
+      lastFireCount = n;
+      if (typeof window.list_more === 'function') window.list_more(); else b.click();
+      var t0 = Date.now();
+      var iv = setInterval(function () {
+        check();
+        if (Date.now() - t0 > 8000) clearInterval(iv);
+      }, 400);
+    }
+    document.addEventListener('scroll', function () {
+      if (tick) return;
+      tick = true;
+      requestAnimationFrame(check);
+    }, { capture: true, passive: true });
   })();
 
   /// 글 목록 페이지 이동: 디시 페이지 번호는 숨기고 앱이 큰 버튼으로 다시 그림
@@ -710,7 +844,7 @@ enum ContentScript {
       list.push({ el: el, kind: kind });
       if (el.getAttribute('data-dcapp-unit') !== kind) el.setAttribute('data-dcapp-unit', kind);
     }
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       if (/(^|\s)ad/.test(clsOf(li))) return;
       if (!li.querySelector('a')) return;
       add(li, 'post');
@@ -1624,7 +1758,7 @@ enum ContentScript {
     "li:has(> a[href*='ads.dcinside.com'])", "a[href*='addc.dcinside.com']", "a[href*='ads.dcinside.com']",
     '.ad-view', '.adv-area', '.ad_box', '.ad-box', '.adbox', '.banner_m', '.powerlink', '[class*="power-link"]',
     // 디시 모바일에서 확인한 것: 파워링크 광고 줄, 글 목록 맨 위 설문·AD 줄, 하단 '앱 다운로드' 배너, 상단 빈 검색 칸
-    '.adv-group', '.pwlink', 'li:not(.notice):has(> .detail-top-lnk)', '#app_down_pop', '.layer-bottom-popup',
+    'li.adv-inner', '.adv-group', '.pwlink', 'li:not(.notice):has(> .detail-top-lnk)', '#app_down_pop', '.layer-bottom-popup',
     '.outside-search-box',
     // 글 본문 아래 'AD | 더 알아보기' 광고 칸 (회색 띠째로)
     '[class*="adv-group"]', '[id^="rtbx-ad"]', '[id*="rtbx"]', '[class*="rtbx"]'
@@ -1632,7 +1766,7 @@ enum ContentScript {
   /// 글 목록 맨 위의 'AD' / '설문' 줄 (선택자로 못 잡는 경우 글자로)
   function hideListPromos() {
     if (cfg.adBlock === false) return;
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       if (/^(AD|설문)\s/.test(txt(li))) li.classList.add('dcapp-pinned-off');
     });
     // 광고 칸을 감싼 회색 띠: 광고 말고 다른 내용이 없을 때만 같이 숨김
@@ -1652,24 +1786,33 @@ enum ContentScript {
     });
   }
   /// 글 목록: 오른쪽 회색 칸의 댓글 수를 없애고 제목 옆에 파란 [댓글수]로
+  /// 댓글 수 아이콘(말풍선, 선 모양). 행 오른쪽 캡슐의 .ct 앞에 한 번만 넣음
+  var CMT_ICON = '<svg class="dcapp-cmt-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
   function listCommentCount() {
-    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban)').forEach(function (li) {
+    document.querySelectorAll('ul.gall-detail-lst > li:not(.app-info-ban):not(.dcapp-pg-sep)').forEach(function (li) {
       var ct = li.querySelector('.ct');
       if (!ct) return;
       var box = ct.closest('a.rt') || ct.closest('.rt') || ct;
       var title = li.querySelector('.subjectin') || li.querySelector('.subject-add') || li.querySelector('.subject');
       if (!title) return;
       var n = (ct.textContent || '').replace(/[^0-9]/g, '');
-      var tag = li.querySelector('.dcapp-cmt');
-      if (n && n !== '0') {
-        if (!tag) {
-          tag = document.createElement('span');
-          tag.className = 'dcapp-cmt';
-          title.parentNode.insertBefore(tag, title.nextSibling);
-        }
-        if (tag.textContent !== '[' + n + ']') tag.textContent = '[' + n + ']';
-      } else if (tag) tag.parentNode.removeChild(tag);
-      box.classList.add('dcapp-hide');
+      // 썸네일 목록·댓글 검색 목록·글 아래 목록은 예전처럼 제목 뒤 [n]으로 표시
+      if (li.closest('ul.gall-detail-lst.thum, ul.gall-detail-lst.sch-comment, #view_next')) {
+        var tag0 = li.querySelector('.dcapp-cmt');
+        if (n && n !== '0') {
+          if (!tag0) { tag0 = document.createElement('span'); tag0.className = 'dcapp-cmt'; title.parentNode.insertBefore(tag0, title.nextSibling); }
+          if (tag0.textContent !== '[' + n + ']') tag0.textContent = '[' + n + ']';
+        } else if (tag0) tag0.parentNode.removeChild(tag0);
+        box.classList.add('dcapp-hide');
+        return;
+      }
+      // 일반 글 목록: 행 오른쪽 캡슐(아이콘 + 숫자). 제목 뒤 [n]은 두지 않음
+      var oldTag = li.querySelector('.dcapp-cmt');
+      if (oldTag) oldTag.parentNode.removeChild(oldTag);
+      box.classList.remove('dcapp-hide');
+      box.classList.add('dcapp-cmtbadge');
+      box.classList.toggle('dcapp-cmt-zero', !n || n === '0');
+      if (!ct.querySelector('svg.dcapp-cmt-ico')) ct.insertAdjacentHTML('afterbegin', CMT_ICON);
     });
   }
   function adBlockCSS() {
@@ -1965,6 +2108,51 @@ enum ContentScript {
     if (ok && ok.textContent !== t) ok.textContent = t;
   }
 
+  /// 추천·비추천이 '다음에 다시 시도'로 실패하면 알림창 없이 0.2초 뒤 새로고침하고, 로딩 뒤 0.2초 뒤 같은 버튼을 다시 누름 (최대 20회).
+  /// 멈추는 경우: 숫자가 바뀌어 성공 · 보안문자 상자가 필요 · 이미 추천 등 다른 안내 · 다른 글로 이동 · 20회 도달
+  /// 상태는 세션 저장소에 두어 새로고침을 넘김. 알림은 페이지 안에서 가로채므로 앱 쪽 알림 처리는 바뀌지 않음
+  var RECOM_KEY = 'dcapp-recom-retry', RECOM_MAX = 20, RECOM_TTL = 30000;
+  var recomKindNow = null, recomRetryScheduled = false;
+  var origAlert = window.alert;
+  window.alert = function (msg) {
+    var m = typeof msg === 'string' ? msg : '';
+    if (recomKindNow && m.indexOf('다음에 다시 시도') > -1) { scheduleRecomRetry(recomKindNow); return; }
+    return origAlert.apply(window, arguments);
+  };
+  function recomState() {
+    try { return JSON.parse(sessionStorage.getItem(RECOM_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function recomClear() { try { sessionStorage.removeItem(RECOM_KEY); } catch (e) {} }
+  function scheduleRecomRetry(kind) {
+    recomRetryScheduled = true;
+    var st = recomState();
+    var n = st && st.url === location.href ? (st.n || 0) : 0;
+    if (n >= RECOM_MAX) {
+      recomClear();
+      recomRetryScheduled = false;
+      origAlert.call(window, '추천이 계속 실패해 자동 재시도를 멈췄어요 (' + RECOM_MAX + '회). 잠시 뒤 다시 눌러 주세요.');
+      return;
+    }
+    try { sessionStorage.setItem(RECOM_KEY, JSON.stringify({ kind: kind, n: n + 1, url: location.href, t: Date.now() })); } catch (e) {}
+    setTimeout(function () { location.reload(); }, 200);
+  }
+  function runRecomRetry() {
+    var st = recomState();
+    if (!st) return;
+    if (st.url !== location.href || Date.now() - (st.t || 0) > RECOM_TTL) { recomClear(); return; }
+    var down = st.kind === 'down';
+    var btn = document.getElementById(down ? 'nonrecommend_join' : 'recommend_join');
+    var cnt = document.getElementById(down ? 'nonrecomm_btn' : 'recomm_btn');
+    if (!btn || document.getElementById('recom_join_box') || document.getElementById('captcha_codeF') || document.getElementById('captcha_codeR')) { recomClear(); return; }
+    recomRetryScheduled = false;
+    recomKindNow = down ? 'down' : 'up';
+    btn.click();
+    recomKindNow = null;
+    setTimeout(function () { if (!recomRetryScheduled) recomClear(); }, 400);
+  }
+  if (document.readyState === 'complete') setTimeout(runRecomRetry, 200);
+  else window.addEventListener('load', function () { setTimeout(runRecomRetry, 200); });
+
   function voteAction(key) {
     var map = { up: '#recommend_join', down: '#nonrecommend_join', best: '.reco-icon-lst .sp-bestchucon', pum: '.reco-icon-lst .sp-crosspost', report: '.reco-icon-lst .sp-report' };
     var area = document.querySelector('.reco-area');
@@ -1981,7 +2169,7 @@ enum ContentScript {
       if (input && area) area.classList.add('dcapp-codeopen');     // 제출하는 동안 상자를 보여 줌 (성공하면 접힘)
     }
     var el = map[key] ? document.querySelector(map[key]) : null;
-    if (el) el.click();
+    if (el) { if (key === 'up' || key === 'down') recomKindNow = key; el.click(); recomKindNow = null; }
     if (key === 'up' || key === 'down') syncVoteCode();
     return el ? 'clicked' : 'none';
   }
@@ -2114,6 +2302,8 @@ enum ContentScript {
     try { markViewButtons(); } catch (e) {}
     try { listRowLayout(); } catch (e) {}
     try { applyListFilter(); } catch (e) {}
+    try { pageSeparators(); } catch (e) {}
+    try { pageStickyBar(); } catch (e) {}
     try { buildPager(); } catch (e) {}
     try { hideBelowPaging(); } catch (e) {}
     try { hideListTypeTabs(); } catch (e) {}
@@ -4071,12 +4261,22 @@ enum ContentScript {
   function headIdOf(url) {
     try { return new URL(url, location.href).searchParams.get('headid') || ''; } catch (e) { return ''; }
   }
+  /// 게시물 필터 깔때기 아이콘 (말머리 줄 맨 왼쪽)
+  var FILTER_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 9.5h9M9.5 12.8h5M11.2 16h1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  var lastHeadSig = null;
+  /// 말머리 이름들을 앱에 알림 (필터 시트의 말머리 고르기). 같은 목록이면 다시 보내지 않음
+  function reportHeadNames(names) {
+    var sig = names.join('|');
+    if (sig === lastHeadSig) return;
+    lastHeadSig = sig;
+    post('headnames', { names: names });
+  }
+  /// 말머리 줄(#dcapp-headbar): 맨 왼쪽 깔때기(게시물 필터) + 말머리 탭. 말머리 탭이 없는 갤러리에서도 깔때기는 보임
   function buildHeadBar() {
-    if (!document.querySelector('ul.gall-detail-lst')) return;
+    if (!document.querySelector('ul.gall-detail-lst') || !document.getElementById('pagination_div')) return;
     var row = headRow();
-    if (!row) return;
     var tabs = [];
-    row.items.forEach(function (a) {
+    if (row) row.items.forEach(function (a) {
       var name = txt(a);
       if (!name || name.length > 12) return;
       var url = name === '전체' ? '' : headHref(a);
@@ -4084,18 +4284,37 @@ enum ContentScript {
       if (tabs.some(function (t) { return t.name === name; })) return;
       tabs.push({ name: name, url: url, el: a });
     });
-    if (tabs.length < 2) return;
+    if (tabs.length < 2) {
+      // 말머리가 없는 갤러리: 말머리 줄을 두지 않음 → 게시물 필터는 앱 상단바 우측에 있음
+      var old = document.getElementById('dcapp-headbar');
+      if (old) old.parentNode.removeChild(old);
+      reportHeadNames([]);
+      return;
+    }
     row.box.classList.add('dcapp-hide');
     var cur = new URLSearchParams(location.search).get('headid') || '';
     var sig = tabs.map(function (t) { return t.name; }).join('|') + '#' + cur;
+    var names = tabs.map(function (t) { return t.name; }).filter(function (n) { return n !== '전체'; });
     var bar = document.getElementById('dcapp-headbar');
-    if (bar && bar.getAttribute('data-sig') === sig && bar.nextSibling === row.box) return;
+    if (bar && bar.getAttribute('data-sig') === sig && bar.nextSibling === row.box) { reportHeadNames(names); return; }
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'dcapp-headbar';
     }
     bar.setAttribute('data-sig', sig);
     bar.innerHTML = '';
+    // 왼쪽 고정 묶음(깔때기 + '전체')과 오른쪽 가로 스크롤 묶음(나머지 말머리). 스크롤해도 왼쪽 두 버튼은 그대로
+    var fixed = document.createElement('div');
+    fixed.className = 'dcapp-hfix';
+    var scroll = document.createElement('div');
+    scroll.className = 'dcapp-hscroll';
+    var fb = document.createElement('button');
+    fb.type = 'button';
+    fb.id = 'dcapp-filterbtn';
+    fb.setAttribute('aria-label', '게시물 필터');
+    fb.innerHTML = FILTER_ICON;
+    fb.addEventListener('click', function () { post('listfilter', {}); });
+    fixed.appendChild(fb);
     tabs.forEach(function (t) {
       var b = document.createElement('button');
       b.type = 'button';
@@ -4115,11 +4334,14 @@ enum ContentScript {
         }
         location.href = t.url;
       });
-      bar.appendChild(b);
+      (t.name === '전체' ? fixed : scroll).appendChild(b);
     });
+    bar.appendChild(fixed);
+    bar.appendChild(scroll);
     row.box.parentNode.insertBefore(bar, row.box);
     var sel = bar.querySelector('button.on');
-    if (sel && sel.offsetLeft > bar.clientWidth - 60) bar.scrollLeft = sel.offsetLeft - 16;
+    if (sel && scroll.contains(sel)) { var dx = sel.getBoundingClientRect().left - scroll.getBoundingClientRect().left; if (dx > scroll.clientWidth - 60) scroll.scrollLeft += dx - 16; }
+    reportHeadNames(names);
   }
   /// 갤러리 공지 목록 열기 (숨긴 '공지' 탭의 주소, 없으면 지금 주소에 notice=1)
   function openNotice() {
@@ -4522,7 +4744,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v278-cfbox', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v288-headfixed', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
