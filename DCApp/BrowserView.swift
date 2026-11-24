@@ -456,6 +456,7 @@ struct BrowserView: View {
         let left = model.isDetailPane ? router.barOverlayLeft : barMirrored
         model.setBarInset(left: left ? w : 0, right: left ? 0 : w)
     }
+    @State private var lastDuoOff: Bool?
     private func applySideColumn() {
         settleCompact()
         let inset = Self.windowTrailingInset
@@ -469,6 +470,9 @@ struct BrowserView: View {
             model.setColumnFlip(flip)
         }
         applyBarInset()
+        syncCommentPin()   // 컨트롤바 가로 ↔ 세로 전환 시 댓글 입력칸 아래 고정도 바로 따라감
+        let duoOff = Self.duoHorizontalBarNow
+        if duoOff != lastDuoOff { lastDuoOff = duoOff; model.applyFilters() }
         guard showsMenuButton else { return }
         SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
     }
@@ -620,6 +624,14 @@ struct BrowserView: View {
     static let compactTouchSize: CGFloat = 44
     /// 휴대폰(듀오 포함). 아이패드는 시스템 상단바를 그대로 씀
     static var isPhone: Bool { UIDevice.current.userInterfaceIdiom == .phone }
+    /// 듀오에서 컨트롤바를 가로(하단 바)로 쓰는 중인지 — 이때 웹 화면은 좌우 안전 영역을 무시하고 화면 끝까지 씀 (시계·배터리와 겹치는 것은 감수)
+    static var duoHorizontalBarNow: Bool {
+        guard isDuoSizedScreen else { return false }
+        let landscape = windowIsLandscape
+        let key = landscape ? ControlBarItem.verticalLandscapeKey : ControlBarItem.verticalPortraitKey
+        let vertical = Profile.defaults.object(forKey: key) as? Bool ?? (landscape ? true : ControlBarItem.defaultVerticalInPortrait)
+        return !vertical
+    }
     /// 창의 좌우 안전 영역 중 큰 값 (휴대폰을 가로로 눕히면 노치 쪽 여백)
     static var windowSideInsetMax: CGFloat {
         let ws = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
@@ -884,7 +896,7 @@ struct BrowserView: View {
                 .opacity(barTucked ? 0 : 1)      // 화면 밖으로 다 못 나가는 경우(접힌 버튼·유리 그림자 등)에도 확실히 안 보이게
                 .animation(.easeOut(duration: 0.2), value: barTucked)
                 .allowsHitTesting(!barTucked)
-                .ignoresSafeArea(.container, edges: (UIDevice.current.userInterfaceIdiom == .phone && !Self.hasSideColumnOnly) ? [.leading, .trailing]   // 일반 폰은 가로여도 컨트롤바를 화면 가장자리 기준으로
+                .ignoresSafeArea(.container, edges: ((UIDevice.current.userInterfaceIdiom == .phone && !Self.hasSideColumnOnly) || Self.duoHorizontalBarNow) ? [.leading, .trailing]   // 일반 폰은 가로여도 컨트롤바를 화면 가장자리 기준으로 (듀오 가로 바도 양끝까지)
                                                 : (fillsTrailing && Self.hasSideColumnOnly && !barMirrored ? .trailing : []))   // 듀오: 컨트롤바를 옆 세로 줄 자리로
             }
             // 듀오는 제목을 왼쪽 칸에 직접 그림 → 시스템 제목까지 있으면 펼쳤을 때 이름이 두 번 나옴
@@ -1240,6 +1252,8 @@ struct BrowserView: View {
                     .sheetUnderBlueBar(medium: true)
             }
             .onChangeCompat(of: model.listFilterTick) { _, _ in showListFilter = true }   // 말머리 줄 깔때기 버튼 (웹)
+            .onChangeCompat(of: verticalInLandscape) { _, _ in applySideColumn() }   // 컨트롤바 가로/세로 바꾸면 웹 여백도 바로
+            .onChangeCompat(of: verticalInPortrait) { _, _ in applySideColumn() }
             .sheet(isPresented: $showDraftPicker) {
                 DraftPickerSheet(galleryID: model.url.flatMap(AutoImageStore.writeGalleryID)) { d in
                     model.restoreDraft(d)

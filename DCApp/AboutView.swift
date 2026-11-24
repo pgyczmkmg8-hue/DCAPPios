@@ -166,7 +166,7 @@ struct AboutView: View {
                 VStack(spacing: 6) {
                     Text(appName)
                         .font(.title2.bold())
-                    Text("버전 \(Self.version) (빌드 \(Self.build))")
+                    Text("버전 \(Self.version) (빌드 \(Self.build))" + ((Int(Self.build) ?? 0) >= 1000 ? " · 테스트 버전" : ""))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

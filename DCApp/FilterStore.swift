@@ -454,6 +454,7 @@ final class FilterStore: ObservableObject {
             "anonG": AnonStore.galleryScriptValue,   // 갤러리별 유동 닉/비번 (있으면 공통보다 우선)
             "duoFlip": BrowserView.windowLeftColumn,   // 돌려서 왼쪽에 생긴 줄 → 글자 여백을 오른쪽으로 뒤집음
             "duoCol": BrowserView.hasSideColumnOnly,   // 듀오 옆 세로 줄이 있으면 글자는 줄 안쪽으로
+            "duoOff": BrowserView.duoHorizontalBarNow,   // 듀오에서 컨트롤바를 가로로 쓰는 중 → 옆 줄 여백을 붙이지 않음 (화면 끝까지)
             "images": s.images.map(\.key),                  // 차단한 본문 사진 키
             "imgHashes": s.images.compactMap { $0.hash },   // 해시 (있으면 페이지가 사진 생김새를 확인해 같은 사진을 찾음)
             "imgStyle": s.imageBlockStyle.rawValue,         // 가리는 방식: blur / gray

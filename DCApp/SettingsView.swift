@@ -18,6 +18,9 @@ struct SettingsView: View {
     @EnvironmentObject private var router: AppRouter
     @State private var path: [SettingsPage] = []
     @State private var showTutorial = false
+    /// 튜토리얼을 '시작하기'로 끝내면 버전 정보/업데이트 화면을 연다
+    @State private var aboutAfterTutorial = false
+    @State private var showAboutAfterTutorial = false
     @State private var currentID: String? = CredentialStore.currentAccountID
 
     private func runNotifyCheck() async {
@@ -204,8 +207,22 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
-            .fullScreenCover(isPresented: $showTutorial) {
-                TutorialView { showTutorial = false }
+            .fullScreenCover(isPresented: $showTutorial, onDismiss: {
+                if aboutAfterTutorial {
+                    aboutAfterTutorial = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(500))
+                        showAboutAfterTutorial = true
+                    }
+                }
+            }) {
+                TutorialView { openAbout in
+                    showTutorial = false
+                    aboutAfterTutorial = openAbout
+                }
+            }
+            .sheet(isPresented: $showAboutAfterTutorial) {
+                TutorialAboutSheet()
             }
             .navigationDestination(for: SettingsPage.self) { page in
                 switch page {

@@ -847,9 +847,8 @@ final class WebViewModel: NSObject, ObservableObject {
 
     /// 듀오 세로 줄이 왼쪽↔오른쪽으로 바뀌었을 때 지금 페이지의 글자 여백 방향을 바로 바꿈
     func setColumnFlip(_ on: Bool) {
-        applyFilters()   // 다음 페이지부터 쓸 설정도 갱신
-        let js = "(function(on){var r=document.documentElement;if(!r)return;if(on)r.classList.add('dcapp-duocol');r.classList.toggle('dcapp-duoflip',on);})(\(on)); true"
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        // 듀오 세로 줄 클래스는 페이지 설정(setConfig)이 정함 (가로 바일 때 줄 여백을 붙이지 않도록 여기서 직접 붙이지 않음)
+        applyFilters()
     }
 
     /// 크기가 바뀐 뒤 웹 화면을 새 크기로 다시 배치 (돌린 뒤 비어 보이는 일 대비)

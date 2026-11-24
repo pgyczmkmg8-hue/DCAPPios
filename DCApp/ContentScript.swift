@@ -609,35 +609,81 @@ enum ContentScript {
   }, { capture: true, passive: true });
 
   /// 글목록 자동 이어 불러오기: 맨 아래에서 350px 남은 지점에 닿으면 당기기·손 떼기 없이 다음 페이지를 불러옴.
-  /// 중복 방지: 로딩 중(#listMore에 스피너)이면 부르지 않고, 목록 수가 늘지 않은 채 4초가 지나야 다시 부름. 부른 뒤 8초 동안 짧게 다시 확인(짧은 페이지도 이어짐)
+  /// DC의 list_more는 요청이 실패하거나 멈춰도 스피너를 지우지 않으므로(오류 처리 없음) 앱이 요청을 감시함:
+  /// 12초 넘게 끝나지 않으면 요청을 끊고 '더보기'로 되돌림, 스피너만 남은 채 요청이 없으면 4초 뒤 되돌림.
+  /// 되돌린 뒤 연속 3번 실패하면 자동 부르기를 멈춤 (더보기 버튼은 그대로 사용 가능). list_more가 알림을 띄우면 그때도 멈춤.
+  var autoMoreState = { calling: false, stopped: false };
   (function autoMore() {
-    var NEAR = 350, COOL = 4000, lastFire = 0, lastFireCount = -1, tick = false;
+    var NEAR = 350, COOL = 4000, STALL = 12000, SPIN_MAX = 4000, MAX_FAILS = 3;
+    var lastFire = 0, lastFireCount = -1, tick = false;
+    var listReq = null, listReqAt = 0, spinSince = 0, fails = 0, okCount = -1;
+    var ORIG = '<span class="sp-arrow arrow-down-lg">더보기</span>';
+    if (window.jQuery && window.jQuery.ajaxPrefilter) {
+      window.jQuery.ajaxPrefilter(function (options, original, jqXHR) {
+        if (options && options.url === '/ajax/response-list') {
+          listReq = jqXHR;
+          listReqAt = Date.now();
+          jqXHR.always(function () { if (listReq === jqXHR) listReq = null; });
+        }
+      });
+    }
     function moreBtn() {
       var b = document.getElementById('listMore');
       return b && b.offsetParent !== null && document.querySelector('ul.gall-detail-lst') ? b : null;
     }
+    function spinning(b) { return !!(b && b.querySelector('.dc-spinner')); }
+    function listCount() { return document.querySelectorAll('ul.gall-detail-lst').length; }
+    function fire(b) {
+      lastFire = Date.now();
+      lastFireCount = listCount();
+      autoMoreState.calling = true;
+      try { if (typeof window.list_more === 'function') window.list_more(); else b.click(); }
+      finally { autoMoreState.calling = false; }
+    }
     function check() {
       tick = false;
+      if (autoMoreState.stopped) return;
       var b = moreBtn();
-      if (!b || b.querySelector('.dc-spinner')) return;
+      if (!b || spinning(b)) return;
       var se = document.scrollingElement || document.documentElement;
       if (window.scrollY + window.innerHeight < se.scrollHeight - NEAR) return;
-      var now = Date.now(), n = document.querySelectorAll('ul.gall-detail-lst').length;
-      if (n <= lastFireCount && now - lastFire < COOL) return;
-      lastFire = now;
-      lastFireCount = n;
-      if (typeof window.list_more === 'function') window.list_more(); else b.click();
-      var t0 = Date.now();
-      var iv = setInterval(function () {
-        check();
-        if (Date.now() - t0 > 8000) clearInterval(iv);
-      }, 400);
+      var now = Date.now();
+      if (listCount() <= lastFireCount && now - lastFire < COOL) return;
+      fire(b);
+    }
+    function watch() {
+      var b = moreBtn();
+      if (!b) { spinSince = 0; return; }
+      if (!spinning(b)) {
+        spinSince = 0;
+        var n = listCount();
+        if (okCount >= 0 && n > okCount) fails = 0;   // 목록이 늘었으면 성공
+        okCount = n;
+        return;
+      }
+      var now = Date.now();
+      if (!spinSince) spinSince = now;
+      var stalled = false;
+      if (listReq && now - listReqAt > STALL) {
+        try { listReq.abort(); } catch (e) {}
+        listReq = null;
+        stalled = true;
+      }
+      if (stalled || (!listReq && now - spinSince > SPIN_MAX)) {
+        b.innerHTML = ORIG;   // 스피너를 걷어 '더보기'로 되돌림 (직접 누르면 DC가 그대로 다시 부름)
+        spinSince = 0;
+        fails += 1;
+        if (fails >= MAX_FAILS) autoMoreState.stopped = true;
+        lastFire = 0;
+        lastFireCount = -1;
+      }
     }
     document.addEventListener('scroll', function () {
       if (tick) return;
       tick = true;
       requestAnimationFrame(check);
     }, { capture: true, passive: true });
+    setInterval(function () { watch(); check(); }, 1000);
   })();
 
   /// 글 목록 페이지 이동: 디시 페이지 번호는 숨기고 앱이 큰 버튼으로 다시 그림
@@ -2117,6 +2163,7 @@ enum ContentScript {
   window.alert = function (msg) {
     var m = typeof msg === 'string' ? msg : '';
     if (recomKindNow && m.indexOf('다음에 다시 시도') > -1) { scheduleRecomRetry(recomKindNow); return; }
+    if (typeof autoMoreState !== 'undefined' && autoMoreState.calling) autoMoreState.stopped = true;
     return origAlert.apply(window, arguments);
   };
   function recomState() {
@@ -3460,7 +3507,7 @@ enum ContentScript {
     if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
     var pin = on && cfg.pinComment === true;
     if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
-    var dc = sideColumnNow() || cfg.duoCol === true;
+    var dc = cfg.duoOff === true ? false : (sideColumnNow() || cfg.duoCol === true);
     if (root.classList.contains('dcapp-duocol') !== dc) root.classList.toggle('dcapp-duocol', dc);
     var fl = dc && cfg.duoFlip === true;
     if (root.classList.contains('dcapp-duoflip') !== fl) root.classList.toggle('dcapp-duoflip', fl);
@@ -4744,7 +4791,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v288-headfixed', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v291-automore', 'URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)

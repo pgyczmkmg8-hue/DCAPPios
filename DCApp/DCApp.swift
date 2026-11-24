@@ -245,9 +245,21 @@ struct RootView: View {
     /// 처음 켰을 때 기능 소개 (한 번 보면 다시 안 뜸)
     @AppStorage(Tutorial.seenKey, store: Profile.defaults) private var tutorialSeen = false
     @State private var showTutorial = false
+    /// 튜토리얼을 '시작하기'로 끝내면 버전 정보/업데이트 화면을 연다 (끝난 뒤 onDismiss에서)
+    @State private var aboutAfterTutorial = false
+    @State private var showAboutAfterTutorial = false
     /// 처음 켠 튜토리얼이 끝나면 앱 아이콘 고르기 화면을 한 번 보여 줌
     @State private var iconPickAfterTutorial = false
     @State private var showIconPicker = false
+    /// 튜토리얼(과 버전 정보 화면)이 모두 내려간 뒤, 첫 실행이었으면 앱 아이콘 고르기를 띄움
+    private func afterTutorialIconPick() {
+        guard iconPickAfterTutorial else { return }
+        iconPickAfterTutorial = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(700))
+            showIconPicker = true
+        }
+    }
     /// 앱 사용 중 새 디시 알림 배너
     @ObservedObject private var alarms = AlarmStore.shared
     @State private var bannerTask: Task<Void, Never>?
@@ -466,16 +478,24 @@ struct RootView: View {
             if let r { availableUpdate = r }
         }
         .fullScreenCover(isPresented: $showTutorial, onDismiss: {
-            if iconPickAfterTutorial {
-                iconPickAfterTutorial = false
-                // 튜토리얼 화면이 완전히 내려간 뒤에 띄워야 시트가 뜸
+            if aboutAfterTutorial {
+                // '시작하기'로 끝냈으면 버전 정보/업데이트 화면을 먼저 (그 화면을 닫은 뒤 아이콘 고르기)
+                aboutAfterTutorial = false
                 Task {
-                    try? await Task.sleep(for: .milliseconds(700))
-                    showIconPicker = true
+                    try? await Task.sleep(for: .milliseconds(500))
+                    showAboutAfterTutorial = true
                 }
+                return
             }
+            afterTutorialIconPick()
         }) {
-            TutorialView { showTutorial = false }
+            TutorialView { openAbout in
+                showTutorial = false
+                aboutAfterTutorial = openAbout
+            }
+        }
+        .sheet(isPresented: $showAboutAfterTutorial, onDismiss: { afterTutorialIconPick() }) {
+            TutorialAboutSheet()
         }
         // 사진 보기·댓글 내용 보기: 분할/접기 전환과 상관없이 떠 있도록 화면 맨 바깥에서 붙임 (두 웹 화면 모두)
         .background {
