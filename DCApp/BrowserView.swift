@@ -559,10 +559,10 @@ struct BrowserView: View {
             .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
             .map(\.safeAreaInsets.top).max() ?? 0
     }
-    /// 위쪽 띠 안에 상단바를 그릴지 — 듀오(옆 세로 줄이 있는 화면)에서만. 글쓰기 화면은 자기 상단바가 따로 있음
+    /// 위쪽 띠 안에 상단바를 그릴지 — 일반 휴대폰은 항상, 듀오는 옆 세로 줄이 있을 때만(90도 돌려 줄이 없으면 0.9.19(3)처럼 시스템 상단바). 글쓰기 화면은 자기 상단바가 따로 있음
     private var compactRaw: Bool {
         _ = viewSize      // 접기·펴기·회전으로 크기가 바뀌면 다시 계산
-        return compactTopBarSetting && Self.isPhone && !model.isWritePage
+        return compactTopBarSetting && (Self.isDuoSizedScreen ? Self.hasSideColumnOnly : Self.isPhone) && !model.isWritePage
     }
     /// 돌리는 도중 안전 영역 값이 잠깐 흔들려도 시스템 상단바가 켜졌다 꺼지지 않게: 값이 0.6초 동안 그대로일 때만 바꿈
     @State private var compactStable: Bool?
@@ -646,23 +646,27 @@ struct BrowserView: View {
     }
     /// 위쪽 띠: [뒤로] 제목 [필터·⋮ / 즐겨찾기·⋮]. 시스템 상단바의 버튼과 같은 기능
     private var compactTopBarView: some View {
+        // 듀오는 0.9.19(3)과 같은 칸 크기(28pt)·간격(6pt)·로고(36pt)를 씀. 휴대폰은 낮은 띠라 칸을 44pt로 둠
+        let duo = Self.isDuoLayout
+        let slot: CGFloat = duo ? Self.topSlotWidth : Self.compactTouchSize
+        let logo: CGFloat = compactBarHeight >= 40 ? 36 : 24
         let side = compactSideWidth
         let pad = compactSidePad
-        return HStack(spacing: 0) {
+        return HStack(spacing: duo ? 6 : 0) {
             if bandShowsClock { BandClockText().frame(width: Self.bandSideItemWidth, alignment: .leading) }
             if showsTopBack {
-                backButton { Image(systemName: "arrow.left").frame(width: Self.compactTouchSize, height: Self.compactTouchSize).contentShape(Rectangle()) }
-                    .frame(width: side, alignment: .leading)
+                backButton { Image(systemName: "arrow.left").frame(width: slot, height: slot).contentShape(Rectangle()) }
+                    .frame(width: duo ? Self.topSlotWidth : side, alignment: .leading)
             } else {
-                Color.clear.frame(width: side, height: 1)
+                Color.clear.frame(width: duo ? Self.topSlotWidth : side, height: duo ? Self.topSlotWidth : 1)
             }
-            titleView(logo: 24).frame(maxWidth: .infinity, alignment: .center)
-            HStack(spacing: Self.topSlotSpacing) {
+            titleView(logo: logo).frame(maxWidth: .infinity, alignment: .center)
+            HStack(spacing: duo ? 6 : Self.topSlotSpacing) {
                 if showsMenuButton {
                     if isListPage {
                         Button { showListFilter = true } label: {
                             Image(systemName: listFilter.filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
+                                .frame(width: slot, height: slot)
                                 .contentShape(Rectangle())
                         }
                         .accessibilityLabel("게시물 필터")
@@ -670,7 +674,7 @@ struct BrowserView: View {
                     if menuInTopBarShown {
                         Menu { moreMenu } label: {
                             Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
+                                .frame(width: slot, height: slot)
                                 .contentShape(Rectangle())
                         }
                     }
@@ -678,20 +682,20 @@ struct BrowserView: View {
                     if currentGallery != nil {
                         Button { toggleFavorite() } label: {
                             Image(systemName: isFavorite ? "star.fill" : "star")
-                                .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
+                                .frame(width: slot, height: slot)
                                 .contentShape(Rectangle())
                         }
                     }
                     Menu { moreMenu } label: {
                         Image(systemName: "ellipsis").rotationEffect(.degrees(90))
-                            .frame(width: Self.compactTouchSize, height: Self.compactTouchSize)
+                            .frame(width: slot, height: slot)
                             .contentShape(Rectangle())
                     }
                 }
             }
             .buttonStyle(.plain)
             .fixedSize()
-            .frame(width: side, alignment: .trailing)
+            .frame(minWidth: duo ? Self.topSlotWidth : side, alignment: .trailing)
             if bandShowsClock { BandBatteryText().frame(width: Self.bandSideItemWidth, alignment: .trailing) }
         }
         .foregroundStyle(.white)
