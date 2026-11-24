@@ -17,6 +17,15 @@
       "category": "social",
       "versions": [
         {
+          "version": "0.10.3",
+          "buildVersion": "0",
+          "date": "2026-11-24",
+          "localizedDescription": "실시간 갤러리·나무위키 검색 및 실검챈 사유 조회, 글쓰기 금지어 위치 선택, 가로 바 댓글작성·듀오 새로고침 통합, 대댓글 └·고닉 아이콘·중복 스피너 개선",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.10.3.0/DCApp.0.10.3.0.ipa",
+          "size": 31195523,
+          "minOSVersion": "16.0"
+        },
+        {
           "version": "0.10.2",
           "buildVersion": "1",
           "date": "2026-11-24",
