@@ -74,24 +74,31 @@ struct NamuSearchInputSheet: View {
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(Array(ranking.enumerated()), id: \.offset) { index, word in
-                            HStack(spacing: 10) {
-                                Text("\(index + 1)")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 18, alignment: .leading)
-                                Text(word).foregroundStyle(.primary)
-                                Spacer(minLength: 0)
+                            Button { open(word) } label: {
+                                HStack(spacing: 10) {
+                                    Text("\(index + 1)")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 18, alignment: .leading)
+                                    Text(word).foregroundStyle(.primary)
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
-                            .onTapGesture { open(word) }
-                            .onLongPressGesture(minimumDuration: 0.45) { showReason(for: word) }
-                            .accessibilityAddTraits(.isButton)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button {
+                                    showReason(for: word)
+                                } label: {
+                                    Label("사유", systemImage: "questionmark.circle")
+                                }
+                                .tint(.accentColor)
+                            }
                             .accessibilityAction(named: "실시간 검색어 사유 보기") { showReason(for: word) }
                         }
                     } header: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("실시간 검색어")
-                            Text("실시간 검색어를 꾹 누를 시 실시간 검색어인 사유를 보여줍니다")
+                            Text("실시간 검색어를 왼쪽으로 밀면 실시간 검색어인 사유를 보여줍니다")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .textCase(nil)
