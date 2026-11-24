@@ -12,10 +12,19 @@
       "developerName": "DCApp",
       "subtitle": "디시인사이드 모바일을 더 편하게",
       "localizedDescription": "디시인사이드 모바일을 더 편하게 보도록 만든 개인용 앱이에요. 글 목록 말머리 · 필터, 자동 이어 불러오기, 차단·메모, 식별코드·IP 작성글 찾기, 글쓰기, 다중 계정, 앱 잠금 등을 제공해요.",
-      "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/icon/source-icon.png",
+      "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/DCApp/Assets.xcassets/AppIcon-1.%20BOOMCAT.appiconset/Icon-iOS-Default-1024@1x.png",
       "tintColor": "#3B4890",
       "category": "social",
       "versions": [
+        {
+          "version": "0.10.2",
+          "buildVersion": "1",
+          "date": "2026-11-24",
+          "localizedDescription": "버전 정보/업데이트 확인 화면에 GitHub·GitLab 저장소 바로가기 추가",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.10.2.1/DCApp.0.10.2.1.ipa",
+          "size": 30955893,
+          "minOSVersion": "16.0"
+        },
         {
           "version": "0.10.2",
           "buildVersion": "0",
