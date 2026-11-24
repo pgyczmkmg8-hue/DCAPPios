@@ -86,6 +86,35 @@ struct AboutView: View {
         .frame(maxWidth: 420)
     }
 
+    /// 저장소 바로가기: GitHub / GitLab (같은 프로젝트). 업데이트 카드와 같은 모양
+    private var repoBox: some View {
+        VStack(spacing: 0) {
+            Link(destination: URL(string: "https://github.com/" + UpdateChecker.githubRepo) ?? URL(string: "https://github.com")!) {
+                repoRow("GitHub 저장소")
+            }
+            Divider()
+            Link(destination: URL(string: "https://gitlab.com/" + UpdateChecker.repo) ?? URL(string: "https://gitlab.com")!) {
+                repoRow("GitLab 저장소")
+            }
+        }
+        .padding(.horizontal, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(maxWidth: 420)
+    }
+
+    private func repoRow(_ title: String) -> some View {
+        HStack {
+            Label(title, systemImage: "chevron.left.forwardslash.chevron.right")
+            Spacer()
+            Image(systemName: "arrow.up.right.square")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .foregroundStyle(.primary)
+        .contentShape(Rectangle())
+        .padding(.vertical, 12)
+    }
+
     /// 히든영역: 사진을 20번 누르면 나타나고, 나타난 뒤 다시 20번 누르면 숨겨짐 (광고 차단 / 페이지 구조 진단 / 프로필 변경)
     private var hiddenBox: some View {
         VStack(spacing: 0) {
@@ -172,6 +201,7 @@ struct AboutView: View {
                 }
 
                 updateBox
+                repoBox
                 if hiddenUnlocked { hiddenBox }
 
             }
