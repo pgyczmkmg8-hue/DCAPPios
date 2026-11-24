@@ -3,7 +3,7 @@
   "identifier": "MACHU.DCApp.source",
   "subtitle": "디시인사이드 모바일 개인용 앱",
   "sourceURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/source.json",
-  "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/DCApp/Assets.xcassets/AppIcon-1.%20BOOMCAT.appiconset/Icon-iOS-Default-1024@1x.png",
+  "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/icon/source-icon.png",
   "tintColor": "#3B4890",
   "apps": [
     {
@@ -12,7 +12,7 @@
       "developerName": "DCApp",
       "subtitle": "디시인사이드 모바일을 더 편하게",
       "localizedDescription": "디시인사이드 모바일을 더 편하게 보도록 만든 개인용 앱이에요. 글 목록 말머리 · 필터, 자동 이어 불러오기, 차단·메모, 식별코드·IP 작성글 찾기, 글쓰기, 다중 계정, 앱 잠금 등을 제공해요.",
-      "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/DCApp/Assets.xcassets/AppIcon-1.%20BOOMCAT.appiconset/Icon-iOS-Default-1024@1x.png",
+      "iconURL": "https://raw.githubusercontent.com/pgyczmkmg8-hue/DCAPPios/main/icon/source-icon.png",
       "tintColor": "#3B4890",
       "category": "social",
       "versions": [
