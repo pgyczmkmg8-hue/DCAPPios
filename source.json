@@ -18,6 +18,15 @@
       "versions": [
         {
           "version": "0.11.0",
+          "buildVersion": "2",
+          "date": "2026-11-25",
+          "localizedDescription": "본문 사진의 디시 순서 번호 보기/숨기기 설정 추가 (세부 설정)",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.0.2/DCApp.0.11.0.2.ipa",
+          "size": 31649584,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.11.0",
           "buildVersion": "1",
           "date": "2026-11-25",
           "localizedDescription": "디시콘 패키지 전체 차단 수정 (움직이는 디시콘도 함께 가림, 패키지를 못 찾으면 안내)",
