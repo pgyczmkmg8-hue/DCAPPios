@@ -486,6 +486,8 @@ final class FilterStore: ObservableObject {
             "hideDory": Profile.defaults.object(forKey: "hideDory") as? Bool ?? true,
             "deferImages": DeferredImages.enabled,   // 본문 이미지 숨기기 (눌러서 불러오기)
             "hideImgComment": Profile.defaults.object(forKey: "hideImgCommentButton") as? Bool ?? false,   // 본문 사진 위 디시 기본 '댓글' 버튼 숨김
+            "imgNum": Profile.defaults.object(forKey: "showImgNumber") as? Bool ?? true,   // 본문 사진 위 디시 기본 '이미지 순서' 번호 보기
+            "imgNumOnAt": Profile.defaults.double(forKey: "showImgNumberOnAt"),   // 앱에서 다시 켠 시각 (디시 쪽 설정이 꺼져 있으면 한 번 켜 줌)
             "nativeComment": Profile.defaults.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
             "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",

@@ -32,6 +32,19 @@ enum ContentScript {
   var IP_RE = /\((\d{1,3}\.\d{1,3})\)/;
   var NOTICE_CLASS_RE = /(^|[-_\s])(toast|noti|notice|alarm|alert|push|popup|pop|layer|banner|float)([-_\s]|$)/i;
 
+  // 앱에서 '순서 번호 보기'를 다시 켰을 때: 디시 자체 설정(전체 서비스 설정의 이미지 순서)이 꺼져 있으면 한 번만 켜 줌
+  // (켠 시각을 기억해 두므로, 그 뒤에 디시 쪽에서 끈 것은 그대로 둠)
+  function syncImgNum() {
+    if (cfg.imgNum === false || !cfg.imgNumOnAt) return;
+    try {
+      var at = String(cfg.imgNumOnAt);
+      if (localStorage.getItem('dcapp_imgnum_on') === at) return;
+      if (localStorage.getItem('show_img_num') === 'hide') localStorage.setItem('show_img_num', '5');   // 5 = 번호 보임, 안내 말풍선 없음
+      localStorage.setItem('dcapp_imgnum_on', at);
+    } catch (e) {}
+  }
+  syncImgNum();
+
   function post(type, data) {
     try {
       window.webkit.messageHandlers.dcapp.postMessage(Object.assign({ type: type }, data || {}));
@@ -879,6 +892,8 @@ enum ContentScript {
     // 본문 사진 위에 뜨는 디시 기본 이미지 댓글 버튼(button.btn-imgcomment, #img_comment_open_btn<n>) 숨김 (설정 → 세부 설정)
     if (cfg.hideImgComment) rules.push('.btn-imgcomment,.img-comment{display:none!important}');   // 사진 댓글 버튼 + 미리보기·댓글 패널
     else rules.push('.btn-imgcomment{display:inline-block!important}');   // 댓글창을 열어도 사진 위 버튼은 남김 (누르면 열림/닫힘)
+    // 본문 사진 위 디시 기본 '이미지 순서' 번호(data-nummark → .num)와 처음 몇 번 뜨는 안내 말풍선 숨김 (설정 → 세부 설정)
+    if (cfg.imgNum === false) rules.push('.gall-thum-btm .imgwrap .num,.gall-thum-btm .imgwrap~.num,.thum-txtin .imgwrap .num,.thum-txtin .gifarea~.num,#img_num_tipbox{display:none!important}');
     var dcAccent = (cfg.tint && tintColor('rgb(59,72,144)', cfg.tint)) || '#3b4890';
     var dcAccentDark = (cfg.tint && tintColor('rgb(157,176,255)', cfg.tint)) || '#9db0ff';
     var dcDeferBorder = (cfg.tint && tintColor('rgb(198,204,226)', cfg.tint)) || '#d6d8e2';
@@ -6346,7 +6361,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v372-dccon-package','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v373-imgnum','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
@@ -6641,6 +6656,7 @@ enum ContentScript {
   window.__dcapp = {
     setConfig: function (c) {
       cfg = c || {};
+      syncImgNum();
       runtimeImg = {};
       imgChecked = {};
       // 탭해서 펼쳐 본 글도 차단 설정이 바뀌면 다시 접히게 (펼친 뒤 다시 차단했을 때 바로 가려지도록)

@@ -487,6 +487,7 @@ struct DetailSettingsView: View {
     @AppStorage("homeRankOnly", store: Profile.defaults) private var homeRankOnly = true
     @AppStorage("hideDory", store: Profile.defaults) private var hideDory = true
     @AppStorage("hideImgCommentButton", store: Profile.defaults) private var hideImgCommentButton = false
+    @AppStorage("showImgNumber", store: Profile.defaults) private var showImgNumber = true
     @AppStorage("deferPostImages", store: Profile.defaults) private var deferPostImages = false
     @AppStorage(BackgroundAudio.key, store: Profile.defaults) private var mixAudio = false
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
@@ -540,6 +541,11 @@ struct DetailSettingsView: View {
                     }
                 Toggle("본문 사진의 댓글 버튼 숨기기", isOn: $hideImgCommentButton)
                     .onChangeCompat(of: hideImgCommentButton) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+                Toggle("본문 사진의 순서 번호 보기", isOn: $showImgNumber)
+                    .onChangeCompat(of: showImgNumber) { _, on in
+                        if on { Profile.defaults.set(Date().timeIntervalSince1970, forKey: "showImgNumberOnAt") }
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
             }
