@@ -965,14 +965,15 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
-    /// 길게 누른 디시콘이 속한 패키지 (DCRefresher-Reborn 방식: gall.dcinside.com/dccon/package_detail + ci_t CSRF 토큰)
+    /// 길게 누른 디시콘이 속한 패키지. 못 찾으면 nil (하나만 차단하고 '전체'라고 하지 않음)
+    /// ① 보던 페이지에서 디시 '디시콘 정보' 요청(getDcconDetail, mode=u) ② 안 되면 PC 디시콘 API(gall.dcinside.com/dccon/package_detail)
     func dcconPackage(forKey key: String) async -> (pkg: String, name: String, keys: [String])? {
-        if let fetched = await fetchDcconPackageFromGall(code: key) {
-            return fetched
-        }
         let r = await call("if (!window.__dcapp) return null; return await window.__dcapp.dcconPackageFor(key);", ["key": key])
-        guard let d = r as? [String: Any], let pkg = d["pkg"] as? String, !pkg.isEmpty else { return nil }
-        return (pkg, d["name"] as? String ?? "", (d["keys"] as? [String]) ?? [])
+        if let d = r as? [String: Any], let pkg = d["pkg"] as? String, !pkg.isEmpty,
+           let keys = d["keys"] as? [String], !keys.isEmpty {
+            return (pkg, d["name"] as? String ?? "", keys)
+        }
+        return await fetchDcconPackageFromGall(code: key)
     }
 
     /// DCRefresher-Reborn의 fetchDcconPackage와 동일하게 gall.dcinside.com/dccon/package_detail에 ci_t + code로 요청
@@ -1004,6 +1005,7 @@ final class WebViewModel: NSObject, ObservableObject {
         req.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
         req.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
         req.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
+        req.httpShouldHandleCookies = false      // 저장된 다른 ci_c가 섞여 토큰과 어긋나지 않게 아래 헤더만 보냄
         req.setValue("ci_c=\(ciToken)", forHTTPHeaderField: "Cookie")
 
         var bodyComps = URLComponents()
@@ -1029,12 +1031,9 @@ final class WebViewModel: NSObject, ObservableObject {
             return nil
         }
         let title = info["title"] as? String ?? ""
-        var keys = Set<String>([trimmed])
-        for item in detail {
-            if let path = item["path"] as? String, !path.isEmpty {
-                keys.insert(path)
-            }
-        }
+        let paths = detail.compactMap { $0["path"] as? String }.filter { !$0.isEmpty }
+        guard !paths.isEmpty else { return nil }          // 목록이 비면 '못 찾음' (하나만 차단하지 않게)
+        let keys = Set(paths + [trimmed])
         return (pkgIdx, title, Array(keys).sorted())
     }
 

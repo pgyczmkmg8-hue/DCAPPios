@@ -1558,6 +1558,16 @@ enum ContentScript {
     var q = s.match(/[?&]no=([^&#]+)/);
     return q ? q[1] : (s.split('#')[0] || null);
   }
+  // 차단 목록에 있는 디시콘인지: 앱 키(dcconKey)에 더해, 움직이는 디시콘(video)은 ori-data의 그림 번호로도 확인
+  // (video의 앱 키는 영상(mp4) 번호라서, 그림 번호로 된 패키지 목록에는 없음)
+  function dcconBlockedIn(m, dset) {
+    var k = dcconKey(m);
+    if (!k) return false;
+    if (dset.has(k)) return true;
+    if (m.tagName !== 'VIDEO') return false;
+    var o = dcconNoOf(m.getAttribute('ori-data'));
+    return !!o && dset.has(o);
+  }
 
   // ---------- 본문 사진 차단 (그 사진만 가림) ----------
   // 키: 사진 주소의 no= 값(소문자), 없으면 호스트+경로+쿼리(소문자). 앱은 키를 직접 만들지 않고 페이지가 준 키만 씀
@@ -1749,9 +1759,8 @@ enum ContentScript {
     if (u.kind === 'comment' && (dset.size || dpset.size)) {
       var media = u.el.querySelectorAll('img, video');
       for (var k = 0; k < media.length; k++) {
-        var key = dcconKey(media[k]);
         var mp = media[k].getAttribute('data-dccon-package') || media[k].getAttribute('package_idx') || '';
-        if ((key && dset.has(key)) || (mp && dpset.has(String(mp)))) return '차단한 디시콘';
+        if (dcconBlockedIn(media[k], dset) || (mp && dpset.has(String(mp)))) return '차단한 디시콘';
       }
     }
     return null;
@@ -3722,7 +3731,7 @@ enum ContentScript {
       if (!k) return;
       var mp = m.getAttribute('data-dccon-package') || m.getAttribute('package_idx') || '';
       var revealed = m.getAttribute('data-dcapp-dccon-reveal') === '1';
-      var off = enabled && !revealed && (dset.has(k) || (mp && dpset.has(String(mp))));
+      var off = enabled && !revealed && (dcconBlockedIn(m, dset) || (mp && dpset.has(String(mp))));
       m.classList.toggle('dcapp-dccon-off', off);
       var prev = m.previousElementSibling;
       var lab = prev && prev.classList.contains('dcapp-dccon-label') ? prev : null;
@@ -6127,111 +6136,39 @@ enum ContentScript {
     dcconBoxes[idx] = parseDcconItems(d);
     return dcconBoxes[idx];
   }
-  // 디시콘 패키지 찾기: 디시 목록의 탭(= 패키지)을 모두 받아 "디시콘 번호 → 패키지" 대응표를 한 번만 만듦 (길게 눌러 패키지 차단할 때)
-  // 같은 디시콘은 글마다 같은 번호(dccon.php?no=)라서, 목록에서 받은 번호로 글 속 디시콘의 패키지를 찾을 수 있음
-  var dcconPkgIdx = null, dcconPkgBusy = null;
+  // 디시콘 패키지 찾기: 디시 '디시콘 정보' 창이 쓰는 getDcconDetail(mode=u)에 디시콘 번호(dccon.php?no=)를 보내면 그 디시콘의 패키지 창이 옴
+  // → 패키지 번호(data-package-idx)·이름·패키지 안 디시콘 번호 전부를 읽음. 글·댓글의 어떤 디시콘이든 됨 (2026-11-25 확인). 못 찾으면 null
   function dcconNoOf(src) {
     var q = /[?&]no=([^&#"'\s]+)/.exec(src || '');
     return q ? q[1] : '';
   }
-  function dcconPackageIndex() {
-    if (dcconPkgIdx) return Promise.resolve(dcconPkgIdx);
-    if (dcconPkgBusy) return dcconPkgBusy;
-    dcconPkgBusy = (async function () {
-      var idx = { byKey: {}, pkgs: {} };
-      try {
-        var info = await dcconTabs();
-        var tabs = info && info.tabs ? info.tabs : [];
-        for (var i = 0; i < tabs.length; i++) {
-          var t = tabs[i];
-          if (!/^\d+$/.test(t.idx)) continue;
-          var items = await dcconItems(t.idx, t.folder);
-          for (var j = 0; j < items.length; j++) {
-            var it = items[j], k = dcconNoOf(it.src);
-            if (!k || idx.byKey[k]) continue;
-            var p = it.pkg;
-            if (!idx.pkgs[p]) idx.pkgs[p] = { name: t.name || '', keys: [] };
-            idx.byKey[k] = p;
-            idx.pkgs[p].keys.push(k);
-          }
-        }
-        dcconPkgIdx = idx;
-      } catch (e) {}
-      dcconPkgBusy = null;
-      return idx;
-    })();
-    return dcconPkgBusy;
-  }
-  // 디시콘 번호 하나의 패키지: { pkg, name, keys } — 먼저 DOM의 package_idx/detail_idx로 단건 API 조회(빠름), 없을 때만 보유 목록 캐시 조회
   async function dcconPackageFor(key) {
     var k = String(key || '');
-    if (!k) return null;
-    if (dcconPkgIdx && dcconPkgIdx.byKey[k]) {
-      var cp = dcconPkgIdx.byKey[k];
-      if (dcconPkgIdx.pkgs[cp]) return { pkg: cp, name: dcconPkgIdx.pkgs[cp].name, keys: dcconPkgIdx.pkgs[cp].keys.slice() };
-    }
-    var pkgId = '', detailId = '';
-    var imgs = document.querySelectorAll('img');
-    for (var i = 0; i < imgs.length; i++) {
-      var im = imgs[i];
-      var s = im.getAttribute('src') || im.getAttribute('data-original') || im.getAttribute('data-src') || '';
-      if (dcconNoOf(s) !== k) continue;
-      var holder = im.closest('[data-dccon-package],[package_idx],[data-dccon-detail],[detail_idx],[onclick]') || im;
-      pkgId = im.getAttribute('data-dccon-package') || im.getAttribute('package_idx') ||
-              (holder && (holder.getAttribute('data-dccon-package') || holder.getAttribute('package_idx'))) || '';
-      detailId = im.getAttribute('data-dccon-detail') || im.getAttribute('detail_idx') ||
-                 (holder && (holder.getAttribute('data-dccon-detail') || holder.getAttribute('detail_idx'))) || '';
-      if (!pkgId && !detailId && holder) {
-        var oc = holder.getAttribute('onclick') || '';
-        var m = /dccon[_a-zA-Z]*\(\s*['"]?(\d+)/i.exec(oc);
-        if (m) detailId = m[1];
-      }
-      if (pkgId || detailId) break;
-    }
-    if (pkgId || detailId || k) {
-      try {
-        var body = pkgId ? ('package_idx=' + encodeURIComponent(pkgId))
-                 : (detailId ? ('detail_idx=' + encodeURIComponent(detailId)) : ('code=' + encodeURIComponent(k)));
-        var res = await fetch('/dccon/package_detail', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
-          body: body
-        });
-        if (res.ok) {
-          var text = await res.text();
-          var keys = [k], name = '', foundPkg = pkgId;
-          try {
-            var j = JSON.parse(text);
-            if (j && j.info) {
-              if (j.info.package_idx) foundPkg = String(j.info.package_idx);
-              if (j.info.title) name = String(j.info.title);
-            }
-            if (j && Array.isArray(j.detail)) {
-              j.detail.forEach(function (d) {
-                var dk = d && (d.path ? (dcconNoOf(d.path) || String(d.path)) : (d.no || ''));
-                if (dk && keys.indexOf(String(dk)) < 0) keys.push(String(dk));
-              });
-            }
-          } catch (eJson) {
-            var re = /dccon\.php\?[^"'\s]*?no=([^&#"'\s]+)/g, mm;
-            while ((mm = re.exec(text))) {
-              if (mm[1] && keys.indexOf(mm[1]) < 0) keys.push(mm[1]);
-            }
-            var nm = /class=["']name["'][^>]*>([^<]+)</i.exec(text);
-            if (nm) name = nm[1].trim();
-            var pm = /package_idx["'\s:=]+(\d+)/i.exec(text);
-            if (!foundPkg && pm) foundPkg = pm[1];
-          }
-          if (!foundPkg) foundPkg = detailId || k;
-          return { pkg: String(foundPkg), name: name, keys: keys };
-        }
-      } catch (e) {}
-    }
-    var idx = await dcconPackageIndex();
-    var p = idx.byKey[k];
-    if (p && idx.pkgs[p]) return { pkg: p, name: idx.pkgs[p].name, keys: idx.pkgs[p].keys.slice() };
-    return null;
+    if (!/^[0-9a-zA-Z]{20,}$/.test(k)) return null;
+    var html = '';
+    try {
+      var res = await fetch('/dccon/getDcconDetail', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+        body: 'dcconInfo=' + encodeURIComponent(k) + '&mode=u'
+      });
+      if (res.ok) html = await res.text();
+    } catch (e) { return null; }
+    var page = new DOMParser().parseFromString(html || '', 'text/html');
+    var pop = page.querySelector('[data-package-idx]');
+    var pkg = pop ? String(pop.getAttribute('data-package-idx') || '') : '';
+    var keys = [];
+    page.querySelectorAll('.dccon-img-lst img, .dccon-img-lst video, .dccon-img-lst source').forEach(function (m) {
+      ['data-src', 'src', 'ori-data', 'data-gif', 'poster'].forEach(function (attr) {
+        var no = dcconNoOf(m.getAttribute(attr));
+        if (no && keys.indexOf(no) < 0) keys.push(no);
+      });
+    });
+    if (!/^\d+$/.test(pkg) || !keys.length) return null;
+    if (keys.indexOf(k) < 0) keys.push(k);   // 누른 디시콘의 번호도 함께
+    var name = page.querySelector('.top-tit .name') || page.querySelector('.dccon-caption-box .name');
+    return { pkg: pkg, name: name ? (name.textContent || '').trim() : '', keys: keys };
   }
   // 고른 디시콘을 디시 방식 그대로 편집기에 넣어 칸(HTML)을 만들고 가져옴
   function dcconMake(pkg, detail) {
@@ -6409,7 +6346,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v371-suppress-gall-info','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v372-dccon-package','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)

@@ -324,9 +324,11 @@ final class FilterStore: ObservableObject {
     }
 
     /// 이 디시콘이 속한 차단된 패키지 (없으면 nil)
+    /// 움직이는 디시콘(video)의 번호는 목록의 그림 번호 뒤에 8자가 붙은 값이라, 그 경우도 같은 디시콘으로 봄
     func dcconPackage(containing key: String) -> BlockedDcconPackage? {
         guard !key.isEmpty else { return nil }
-        return settings.dcconPackages.first { $0.keys.contains(key) }
+        let image = String(key.dropLast(8))
+        return settings.dcconPackages.first { $0.keys.contains(key) || $0.keys.contains(image) }
     }
 
     func removeDcconPackage(pkg: String) {
