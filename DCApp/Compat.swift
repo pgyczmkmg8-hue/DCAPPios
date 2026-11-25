@@ -71,6 +71,7 @@ private struct OnChangeCompat<V: Equatable>: ViewModifier {
 
 /// ContentUnavailableView (iOS 17) 대체: 비어 있을 때 가운데 안내
 struct EmptyStateView<Label: View, Desc: View, Actions: View>: View {
+    @ObservedObject var fonts = FontStore.shared
     private let label: Label
     private let desc: Desc
     private let actions: Actions
@@ -84,8 +85,8 @@ struct EmptyStateView<Label: View, Desc: View, Actions: View>: View {
             ContentUnavailableView { label } description: { desc } actions: { actions }
         } else {
             VStack(spacing: 10) {
-                label.font(.title3.weight(.semibold)).multilineTextAlignment(.center)
-                desc.font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                label.font(fonts.styleFont(.title3, weight: .semibold)).multilineTextAlignment(.center)
+                desc.font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 actions
             }
             .padding(24)

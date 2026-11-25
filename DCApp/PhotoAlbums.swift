@@ -86,6 +86,7 @@ enum PhotoSaver {
 
 /// 앨범 고르기 (설정에서 기본 앨범 정하기 / 저장할 때 물어보기 둘 다)
 struct PhotoAlbumPicker: View {
+    @ObservedObject var fonts = FontStore.shared
     let title: String
     /// 지금 골라져 있는 앨범 (체크 표시)
     let selectedID: String?
@@ -105,7 +106,7 @@ struct PhotoAlbumPicker: View {
             Section("내 앨범") {
                 if denied {
                     Text("앨범 목록을 보려면 설정 앱 → DCAPP → 사진에서 '전체 접근'(또는 '제한된 접근')을 허용해주세요.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
                 } else if loaded && albums.isEmpty {
                     Text("앨범이 없어요").foregroundStyle(.secondary)
                 }
@@ -150,7 +151,7 @@ struct PhotoAlbumPicker: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name).foregroundStyle(.primary)
-                    if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                    if let detail { Text(detail).font(fonts.styleFont(.caption)).foregroundStyle(.secondary) }
                 }
                 Spacer()
                 if (selectedID ?? "") == (id ?? "") {

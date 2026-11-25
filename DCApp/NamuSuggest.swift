@@ -64,17 +64,26 @@ final class NamuSuggestBridge: NSObject, ObservableObject, WKNavigationDelegate 
         AdBlock.apply(to: config.userContentController)
     }
 
-    /// 대문을 한 번만 연다. 화면 밖(거의 투명한 1칸)에 붙여 둬서 사이트 스크립트가 정상 동작하게 함
+    /// 대문을 한 번만 연다. 사이트 스크립트가 도는 동안만 화면에 붙임 (끝나면 떼어냄 — 남겨 두면 좌상단에 흐린 잔상이 보임)
     func prepare() {
         guard !started else { return }
         started = true
-        if webView.superview == nil, let window = Self.keyWindow() {
-            webView.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
-            webView.alpha = 0.01
-            webView.isUserInteractionEnabled = false
-            window.addSubview(webView)
-        }
+        attachHidden()
         webView.load(URLRequest(url: URL(string: "https://namu.wiki/")!))
+    }
+
+    /// 창에 붙이되 완전히 투명하게 (알파 0, 터치 안 받음). 이미 붙어 있으면 그대로
+    private func attachHidden() {
+        guard webView.superview == nil, let window = Self.keyWindow() else { return }
+        webView.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
+        webView.alpha = 0
+        webView.isUserInteractionEnabled = false
+        window.addSubview(webView)
+    }
+
+    /// 창에서 떼어냄 (잔상 방지). 페이지 상태는 웹뷰가 그대로 가지고 있어서 다음 요청 때 다시 붙이면 됨
+    private func detachHidden() {
+        webView.removeFromSuperview()
     }
 
     /// 빈 검색창의 목록 = 실시간 검색어 (최대 10개)
@@ -96,6 +105,8 @@ final class NamuSuggestBridge: NSObject, ObservableObject, WKNavigationDelegate 
     // MARK: 내부
 
     private func run(query: String) async -> [String] {
+        attachHidden()                 // 사이트 검색창 스크립트는 화면에 붙어 있을 때만 확실히 돈다 (보이지는 않음)
+        defer { detachHidden() }       // 끝나면 바로 떼어서 흐린 잔상이 남지 않게
         do {
             let result = try await webView.callAsyncJavaScript(Self.script, arguments: ["q": query], in: nil, contentWorld: .page)
             return result as? [String] ?? []
@@ -137,6 +148,7 @@ final class NamuSuggestBridge: NSObject, ObservableObject, WKNavigationDelegate 
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
+        detachHidden()                 // 대문이 다 열렸으면 떼어 둠 (질의 때 다시 붙임)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

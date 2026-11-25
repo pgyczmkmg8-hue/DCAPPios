@@ -80,6 +80,13 @@ final class IdPostSearcher: ObservableObject {
         }
     }
 
+    /// 찾을 갤러리 바꾸기 (찾는 중에는 바꾸지 않음. 바꾸면 이전 결과는 지움)
+    func setGallery(_ g: Gallery) {
+        guard !running, gallery?.id != g.id else { return }
+        clearResults()
+        gallery = g
+    }
+
     func start() {
         guard let g = gallery, canStart else { return }
         stop()
@@ -330,21 +337,16 @@ extension Gallery {
     }
 }
 
-/// 식별코드(IP)로 작성글 찾기 창: 목록을 최근 쪽부터 받아 그 사람 글만 모아 보여 줌 (창을 닫아도 뒤에서 계속)
-struct IdPostSearchSheet: View {
-    let gallery: Gallery
-    let initialCode: String
-    let onOpen: (URL) -> Void
-    @Environment(\.dismiss) private var dismiss
+/// 식별코드(IP)로 작성글 찾기 내용 (List 안에 넣어서 씀). 찾기 창과 검색 창의 '식별코드·IP' 탭이 같이 씀
+/// showsCodeField: 식별코드 입력칸을 이 안에 둘지 (검색 창 탭은 위 검색창을 씀)
+/// onOpen: 찾은 글을 누르면 (창을 닫는 일은 부른 쪽이 함)
+struct IdPostSearchSections: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var s = IdPostSearcher.shared
+    let showsCodeField: Bool
+    let onOpen: (URL) -> Void
     private let presets = [30, 100, 300, 1000]
     @FocusState private var codeFocused: Bool
-
-    init(gallery: Gallery, code: String, onOpen: @escaping (URL) -> Void) {
-        self.gallery = gallery
-        self.initialCode = code
-        self.onOpen = onOpen
-    }
 
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -356,92 +358,123 @@ struct IdPostSearchSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
+        Group {
+            Section {
+                if showsCodeField {
                     TextField(s.useDate ? "식별코드 또는 IP (비우면 그날 글 전체)" : "식별코드 또는 IP", text: $s.code)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .focused($codeFocused)
                         .submitLabel(.search)
                         .onSubmit { begin() }
-                    Toggle("날짜로 찾기", isOn: $s.useDate)
-                    if s.useDate {
-                        DatePicker("부터", selection: $s.fromDate, in: ...Date(), displayedComponents: .date)
-                        DatePicker("까지", selection: $s.toDate, in: ...Date(), displayedComponents: .date)
-                    } else {
-                        HStack {
-                            Text("검색할 쪽 수")
-                            Spacer()
-                            TextField("100", text: $s.pagesText)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 90)
-                            Text("쪽").foregroundStyle(.secondary)
-                        }
-                        HStack(spacing: 8) {
-                            ForEach(presets, id: \.self) { n in
-                                Button { s.pagesText = String(n) } label: {
-                                    Text("\(n)").font(.footnote)
-                                        .padding(.horizontal, 10).padding(.vertical, 5)
-                                        .background(s.pages == n ? DCTheme.accent.opacity(0.18) : Color(uiColor: .tertiarySystemFill), in: Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                    Button {
-                        if s.running { s.stop() } else { begin() }
-                    } label: {
-                        Text(s.running ? "중지" : "찾기").frame(maxWidth: .infinity)
-                    }
-                    .disabled(!s.running && !s.canStart)
-                } footer: {
-                    Text((s.useDate
-                          ? "정한 날짜 사이의 글만 찾아요. 오래전 날짜도 앱이 그 근처 쪽을 바로 찾아가서 빨리 시작해요."
-                          : "최근 쪽부터 받아 와요. 쪽당 약 30글이고 최대 \(IdPostSearcher.maxPages)쪽까지예요.")
-                         + " 창을 닫아도 뒤에서 계속 찾고, 끝나면 화면 위에 알려 줘요. 유동은 IP 앞 두 칸(예: 118.235)으로 찾아요.")
                 }
-                if s.running || s.finishedMessage != nil || s.scanned > 0 {
-                    Section {
-                        if s.running {
-                            if s.total > 0 {
-                                ProgressView(value: Double(min(s.scanned, s.total)), total: Double(max(s.total, 1)))
-                                Text("\(s.scanned)/\(s.total)쪽 확인 · \(s.hits.count)개 찾음")
-                                    .font(.footnote).foregroundStyle(.secondary)
-                            } else {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                    Text(s.phase.isEmpty ? "\(s.scanned)쪽 확인 · \(s.hits.count)개 찾음" : s.phase + (s.scanned > 0 ? " · \(s.scanned)쪽 확인 · \(s.hits.count)개" : ""))
-                                        .font(.footnote).foregroundStyle(.secondary)
-                                }
-                            }
-                        } else if let m = s.finishedMessage {
-                            Text(m).font(.footnote).foregroundStyle(.secondary)
-                        }
-                        if s.failedPages > 0 {
-                            Text("\(s.failedPages)쪽은 받지 못했어요 (요청 제한 등)")
-                                .font(.footnote).foregroundStyle(.orange)
-                        }
+                Toggle("날짜로 찾기", isOn: $s.useDate)
+                if s.useDate {
+                    DatePicker("부터", selection: $s.fromDate, in: ...Date(), displayedComponents: .date)
+                    DatePicker("까지", selection: $s.toDate, in: ...Date(), displayedComponents: .date)
+                } else {
+                    HStack {
+                        Text("검색할 쪽 수")
+                        Spacer()
+                        TextField("100", text: $s.pagesText)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                        Text("쪽").foregroundStyle(.secondary)
                     }
-                }
-                if !s.hits.isEmpty {
-                    Section("찾은 글") {
-                        ForEach(s.hits) { h in
-                            Button {
-                                dismiss()
-                                onOpen(h.url)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(h.title.isEmpty ? "(제목 없음)" : h.title).lineLimit(2)
-                                    Text("\(h.nick) · \(h.date)" + (h.comments > 0 ? " · 댓글 \(h.comments)" : ""))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
+                    HStack(spacing: 8) {
+                        ForEach(presets, id: \.self) { n in
+                            Button { s.pagesText = String(n) } label: {
+                                Text("\(n)").font(fonts.styleFont(.footnote))
+                                    .padding(.horizontal, 10).padding(.vertical, 5)
+                                    .background(s.pages == n ? DCTheme.accent.opacity(0.18) : Color(uiColor: .tertiarySystemFill), in: Capsule())
                             }
                             .buttonStyle(.plain)
                         }
                     }
+                }
+                Button {
+                    if s.running { s.stop() } else { begin() }
+                } label: {
+                    Text(s.running ? "중지" : "찾기").frame(maxWidth: .infinity)
+                }
+                .disabled(!s.running && !s.canStart)
+            } footer: {
+                Text((s.useDate
+                      ? "정한 날짜 사이의 글만 찾아요. 오래전 날짜도 앱이 그 근처 쪽을 바로 찾아가서 빨리 시작해요."
+                      : "최근 쪽부터 받아 와요. 쪽당 약 30글이고 최대 \(IdPostSearcher.maxPages)쪽까지예요.")
+                     + " 창을 닫아도 뒤에서 계속 찾고, 끝나면 화면 위에 알려 줘요. 유동은 IP 앞 두 칸(예: 118.235)으로 찾아요.")
+            }
+            if s.running || s.finishedMessage != nil || s.scanned > 0 {
+                Section {
+                    if s.running {
+                        if s.total > 0 {
+                            ProgressView(value: Double(min(s.scanned, s.total)), total: Double(max(s.total, 1)))
+                            Text("\(s.scanned)/\(s.total)쪽 확인 · \(s.hits.count)개 찾음")
+                                .font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
+                        } else {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text(s.phase.isEmpty ? "\(s.scanned)쪽 확인 · \(s.hits.count)개 찾음" : s.phase + (s.scanned > 0 ? " · \(s.scanned)쪽 확인 · \(s.hits.count)개" : ""))
+                                    .font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
+                            }
+                        }
+                    } else if let m = s.finishedMessage {
+                        Text(m).font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
+                    }
+                    if s.failedPages > 0 {
+                        Text("\(s.failedPages)쪽은 받지 못했어요 (요청 제한 등)")
+                            .font(fonts.styleFont(.footnote)).foregroundStyle(.orange)
+                    }
+                }
+            }
+            if !s.hits.isEmpty {
+                Section("찾은 글") {
+                    ForEach(s.hits) { h in
+                        Button {
+                            onOpen(h.url)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(h.title.isEmpty ? "(제목 없음)" : h.title).lineLimit(2)
+                                Text("\(h.nick) · \(h.date)" + (h.comments > 0 ? " · 댓글 \(h.comments)" : ""))
+                                    .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // 식별코드를 아직 안 적었으면 키보드를 바로 올림 (돌고 있거나 결과가 있는 채로 다시 열면 올리지 않음)
+            guard showsCodeField else { return }
+            if s.code.trimmingCharacters(in: .whitespaces).isEmpty, !s.running, s.hits.isEmpty {
+                Task { try? await Task.sleep(for: .milliseconds(450)); codeFocused = true }
+            }
+        }
+    }
+}
+
+/// 식별코드(IP)로 작성글 찾기 창 (닉네임·글 메뉴에서 열림): 목록을 최근 쪽부터 받아 그 사람 글만 모아 보여 줌 (창을 닫아도 뒤에서 계속)
+struct IdPostSearchSheet: View {
+    let gallery: Gallery
+    let initialCode: String
+    let onOpen: (URL) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    init(gallery: Gallery, code: String, onOpen: @escaping (URL) -> Void) {
+        self.gallery = gallery
+        self.initialCode = code
+        self.onOpen = onOpen
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                IdPostSearchSections(showsCodeField: true) { url in
+                    dismiss()
+                    onOpen(url)
                 }
             }
             .navigationTitle("작성글 찾기")
@@ -450,18 +483,15 @@ struct IdPostSearchSheet: View {
         }
         .sheetUnderBlueBar(medium: true)
         .onAppear {
-            s.prepare(gallery: gallery, code: initialCode)
-            // 식별코드를 아직 안 적었으면 키보드를 바로 올림 (돌고 있거나 결과가 있는 채로 다시 열면 올리지 않음)
-            if s.code.trimmingCharacters(in: .whitespaces).isEmpty, !s.running, s.hits.isEmpty {
-                Task { try? await Task.sleep(for: .milliseconds(450)); codeFocused = true }
-            }
+            IdPostSearcher.shared.prepare(gallery: gallery, code: initialCode)
         }
-        .onDisappear { s.unseen = false }
+        .onDisappear { IdPostSearcher.shared.unseen = false }
     }
 }
 
 /// 화면 위에 뜨는 작은 알림 칸: 뒤에서 찾는 중이거나 끝났을 때 (누르면 결과 창)
 struct IdSearchPill: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var s = IdPostSearcher.shared
     let open: () -> Void
 
@@ -472,7 +502,7 @@ struct IdSearchPill: View {
                     HStack(spacing: 8) {
                         if s.running { ProgressView().controlSize(.small) }
                         else { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
-                        Text(label).font(.footnote.weight(.medium)).lineLimit(1)
+                        Text(label).font(fonts.styleFont(.footnote, weight: .medium)).lineLimit(1)
                     }
                 }
                 .buttonStyle(.plain)

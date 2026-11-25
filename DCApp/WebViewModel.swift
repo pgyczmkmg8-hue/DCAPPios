@@ -41,6 +41,24 @@ struct PickRequest: Identifiable {
     let snippet: String
 }
 
+/// 퀵 글쓰기 제목만 올릴 때 본문을 채우는 규칙 (디시가 같은 본문의 연속 글을 막으므로 글마다 달라지게 함)
+nonisolated enum QuickBodyFiller {
+    /// 제목에 "ㅋㅋ"가 있으면 ㅋ를 4~16개 이어 붙이고, 없으면 본문을 제목과 같게
+    static func body(forTitle title: String) -> String {
+        guard title.contains("ㅋㅋ") else { return title }
+        return String(repeating: "ㅋ", count: keuCount())
+    }
+
+    /// Box-Muller 정규분포 (평균 10, 표준편차 3)로 뽑고 반올림한 뒤 4~16으로 자름
+    static func keuCount() -> Int {
+        let u1 = max(Double.random(in: 0..<1), Double.leastNonzeroMagnitude)   // log(0) 방지
+        let u2 = Double.random(in: 0..<1)
+        let z = (-2 * log(u1)).squareRoot() * cos(2 * Double.pi * u2)
+        let n = Int((10 + 3 * z).rounded())
+        return min(16, max(4, n))
+    }
+}
+
 /// WKUserContentController가 핸들러를 강하게 잡아서 생기는 메모리 누수 방지용
 @MainActor
 final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
@@ -61,6 +79,12 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var url: URL?
     /// 글 목록 말머리 이름들 (말머리 줄에서 읽음) — 필터 시트의 말머리 고르기에 씀
     @Published var headNames: [String] = []
+    /// headNames가 어느 갤러리 것인지 (같은 갤러리 안의 새로고침·이동에서는 말머리를 지우지 않으려고 씀)
+    private var headNamesGallery: String?
+    /// 갤러리별로 기억해 둔 말머리 (다시 들어갈 때 깔때기 버튼이 잠깐 떴다 사라지지 않게 바로 씀)
+    private var headNamesCache: [String: [String]] = [:]
+    /// 지금 이동하려는 주소 (didStart에서 목적지가 같은 갤러리인지 확인하려고 씀)
+    private var pendingNavURL: URL?
     /// 말머리 줄 깔때기 버튼을 누를 때마다 바뀜 → 필터 시트 열기
     @Published var listFilterTick = 0
     @Published var canGoBack = false
@@ -88,6 +112,8 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var captured: CapturedImage?
     /// 글 속 사진 보기 (사진 탭 → 전체 화면)
     @Published var imageViewer: ImageViewerItem?
+    /// 투표 보기 썸네일을 누른 사진 (디시 전체 화면 대신 적당한 크기의 앱 창으로)
+    @Published var votePreview: VotePreviewItem?
     /// 댓글을 길게 눌러 띄우는 '댓글 내용만 보기' (선택·복사용)
     @Published var commentText: CommentTextItem?
     /// 댓글을 길게 눌렀을 때 뜨는 '텍스트 선택' 버튼 (누르면 commentText로 넘어가 내용 화면이 열림)
@@ -143,6 +169,8 @@ final class WebViewModel: NSObject, ObservableObject {
     var focusTitleOnWrite = false
     /// 키보드가 떠 있는지 (제목 칸 포커스가 먹혔는지 확인용)
     private var keyboardUp = false
+    /// 저장된 계정으로 로그인하는 동안 디시 로그인 화면을 가리는 '로그인 중…' 가림막 (nil = 안 가림)
+    @Published var loginCover: String?
     @Published var toast: String?
     /// 429로 막힌 댓글을 자동으로 다시 누르는 중 ('댓글을 다는 중입니다' 말풍선)
     @Published var isRetryingComment = false
@@ -178,6 +206,8 @@ final class WebViewModel: NSObject, ObservableObject {
         let v = UIDevice.current.systemVersion.split(separator: ".").prefix(2).joined(separator: ".")
         config.applicationNameForUserAgent = "Version/\(v) Mobile/15E148 Safari/604.1"
         config.userContentController = WKUserContentController()
+        // 고른 글꼴 파일을 dcappfont:// 주소로 건넴 (페이지 설정에는 주소만)
+        config.setURLSchemeHandler(WebFontSchemeHandler.shared, forURLScheme: FontStore.webScheme)
         // 아이패드에서도 PC판이 아닌 모바일 디시를 받도록 (차단·자짤 등 기능이 모바일 페이지 기준)
         config.defaultWebpagePreferences.preferredContentMode = .mobile
 
@@ -186,6 +216,7 @@ final class WebViewModel: NSObject, ObservableObject {
         super.init()
 
         config.userContentController.add(WeakScriptMessageHandler(self), name: "dcapp")
+        config.userContentController.addScriptMessageHandler(WebFontMessageHandler.shared, contentWorld: .page, name: "dcappFont")
         installUserScript()
 
         webView.navigationDelegate = self
@@ -662,7 +693,52 @@ final class WebViewModel: NSObject, ObservableObject {
             webView.evaluateJavaScript("window.__dcapp && window.__dcapp.setConfig(\(scriptConfigJSON)); true", completionHandler: nil)
         }
     }
-    private var scriptConfigJSON: String { FilterStore.shared.scriptConfig(detailPane: isDetailPane) }
+    /// 분할 화면의 왼쪽(목록) 화면인지 — 오른쪽 화면 끝에 닿지 않으므로 오른쪽 안전영역 여백을 붙이지 않음
+    var isSplitListPane = false {
+        didSet {
+            guard oldValue != isSplitListPane else { return }
+            installUserScript()
+            pushDuoFlags()
+        }
+    }
+    private var scriptConfigJSON: String { FilterStore.shared.scriptConfig(detailPane: isDetailPane, duo: duoFlags) }
+
+    /// 듀오 옆 세로 줄 여백을 이 화면에 붙일지. 창 전체가 아니라 이 화면이 줄 쪽 끝에 닿는지로 정함
+    /// (분할 화면의 왼쪽 목록은 오른쪽 끝에 닿지 않음 → 옆 줄 여백을 붙이면 오른쪽 요소가 안전 영역만큼 밀림)
+    struct DuoFlags: Equatable {
+        let col: Bool      // 옆 세로 줄 여백 (줄 쪽 끝에 닿을 때)
+        let flip: Bool     // 줄이 왼쪽에 있음 (뒤집힌 여백)
+        let flipR: Bool    // 뒤집힌 줄의 오른쪽 여백 (오른쪽 끝에도 닿을 때)
+    }
+
+    var duoFlags: DuoFlags {
+        let (left, right): (Bool, Bool)
+        if isSplitListPane {
+            (left, right) = (true, false)
+        } else if isDetailPane {
+            (left, right) = (false, true)
+        } else {
+            (left, right) = screenEdgeContact()
+        }
+        let flipped = BrowserView.windowLeftColumn
+        let col = BrowserView.hasSideColumnOnly && (flipped ? left : right)
+        let flip = flipped && left
+        return DuoFlags(col: col, flip: flip, flipR: flip && right)
+    }
+
+    /// 이 웹 화면의 왼쪽·오른쪽이 화면(창의 안전 영역) 끝에 닿아 있는지. 창을 알 수 없으면 둘 다 닿은 것으로 봄
+    private func screenEdgeContact() -> (left: Bool, right: Bool) {
+        guard let win = webView.window else { return (true, true) }
+        let f = webView.convert(webView.bounds, to: win)
+        let safe = win.safeAreaInsets
+        return (f.minX <= win.bounds.minX + safe.left + 2, f.maxX >= win.bounds.maxX - safe.right - 2)
+    }
+
+    /// 화면 자리(분할·회전)가 바뀌면 여백 설정만 다시 보냄 (페이지는 새로 불러오지 않음)
+    func pushDuoFlags() {
+        let f = duoFlags
+        webView.evaluateJavaScript("window.__dcapp && window.__dcapp.setDuo(\(f.col), \(f.flip), \(f.flipR)); true", completionHandler: nil)
+    }
 
     /// 지금 화면이 갤러리 글 목록인지 (글 보기·글쓰기 화면은 아님)
     var isGalleryListPage: Bool {
@@ -828,6 +904,8 @@ final class WebViewModel: NSObject, ObservableObject {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
         let source = "window.__DCAPP_CONFIG__ = \(scriptConfigJSON);\n" + ContentScript.source
+        // 본문이 앱 스타일 없이 잠깐 보이는 것 막기 (문서 맨 처음에 본문을 가려 두고, 스타일이 붙으면 풂)
+        controller.addUserScript(WKUserScript(source: ContentScript.preload, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // 알림 주소 찾기용 네트워크 기록 (페이지 맨 처음에 넣어야 처음부터 기록됨)
         controller.addUserScript(WKUserScript(source: ContentScript.netLog, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -864,6 +942,7 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.setNeedsLayout()
         webView.scrollView.setNeedsLayout()
         webView.evaluateJavaScript("window.dispatchEvent(new Event('resize')); true", completionHandler: nil)
+        pushDuoFlags()   // 자리가 바뀌었으니 이 화면의 옆 줄 여백도 맞춤
     }
 
     /// 세로 컨트롤바가 웹 화면 위에 떠서 가리는 폭 (왼쪽/오른쪽) — 글 아래 수정·삭제 버튼 줄을 그만큼 비워 겹치지 않게
@@ -879,9 +958,90 @@ final class WebViewModel: NSObject, ObservableObject {
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// 위쪽 상단바가 웹 화면을 덮는 높이 → 페이지의 고정 창(디시콘 정보 등)이 바 밑으로 잘리지 않게 --dcapp-top으로 넘김
+    func syncTopInset() {
+        let top = Int(webView.scrollView.adjustedContentInset.top.rounded())
+        let js = "(function(t){var s=document.documentElement&&document.documentElement.style;if(!s)return;s.setProperty('--dcapp-top',t+'px');})(\(top)); true"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// 길게 누른 디시콘이 속한 패키지 (DCRefresher-Reborn 방식: gall.dcinside.com/dccon/package_detail + ci_t CSRF 토큰)
+    func dcconPackage(forKey key: String) async -> (pkg: String, name: String, keys: [String])? {
+        if let fetched = await fetchDcconPackageFromGall(code: key) {
+            return fetched
+        }
+        let r = await call("if (!window.__dcapp) return null; return await window.__dcapp.dcconPackageFor(key);", ["key": key])
+        guard let d = r as? [String: Any], let pkg = d["pkg"] as? String, !pkg.isEmpty else { return nil }
+        return (pkg, d["name"] as? String ?? "", (d["keys"] as? [String]) ?? [])
+    }
+
+    /// DCRefresher-Reborn의 fetchDcconPackage와 동일하게 gall.dcinside.com/dccon/package_detail에 ci_t + code로 요청
+    private func fetchDcconPackageFromGall(code: String) async -> (pkg: String, name: String, keys: [String])? {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let url = URL(string: "https://gall.dcinside.com/dccon/package_detail") else { return nil }
+
+        // 1) WebView 쿠키 저장소에서 ci_c 확보, 없으면 gall.dcinside.com에서 새로 발급
+        let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
+        var ciToken = cookies.first(where: { $0.name == "ci_c" && $0.domain.contains("dcinside.com") })?.value ?? ""
+        let ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+        if ciToken.isEmpty, let seedURL = URL(string: "https://gall.dcinside.com/board/lists/?id=dcbest") {
+            var seedReq = URLRequest(url: seedURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+            seedReq.setValue(ua, forHTTPHeaderField: "User-Agent")
+            if let (_, resp) = try? await URLSession.shared.data(for: seedReq),
+               let http = resp as? HTTPURLResponse,
+               let fields = http.allHeaderFields as? [String: String] {
+                let parsed = HTTPCookie.cookies(withResponseHeaderFields: fields, for: seedURL)
+                ciToken = parsed.first(where: { $0.name == "ci_c" })?.value ?? ""
+            }
+        }
+        guard !ciToken.isEmpty else { return nil }
+
+        // 2) POST https://gall.dcinside.com/dccon/package_detail (ci_t=...&code=...)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.httpMethod = "POST"
+        req.setValue(ua, forHTTPHeaderField: "User-Agent")
+        req.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        req.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+        req.setValue("https://gall.dcinside.com/", forHTTPHeaderField: "Referer")
+        req.setValue("ci_c=\(ciToken)", forHTTPHeaderField: "Cookie")
+
+        var bodyComps = URLComponents()
+        bodyComps.queryItems = [
+            URLQueryItem(name: "ci_t", value: ciToken),
+            URLQueryItem(name: "code", value: trimmed)
+        ]
+        req.httpBody = bodyComps.percentEncodedQuery?.data(using: .utf8)
+
+        guard let (data, _) = try? await URLSession.shared.data(for: req),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let info = json["info"] as? [String: Any],
+              let detail = json["detail"] as? [[String: Any]] else {
+            return nil
+        }
+
+        let pkgIdx: String
+        if let s = info["package_idx"] as? String, !s.isEmpty {
+            pkgIdx = s
+        } else if let n = info["package_idx"] as? NSNumber {
+            pkgIdx = n.stringValue
+        } else {
+            return nil
+        }
+        let title = info["title"] as? String ?? ""
+        var keys = Set<String>([trimmed])
+        for item in detail {
+            if let path = item["path"] as? String, !path.isEmpty {
+                keys.insert(path)
+            }
+        }
+        return (pkgIdx, title, Array(keys).sorted())
+    }
+
     func applyFilters() {
         webView.allowsBackForwardNavigationGestures = !Self.customSwipeEnabled
         installUserScript()   // 다음 페이지부터 적용
+        AdBlock.apply(to: webView.configuration.userContentController)   // 본문 이미지 숨기기 규칙 바꾸기 (광고 차단 규칙은 그대로 다시 붙음)
         let js = "window.__dcapp && window.__dcapp.setConfig(\(scriptConfigJSON)); true"
         webView.evaluateJavaScript(js, completionHandler: nil)   // 지금 페이지에 즉시 적용
     }
@@ -1134,6 +1294,7 @@ final class WebViewModel: NSObject, ObservableObject {
             }
             pendingLogin = account
             manualLogin = (account == nil)
+            if account != nil { showLoginCover() } else { hideLoginCover() }   // 계정으로 로그인하면 가림막, 직접 로그인하면 원래 화면
             load(loginURL(returnTo: back))
             if let account { showToast("\(account.id) 계정으로 로그인하는 중…") }
         }
@@ -1216,6 +1377,9 @@ final class WebViewModel: NSObject, ObservableObject {
 
     // MARK: - 앱 글쓰기 화면
 
+    /// 퀵 글쓰기 요청: 글쓰기 주소로 가는 동안 기다렸다가 글쓰기 화면 대신 이 내용으로 채워 바로 등록
+    private var pendingQuick: QuickWriteRequest?
+
     static let nativeWriteKey = "nativeWrite"
     static var nativeWriteEnabled: Bool { Profile.defaults.object(forKey: nativeWriteKey) as? Bool ?? true }
 
@@ -1227,6 +1391,17 @@ final class WebViewModel: NSObject, ObservableObject {
         let s = NativeWriteSession(galleryID: gid)
         nativeWrite = s
         var restored = false
+        // 퀵 글쓰기 요청이 같은 갤러리 것이면 글쓰기 화면 대신 그 내용으로 채우고, 양식을 읽은 뒤 바로 등록 (오래된 요청은 버림)
+        if let q = pendingQuick, DCGalleryID.bare(q.galleryID) == DCGalleryID.bare(gid) {
+            pendingQuick = nil
+            if Date().timeIntervalSince(q.at) < 30 {
+                s.title = q.title
+                s.blocks = [WriteBlock(text: q.body)]
+                s.quick = true
+                s.quickListURL = q.listURL
+                return (s, false)
+            }
+        }
         if let d = pendingDraft {
             pendingDraft = nil; keptWrite = nil
             s.apply(d); restored = true
@@ -1248,25 +1423,42 @@ final class WebViewModel: NSObject, ObservableObject {
     private var retrySession: NativeWriteSession?
 
     /// 디시의 '너무 많은 요청으로 이용하실 수 없습니다' 안내 페이지가 뜨면 → 풀릴 때까지 빠르게 자동 새로고침
+    @Published var isRateLimited = false
+    @Published var rateLimitTries = 0
     private var tooManyTries = 0
     private func retryIfTooManyRequests() {
         let url = webView.url
         Task { @MainActor in
             let js = "(function(){var b=document.body;if(!b)return false;var t=b.innerText||'';return t.length<600 && t.indexOf('너무 많은 요청으로')>=0 && t.indexOf('이용하실 수 없습니다')>=0;})()"
             let hit = (try? await webView.evaluateJavaScript(js)) as? Bool ?? false
-            guard hit else { tooManyTries = 0; return }
+            guard hit else {
+                tooManyTries = 0
+                isRateLimited = false
+                rateLimitTries = 0
+                return
+            }
             tooManyTries += 1
+            isRateLimited = true
+            rateLimitTries = tooManyTries
             guard tooManyTries <= 300 else {
                 showToast("요청 제한이 계속돼서 자동 새로고침을 멈췄어요")
                 tooManyTries = 0
                 return
             }
-            if tooManyTries == 1 { showToast("요청이 많아 안 열려요. 열릴 때까지 자동으로 다시 불러와요") }
             try? await Task.sleep(for: .milliseconds(600))
             // 그 사이에 다른 페이지로 옮겼으면 멈춤
             guard webView.url == url, !webView.isLoading else { return }
             if let u = url { webView.load(URLRequest(url: u)) } else { webView.reload() }
         }
+    }
+
+    /// 퀵 글쓰기: 글쓰기 화면을 열지 않고 제목(첫 줄)·본문(둘째 줄부터)으로 바로 등록. 글쓰기 주소로 가서 양식을 읽은 뒤 등록하고,
+    /// 말머리·코드·유동 비밀번호가 필요하거나 등록이 막히면 그때 글쓰기 화면을 띄워 채워 둠
+    func quickWrite(gallery g: Gallery, title: String, body: String) {
+        guard Self.nativeWriteEnabled else { showToast("앱 글쓰기를 켜야 퀵 글쓰기를 쓸 수 있어요"); return }
+        guard nativeWrite == nil else { showToast("글쓰기 중이라 퀵 글쓰기를 열지 못했어요"); return }
+        pendingQuick = QuickWriteRequest(galleryID: g.galleryID, title: title, body: body, listURL: g.url, at: Date())
+        load(g.writeURL)
     }
 
     private func startNativeWrite(_ gid: String) {
@@ -1282,7 +1474,8 @@ final class WebViewModel: NSObject, ObservableObject {
         Task {
             guard let info = await readWriteInfo(s) else { return }
             // 자짤 (자동 첨부로 설정된 계정·갤러리): 유동/로그인은 글쓰기 양식을 읽은 뒤에야 알 수 있음
-            if info["mode"] as? String != "modify" && !restored {
+            // (퀵 글쓰기는 글만 올리므로 자짤을 붙이지 않음)
+            if info["mode"] as? String != "modify" && !restored && !s.quick {
                 let eff = AutoImageStore.shared.effective(for: gid, account: AutoImageScope.currentAccount(isAnon: s.isAnon))
                 if eff.enabled && eff.mode == .auto { addAutoImage(to: s, silent: true) }
             }
@@ -1309,6 +1502,8 @@ final class WebViewModel: NSObject, ObservableObject {
             s.loaded = true
             s.startDone = true
             runNativeAutosave(s)
+            // 퀵 글쓰기: 양식을 다 읽었으니 바로 등록 (막히는 게 있으면 submitNative가 글쓰기 화면을 띄움)
+            if s.quick, !s.submitting { submitNative() }
         }
     }
 
@@ -1518,21 +1713,24 @@ final class WebViewModel: NSObject, ObservableObject {
     /// 앱 글쓰기 '등록' → 디시 양식에 채우고 등록
     func submitNative() {
         guard let s = nativeWrite, !s.submitting else { return }
-        if !s.loaded { showToast("디시 글쓰기 양식을 불러오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
-        if s.convertingPhotos > 0 { showToast("사진을 준비하는 중이에요. 잠시 뒤에 눌러 주세요"); return }
+        // 퀵 글쓰기는 막히는 게 있으면 quick을 끄고 알림 → 글쓰기 화면이 나와서 채울 수 있음
+        func reject(_ message: String) { s.quick = false; showToast(message) }
+        if !s.loaded { reject("디시 글쓰기 양식을 불러오는 중이에요. 잠시 뒤에 눌러 주세요"); return }
+        if s.convertingPhotos > 0 { reject("사진을 준비하는 중이에요. 잠시 뒤에 눌러 주세요"); return }
         let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if title.count < 2 { showToast("제목을 2자 이상 입력해 주세요"); return }
-        if title.count > 40 { showToast("제목은 40자까지 쓸 수 있어요"); return }
-        if s.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && s.images.isEmpty {
-            showToast("내용을 입력해 주세요"); return
+        if title.count < 2 { reject("제목을 2자 이상 입력해 주세요"); return }
+        if title.count > 40 { reject("제목은 40자까지 쓸 수 있어요"); return }
+        // 퀵 글쓰기는 제목만 있어도 등록 (본문이 비면 아래에서 보이지 않는 글자 하나로 채움)
+        if s.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && s.images.isEmpty && !s.quick {
+            reject("내용을 입력해 주세요"); return
         }
         if s.isAnon {
-            if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { showToast("닉네임을 입력해 주세요"); return }
-            if s.pw.count < 4 { showToast("비밀번호를 4자리 이상 입력해 주세요"); return }
+            if s.nick.trimmingCharacters(in: .whitespaces).isEmpty { reject("닉네임을 입력해 주세요"); return }
+            if s.pw.count < 4 { reject("비밀번호를 4자리 이상 입력해 주세요"); return }
             AnonStore.update(gallery: s.galleryID, nick: s.nickLocked ? nil : s.nick, password: s.pw)
         }
-        if s.hasCaptcha && s.captcha.isEmpty { showToast("코드를 입력해 주세요"); return }
-        if !s.heads.isEmpty && s.head.isEmpty { showToast("말머리를 골라 주세요"); return }
+        if s.hasCaptcha && s.captcha.isEmpty { reject("코드를 입력해 주세요"); return }
+        if !s.heads.isEmpty && s.head.isEmpty { reject("말머리를 골라 주세요"); return }
         // 쓰던 내용은 혹시 몰라 자동 저장에도
         DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
                                    preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
@@ -1542,13 +1740,36 @@ final class WebViewModel: NSObject, ObservableObject {
         s.submitToken = token
         // 분할 화면의 글 수정: 등록 뒤 디시가 글 목록을 열면 수정한 글을 오른쪽에 다시 띄움
         if isDetailPane, let u = s.modifyPostURL { pendingModifyReturn = (u, Date()) }
-        var bodyBlocks: [[String: Any]] = s.blocks.compactMap { b -> [String: Any]? in
+        // 본문의 유튜브 링크는 그 자리에 영상 칸으로 (등록할 때 디시 편집기의 유튜브 삽입으로 만듦)
+        var youtubeIDs: [String] = []
+        var bodyBlocks: [[String: Any]] = s.blocks.flatMap { b -> [[String: Any]] in
             if let img = b.image {
-                if let raw = img.rawHTML { return ["t": "raw", "html": raw] }      // 수정: 원래 있던 칸 그대로
-                return ["t": "image", "b64": img.data.base64EncodedString(), "mime": img.mime, "ext": img.ext]
+                if let raw = img.rawHTML { return [["t": "raw", "html": raw]] }      // 수정: 원래 있던 칸 그대로
+                return [["t": "image", "b64": img.data.base64EncodedString(), "mime": img.mime, "ext": img.ext]]
             }
-            return b.text.isEmpty ? nil : ["t": "text", "text": b.text, "html": RichText.html(b.rich)]   // 꾸미기 포함
+            if b.text.isEmpty { return [] }
+            let pieces = YouTubeLinks.split(b.text)
+            if !pieces.contains(where: { $0.videoID != nil }) {
+                return [["t": "text", "text": b.text, "html": RichText.html(b.rich)]]   // 꾸미기 포함
+            }
+            // 유튜브 링크가 든 줄: 글자 조각과 영상 칸을 나온 순서대로 (그 줄의 꾸밈은 글자만 남김)
+            var out: [[String: Any]] = []
+            for piece in pieces {
+                switch piece {
+                case .video(let id):
+                    out.append(["t": "youtube", "id": id])
+                    if !youtubeIDs.contains(id) { youtubeIDs.append(id) }
+                case .text(let t):
+                    if t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+                    out.append(["t": "text", "text": t])
+                }
+            }
+            return out
         }
+        // 퀵 글쓰기 제목만: 디시는 본문이 비면 막고, 같은 본문이 이어지면 같은 내용으로 막음.
+        // 제목에 "ㅋㅋ"가 있으면 ㅋ 4~16개, 아니면 제목과 같은 본문으로 채워 글마다 본문이 달라지게 함 (QuickBodyFiller)
+        let hasRealBody = !s.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !s.images.isEmpty
+        if s.quick, !hasRealBody { bodyBlocks = [["t": "text", "text": QuickBodyFiller.body(forTitle: title)]] }
         // 꼬릿말: 계정(유동 포함)·갤러리에 맞는 한 줄을 본문 맨 아래에 (글 수정으로 이미 들어 있으면 또 붙이지 않음)
         let footerAccount: String? = s.isAnon ? FooterRule.anon : CredentialStore.currentAccountID
         if let f = FooterStore.shared.text(account: footerAccount, gallery: s.galleryID) {
@@ -1565,16 +1786,26 @@ final class WebViewModel: NSObject, ObservableObject {
             "imgSize": Self.submitImageSize(for: s).rawValue,
             // 본문 순서 그대로: 글자 칸 / 사진 칸 (+ 꼬릿말)
             "blocks": bodyBlocks,
+            "youtube": youtubeIDs,   // 본문에서 찾은 유튜브 영상 ID (등록할 때 영상으로 붙임)
         ]
+        if !youtubeIDs.isEmpty { showToast("유튜브 영상 \(youtubeIDs.count)개를 넣어요") }
         Task {
             let r = await call("return window.__dcapp ? await window.__dcapp.nativeSubmit(p) : 'noscript';", ["p": payload]) as? String ?? "error"
             // 재시도로 이미 새 등록으로 넘어갔으면(또는 페이지가 바뀌며 이 호출이 오류로 끝났으면) 이 결과는 버림
             guard nativeWrite === s, s.submitToken == token else { return }
+            // 퀵 글쓰기가 등록되지 않았으면(성공 외 결과) 글쓰기 화면을 보여 줌
+            if r != "submitted" { s.quick = false }
             switch r {
             case "submitted":
                 // 디시가 등록하고 글 화면으로 넘어가면 닫힘. 안 넘어가면(오류) 잠시 뒤 다시 쓸 수 있게
                 try? await Task.sleep(for: .seconds(15))
-                if nativeWrite === s, s.submitting, s.submitToken == token { s.submitting = false }
+                if nativeWrite === s, s.submitting, s.submitToken == token {
+                    s.submitting = false
+                    if s.quick {
+                        s.quick = false
+                        showToast("등록이 넘어가지 않아서 글쓰기 화면을 열었어요. 확인해 주세요")
+                    }
+                }
             case "needcheck":
                 s.submitting = false
                 s.webFeature = nil
@@ -1600,6 +1831,64 @@ final class WebViewModel: NSObject, ObservableObject {
     private static func submitImageSize(for s: NativeWriteSession) -> WriteImageSize {
         let sizes = s.blocks.compactMap(\.image).filter { $0.rawHTML == nil }.map { $0.size ?? WriteImageSize.current }
         return sizes.max(by: { $0.rank < $1.rank }) ?? WriteImageSize.current
+    }
+
+    /// 앱 시리즈 화면에서 쓴 제목·게시물 주소를 디시 시리즈 창에 채워 만듦 (디시 시리즈 창은 띄우지 않음).
+    /// 성공하면 생긴 시리즈 칸을 앱 글쓰기 끝에 붙임. 결과 문자열을 돌려줌
+    func submitSeries(title: String, urls: [String], existing: Int) async -> String {
+        guard let s = nativeWrite else { return "nowrite" }
+        let payload: [String: Any] = ["title": title, "urls": urls, "existing": existing]
+        let r = await call("return window.__dcapp ? window.__dcapp.submitSeries(p) : 'noscript';", ["p": payload]) as? String ?? "error"
+        guard nativeWrite === s else { return "gone" }
+        switch r {
+        case "ok":
+            s.webFeature = "시리즈"
+            finishWebFeature()
+        case "limit": showToast("시리즈는 글 하나에 5개까지 만들 수 있어요")
+        case "nourl": showToast("시리즈에 넣을 게시물 주소를 찾지 못했어요")
+        case "notallowed": showToast("시리즈에 넣을 수 없는 게시물 주소가 있어요")
+        case "invalid": showToast("시리즈 제목과 게시물 주소를 확인해 주세요")
+        case "nofeature", "notwrite", "noscript": showToast("이 글에서는 시리즈를 만들 수 없어요")
+        default: showToast("시리즈를 만들지 못했어요")
+        }
+        return r
+    }
+
+    /// 앱 투표 화면에서 만든 투표를 디시 투표 양식에 채워 등록 (디시 투표 창은 띄우지 않음).
+    /// 보기 사진·기간·결과 공개·권한까지 디시 폼 칸과 같은 값으로 넣음. 성공하면 투표 칸을 앱 글쓰기 끝에 붙임
+    func submitVote(title: String, options: [VoteSubmitOption], multi: Bool, multiCount: Int,
+                    endDate: Bool, date: String, hour: String, minute: String,
+                    preview: Bool, permission: String) async -> String {
+        guard let s = nativeWrite else { return "nowrite" }
+        let opts: [[String: Any]] = options.map { o in
+            var d: [String: Any] = ["text": o.text]
+            if let img = o.image {
+                d["b64"] = img.data.base64EncodedString()
+                d["mime"] = img.mime
+                d["ext"] = img.ext
+            }
+            return d
+        }
+        let payload: [String: Any] = [
+            "title": title, "options": opts, "multi": multi, "multiCount": multiCount,
+            "endDate": endDate, "date": date, "hour": hour, "minute": minute,
+            "preview": preview, "permission": permission,
+        ]
+        let r = await call("return window.__dcapp ? await window.__dcapp.submitVote(p) : 'noscript';", ["p": payload]) as? String ?? "error"
+        guard nativeWrite === s else { return "gone" }
+        switch r {
+        case "ok":
+            s.webFeature = "투표"
+            finishWebFeature()
+        case "hasPoll": showToast("투표는 하나만 등록할 수 있어요")
+        case "invalid": showToast("제목과 보기를 확인해 주세요")
+        case "nofeature", "notwrite", "noscript": showToast("이 글에서는 투표를 쓸 수 없어요")
+        case _ where r.hasPrefix("imgfail"):
+            let n = r.split(separator: ":").last.map(String.init) ?? ""
+            showToast("보기 \(n)번 사진을 올리지 못했어요")
+        default: showToast("투표를 만들지 못했어요")
+        }
+        return r
     }
 
     /// 동영상·디시콘·유튜브·투표: 디시 화면에서 그 기능을 열어 넣게 하고, 다 넣으면 앱 화면으로 가져옴
@@ -1823,16 +2112,36 @@ final class WebViewModel: NSObject, ObservableObject {
         swipeBack()
     }
 
+    /// 나가는 글쓰기 화면을 목록 페이지가 그려진 뒤에 닫음 (150ms 여유: 첫 프레임 전에 /write가 비치지 않게)
+    private func scheduleCloseNativeWrite(_ s: NativeWriteSession) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self, self.nativeWrite === s else { return }
+            self.nativeWrite = nil
+        }
+    }
+
     func closeNativeWrite() {
-        guard let s = nativeWrite else { return }
+        guard let s = nativeWrite, !s.closing else { return }
         if s.hasText || s.hasUserImages {
             DraftStore.shared.autosave(galleryID: s.galleryID, title: s.title, body: s.body,
                                        preview: String(s.body.prefix(200)), isHTML: false, writeURL: webView.url,
                                        parts: s.draftParts())
             showToast("쓰던 글을 자동 임시저장했어요")
         }
-        nativeWrite = nil
+        // 바로 닫으면 뒤의 웹뷰가 아직 /write 페이지라 디시 원본 글쓰기가 잠깐 비침 → 가림막을 덮어 두고 목록으로 옮긴 뒤 닫음
+        // (목록 페이지가 열리면 didFinish에서 nativeWrite가 비워짐)
+        s.closing = true
         swipeBack()
+        Task { @MainActor [weak self] in
+            // 목록으로 가는 이동이 시작되지 않았으면(돌아갈 곳 없음 등) 바로 닫음
+            try? await Task.sleep(for: .milliseconds(700))
+            guard let self, self.nativeWrite === s else { return }
+            if !self.webView.isLoading { self.nativeWrite = nil; return }
+            // 이동이 오래 걸려도 10초 뒤에는 닫음
+            try? await Task.sleep(for: .seconds(10))
+            if self.nativeWrite === s { self.nativeWrite = nil }
+        }
     }
 
     // MARK: - 읽은 글 / 작성한 글 기록
@@ -1875,6 +2184,12 @@ final class WebViewModel: NSObject, ObservableObject {
     }
 
     /// 지금 글 목록의 갤러리 키 (읽은 글과 같은 형식: 미니 mi$, 인물 pr$) — 말머리 필터는 갤러리마다 따로 둠
+    /// 주소가 어느 갤러리인지 (galleryFilterKey와 같은 형식: 미니 mi$, 인물 pr$). 갤러리 밖이면 nil
+    static func headGalleryKey(_ url: URL?) -> String? {
+        guard let u = url, let g = Gallery.parse(u) else { return nil }
+        return (g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")) + g.id
+    }
+
     var galleryFilterKey: String? {
         guard let u = webView.url, let g = Gallery.parse(u) else { return nil }
         return (g.kind == .mini ? "mi$" : (g.kind == .person ? "pr$" : "")) + g.id
@@ -1913,6 +2228,17 @@ final class WebViewModel: NSObject, ObservableObject {
     func dismissKeyboard() {
         webView.evaluateJavaScript("document.activeElement && document.activeElement.blur && document.activeElement.blur(); true", completionHandler: nil)
         webView.endEditing(true)
+    }
+
+    // MARK: - 갤러리 정보 보기
+
+    func openGalleryInfo() {
+        Task {
+            let r = await call("return window.__dcapp ? window.__dcapp.openGalleryInfo() : 'none';") as? String
+            if r == "none" || r == nil {
+                showToast("갤러리 정보를 열 수 없는 화면이에요 (갤러리 목록 화면에서 눌러 주세요)")
+            }
+        }
     }
 
     // MARK: - 갤러리 관리 내역
@@ -2072,14 +2398,35 @@ final class WebViewModel: NSObject, ObservableObject {
 
     // MARK: - 로그인 자동 입력 / 저장
 
+    /// 계정 전환 로그인 중: 디시 로그인 화면 대신 '로그인 중…'을 보여 줌. 오래 걸리면(오류·캡차 등) 풀어서 원래 화면이 보이게
+    private var loginCoverTask: Task<Void, Never>?
+
+    private func showLoginCover() {
+        loginCover = "로그인 중…"
+        loginCoverTask?.cancel()
+        loginCoverTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard !Task.isCancelled else { return }
+            self?.loginCover = nil
+        }
+    }
+
+    private func hideLoginCover() {
+        loginCoverTask?.cancel()
+        loginCoverTask = nil
+        loginCover = nil
+    }
+
     private func autofillLogin() {
         if manualLogin { return }
         let switching = pendingLogin != nil
         guard let cred = pendingLogin ?? CredentialStore.load() else { return }
         let auto = switching || Profile.defaults.bool(forKey: "autoLogin")
         Task {
-            await call("return window.__dcapp ? window.__dcapp.fillLogin(id, pw, auto, 0, force) : 'none';",
-                       ["id": cred.id, "pw": cred.password, "auto": auto, "force": switching])
+            let result = await call("return window.__dcapp ? window.__dcapp.fillLogin(id, pw, auto, 0, force) : 'none';",
+                                    ["id": cred.id, "pw": cred.password, "auto": auto, "force": switching]) as? String
+            // 자동 입력을 할 수 없었으면(앱 스크립트가 없음) 가림막을 풀어 디시 화면이 보이게. 칸을 기다리는 중('waiting')이면 그대로 둠
+            if switching, result == "none" || result == "skipped" { hideLoginCover() }
         }
     }
 
@@ -2149,6 +2496,14 @@ extension WebViewModel: WKScriptMessageHandler {
                                            isHTML: body["html"] as? Bool ?? false,
                                            writeURL: webView.url)
             }
+        case "mediaPlay":   // 웹 화면에서 영상·소리가 시작됨 → 배경 음악 유지 중이면 오디오 세션을 다시 맞춤
+            BackgroundAudio.reassertAfterMediaStart()
+        case "voteImage":   // 투표 보기 썸네일 → 디시 전체 화면 대신 앱의 미리보기 창
+            if let s = body["url"] as? String, let u = URL(string: s), u.scheme == "https", Self.isDCURL(u) {   // dcinside.co.kr 사진 서버도 허용
+                // Referer: 투표 iframe의 주소 (없으면 보던 글 주소)
+                let ref = (body["ref"] as? String).flatMap { URL(string: $0) }
+                votePreview = VotePreviewItem(url: u, pageURL: webView.url, referer: ref)
+            }
         case "images":
             let urls = (body["urls"] as? [String] ?? []).compactMap(URL.init(string:))
             if !urls.isEmpty {
@@ -2170,7 +2525,12 @@ extension WebViewModel: WKScriptMessageHandler {
         case "listfilter":   // 말머리 줄 맨 왼쪽 깔때기 버튼 → 게시물 필터 시트
             listFilterTick += 1
         case "headnames":   // 글 목록 말머리 이름들 → 필터 시트의 말머리 고르기
-            headNames = (body["names"] as? [String]) ?? []
+            let names = (body["names"] as? [String]) ?? []
+            headNames = names
+            headNamesGallery = Self.headGalleryKey(webView.url)
+            if let k = headNamesGallery {
+                if names.isEmpty { headNamesCache[k] = nil } else { headNamesCache[k] = names }
+            }
         case "gotolist":   // 분할 화면 오른쪽 글 화면의 '글목록' 버튼
             if let u = webView.url, let g = Gallery.parse(u) {
                 showListInMain?(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
@@ -2312,6 +2672,11 @@ extension WebViewModel: WKScriptMessageHandler {
             if let k = commentCompose?.draftKey { CommentDraftStore.remove(k) }
             commentCarry = nil
             if commentCompose != nil { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
+        case "voteCopy":   // 투표 '공유하기' → 팝업 없이 <iframe src="…"></iframe> 소스만 클립보드에
+            if let text = body["text"] as? String, !text.isEmpty {
+                UIPasteboard.general.string = text
+                showToast("투표 소스를 복사했어요")
+            }
         case "cmtlink":   // 댓글 안의 링크를 누름 → 대댓글 달기 / 링크로 이동 선택
             if var s = body["href"] as? String {
                 // 디시가 <br>·다음 링크까지 한 주소로 묶어 둔 경우 첫 주소만 (스크립트가 옛 버전이어도 안전하게)
@@ -2344,6 +2709,20 @@ extension WebViewModel: WKScriptMessageHandler {
             pickRequest = PickRequest(selector: body["selector"] as? String ?? "",
                                       count: (body["count"] as? NSNumber)?.intValue ?? 0,
                                       snippet: body["snippet"] as? String ?? "")
+        case "deferimg":   // 본문 이미지 숨기기: '이미지 불러오기' 버튼 → 디시 사진 서버에서 받아 페이지에 넣어 줌
+            let id = body["id"] as? String ?? ""
+            let src = body["src"] as? String ?? ""
+            let page = body["page"] as? String ?? ""
+            let agent = body["ua"] as? String ?? ""
+            Task { [weak self] in
+                let url = await DeferredImages.fetchDataURL(src, page: page, userAgent: agent)
+                guard let self else { return }
+                // 값은 문자열 조립 대신 인자로 넘김 (사진 한 장이 수 MB라서 스크립트에 끼워 넣지 않음)
+                let urlArg: Any = url.map { $0 as Any } ?? NSNull()
+                let args: [String: Any] = ["id": id, "url": urlArg]
+                _ = try? await self.webView.callAsyncJavaScript("return window.__dcapp ? window.__dcapp.deferredImage(id, url) : false;",
+                                                                arguments: args, in: nil, contentWorld: .page)
+            }
         case "credentials":
             if let id = body["id"] as? String, let pw = body["pw"] as? String, !id.isEmpty, !pw.isEmpty {
                 pendingCredential = LoginCredential(id: id, password: pw)
@@ -2367,6 +2746,9 @@ extension WebViewModel: WKNavigationDelegate {
                 try? await Task.sleep(for: .milliseconds(400))
                 _ = try? await webView.evaluateJavaScript(js)
             }
+        }
+        if navigationAction.targetFrame?.isMainFrame ?? true {
+            pendingNavURL = navigationAction.request.url
         }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {
             return .allow
@@ -2405,6 +2787,12 @@ extension WebViewModel: WKNavigationDelegate {
     }
 
     /// 디시 주소인지 (m.dcinside.com, msign.dcinside.com, dcimg*.dcinside.co.kr 등)
+    /// 디시 모바일 홈 주소인지 (https://m.dcinside.com/ 또는 /index.php)
+    nonisolated static func isDCHomeURL(_ url: URL?) -> Bool {
+        guard let u = url, u.scheme == "https", u.host?.lowercased() == "m.dcinside.com" else { return false }
+        return u.path.isEmpty || u.path == "/" || u.path == "/index.php"
+    }
+
     nonisolated static func isDCURL(_ url: URL) -> Bool {
         guard let h = url.host?.lowercased() else { return true }
         return ["dcinside.com", "dcinside.co.kr", "dcinside.kr"].contains { h == $0 || h.hasSuffix("." + $0) }
@@ -2432,7 +2820,19 @@ extension WebViewModel: WKNavigationDelegate {
             AdBlock.apply(to: webView.configuration.userContentController)
         }
         commentTextPrompt = nil      // 다른 페이지로 가면 '텍스트 선택' 버튼은 사라짐
-        headNames = []               // 새 페이지의 말머리는 그 페이지가 다시 알려 줌 (이전 갤러리 말머리가 남지 않게)
+        // 말머리: 같은 갤러리로 이동하거나 새로고침하는 동안에는 기존 말머리를 그대로 둠 → 깔때기 버튼이 깜빡이지 않게
+        // 다른 갤러리나 갤러리 밖 페이지로 갈 때만 비움 (새 페이지의 말머리는 그 페이지가 다시 알려 줌)
+        let headTarget = Self.headGalleryKey(pendingNavURL ?? webView.url)
+        if let k = headTarget, k == headNamesGallery {
+            // 같은 갤러리: 그대로 둠
+        } else if let k = headTarget, let cached = headNamesCache[k] {
+            // 기억해 둔 갤러리: 그 말머리를 바로 씀 (페이지가 다시 알려 주면 갱신)
+            headNames = cached
+            headNamesGallery = k
+        } else {
+            headNames = []
+            headNamesGallery = nil
+        }
         tsCheckOn = false            // 새 페이지는 체크 상태도 새로 시작
         isRetryingComment = false    // 새 페이지로 가면 댓글 재시도 말풍선도 내림 (남아 있으면 영구히 떠 있게 됨)
         barHiddenByDirection = false     // 새 페이지에서는 컨트롤바를 다시 보임
@@ -2447,6 +2847,7 @@ extension WebViewModel: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         endRefreshing()
+        syncTopInset()                     // 새 페이지에도 상단바 높이를 넘겨 고정 창이 바 밑으로 잘리지 않게
         if barInsetL > 0 || barInsetR > 0 { applyBarInset() }     // 새 페이지에도 컨트롤바 비움 폭 다시 넣음
         retryIfTooManyRequests()
         webView.removeInputAccessoryBar()   // 웹 프로세스가 다시 시작된 경우 대비
@@ -2484,7 +2885,7 @@ extension WebViewModel: WKNavigationDelegate {
                 load(w)
             }
         }
-        if host != DC.loginHost { manualLogin = false }      // 로그인 화면을 벗어나면 원래대로
+        if host != DC.loginHost { manualLogin = false; hideLoginCover() }      // 로그인 화면을 벗어나면 원래대로 (가림막도 풀기)
         if host == DC.loginHost {
             autofillLogin()
         }
@@ -2562,9 +2963,18 @@ extension WebViewModel: WKNavigationDelegate {
                 }
             } else if s.submitting {
                 DraftStore.shared.removeAuto(galleryID: s.galleryID)   // 등록됨 → 자동 저장본 지움
-                if s.modifyPostURL == nil, openWrittenPost != nil { openWrittenPostFromList(title: s.title) }   // 분할 화면: 방금 쓴 글을 오른쪽에
+                if s.quick, let list = s.quickListURL {
+                    // 퀵 글쓰기: 등록 뒤 글 화면 대신 목록으로 돌아가 새로고침 (지금 넘어가는 글 화면 요청을 목록이 덮음)
+                    showToast("퀵 글쓰기 등록했어요")
+                    Task { @MainActor in self.load(list) }
+                } else if s.modifyPostURL == nil, openWrittenPost != nil { openWrittenPostFromList(title: s.title) }   // 분할 화면: 방금 쓴 글을 오른쪽에
             }
-            nativeWrite = nil
+            if s.closing {
+                // ← 로 나가는 중: 목록이 실제로 그려진 뒤에 가림막을 내림 (그리기 전 /write 화면이 한 프레임 비치는 것 방지)
+                scheduleCloseNativeWrite(s)
+            } else {
+                nativeWrite = nil
+            }
         }
         if let gid = writeGID, !nativeHandled {
             let eff = AutoImageStore.shared.effective(for: gid, account: AutoImageScope.currentAccount())   // 계정·갤러리별 설정 반영
@@ -2694,6 +3104,8 @@ extension WebViewModel: WKUIDelegate {
             showToast("비밀번호 변경 안내를 건너뛰었어요")
             return
         }
+        // 로그인 화면에서 안내창이 뜨면(아이디·비밀번호 틀림 등) 가림막을 풀어 디시 화면과 안내를 보이게
+        if webView.url?.host == DC.loginHost { hideLoginCover() }
         nativeWrite?.submitting = false      // 디시가 안내창을 띄우면(입력 누락 등) 앱 글쓰기 '등록 중' 풀기
         commentCompose?.sending = false
         // 글·댓글을 쓰는 중에 차단 안내가 오면 → 디시 문구를 그대로 보여 주고, 쓰던 화면은 닫고 이전 화면으로 (막지는 않음)
@@ -2712,6 +3124,19 @@ extension WebViewModel: WKUIDelegate {
             commentCompose = nil
             if nativeWrite != nil { forceCloseNativeWrite(quiet: true) }
         }
+        // 관리 내역 비공개 등으로 거절 알림 후 갤러리 목록으로 돌아올 때 갤러리 정보 팝업이 남아 있으면 닫기
+        let closePopJS = """
+        (function(){
+          var close = function(){
+            try { if (typeof window.mgall_popClose === 'function') window.mgall_popClose(); } catch (e) {}
+            document.querySelectorAll('#minor_info_pop, #major_info_pop, .layer-center-popup[id*="info_pop"]').forEach(function(el){
+              el.style.setProperty('display', 'none', 'important');
+            });
+          };
+          close(); setTimeout(close, 150); setTimeout(close, 450);
+        })(); true
+        """
+        webView.evaluateJavaScript(closePopJS, completionHandler: nil)
     }
 
     func webView(_ webView: WKWebView,

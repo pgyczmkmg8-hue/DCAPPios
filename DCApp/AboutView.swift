@@ -3,6 +3,7 @@ import SwiftUI
 /// 설정 → 버전 정보/업데이트 확인
 /// 사진은 아래 aboutImages 목록에서 확률(가중치)에 따라 하나를 골라 보여 줘요. (화면에 들어올 때마다 새로 뽑음)
 struct AboutView: View {
+    @ObservedObject var fonts = FontStore.shared
     /// ★ 버전 정보 사진 목록: (Assets의 Image Set 이름, 뽑힐 비율)
     /// 비율은 합이 100이 아니어도 돼요 — 예) 70, 20, 10 이면 70% / 20% / 10%
     /// 사진을 추가하려면: Assets에 Image Set을 만들고 이름을 정한 뒤 여기에 한 줄 추가
@@ -51,7 +52,7 @@ struct AboutView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "photo").font(.largeTitle)
                     Text("Assets에 AboutImage를\n추가하면 여기에 보여요")
-                        .font(.caption)
+                        .font(fonts.styleFont(.caption))
                         .multilineTextAlignment(.center)
                 }
                 .foregroundStyle(.secondary)
@@ -98,24 +99,6 @@ struct AboutView: View {
             }
         }
         .padding(.horizontal, 16)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .frame(maxWidth: 420)
-    }
-
-    /// 외부 스크립트 고지: 나무위키 화면에서 실행하는 NamuLink (MPL-2.0). 앱에는 넣지 않고 실행할 때 CDN에서 받음
-    private var noticeBox: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("외부 스크립트 고지")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text("나무위키 화면에서 NamuLink 스크립트(MPL-2.0, 저작자 PiQuark6046 외 기여자)를 실행해요. 앱에는 포함하지 않고 CDN에서 받아 써요. 디시 갤러리 필터(애드가드 형식)도 CDN에서 받아 적용해요.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Link("NamuLink 저장소 열기", destination: URL(string: "https://github.com/FilteringDev/NamuLink")!)
-                .font(.footnote)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .frame(maxWidth: 420)
     }
@@ -212,15 +195,14 @@ struct AboutView: View {
 
                 VStack(spacing: 6) {
                     Text(appName)
-                        .font(.title2.bold())
+                        .font(fonts.styleFont(.title2, weight: .bold))
                     Text("버전 \(Self.version) (빌드 \(Self.build))" + ((Int(Self.build) ?? 0) >= 1000 ? " · 테스트 버전" : ""))
-                        .font(.subheadline)
+                        .font(fonts.styleFont(.subheadline))
                         .foregroundStyle(.secondary)
                 }
 
                 updateBox
                 repoBox
-                noticeBox
                 if hiddenUnlocked { hiddenBox }
 
             }
@@ -245,6 +227,7 @@ struct AboutView: View {
 
 /// 버전 정보 → 업데이트: 자동 확인, 지금 확인, 사이드로드 앱으로 바로 설치
 struct UpdateView: View {
+    @ObservedObject var fonts = FontStore.shared
     @AppStorage(UpdateChecker.autoCheckKey, store: Profile.defaults) private var autoCheck = true
     @AppStorage(UpdateChecker.Frequency.storageKey, store: Profile.defaults) private var frequency: UpdateChecker.Frequency = .everyOpen
     @AppStorage(Installer.storageKey, store: Profile.defaults) private var installer: Installer = .feather
@@ -295,7 +278,7 @@ struct UpdateView: View {
             if let checkResult {
                 Section {
                     Text(checkResult)
-                        .font(.callout)
+                        .font(fonts.styleFont(.callout))
                         .foregroundStyle(.secondary)
                 }
             }

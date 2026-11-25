@@ -4,8 +4,10 @@ import WebKit
 // MARK: - 설정 탭
 
 struct SettingsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @AppStorage(DCTheme.storageKey, store: Profile.defaults) private var themeRaw = AppTheme.dc.rawValue
+    @AppStorage(DCTheme.customHexKey, store: Profile.defaults) private var customHex = DCTheme.defaultCustomHex
     @AppStorage(DarkMode.followKey, store: Profile.defaults) private var darkFollowSystem = false
     @AppStorage(AlarmStore.bannerKey, store: Profile.defaults) private var alarmBanner = true
     @AppStorage(AppLock.lockKey, store: Profile.defaults) private var appLock = false
@@ -41,21 +43,15 @@ struct SettingsView: View {
                             Label("계정", systemImage: "person.crop.circle")
                         }
                     }
-                    Picker(selection: $themeRaw) {
-                        ForEach(AppTheme.allCases) { t in
-                            Label {
-                                Text(t.name)
-                            } icon: {
-                                Image(systemName: "circle.fill").foregroundStyle(Color(uiColor: t.bar))
-                            }
-                            .tag(t.rawValue)
-                        }
+                    NavigationLink {
+                        ThemeSettingsView()
                     } label: {
-                        Label("테마", systemImage: "paintpalette")
-                    }
-                    .pickerStyle(.navigationLink)
-                    .onChangeCompat(of: themeRaw) { _, _ in
-                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)   // 웹페이지 색도 다시 칠하기
+                        let currentTheme = AppTheme(rawValue: themeRaw) ?? .dc
+                        LabeledContent {
+                            Text(currentTheme == .custom ? "#\(DCTheme.normalizedHex(customHex) ?? DCTheme.defaultCustomHex)" : currentTheme.name)
+                        } label: {
+                            Label("테마", systemImage: "paintpalette")
+                        }
                     }
                     Toggle(isOn: $darkFollowSystem) {
                         Label("다크모드를 시스템에 맞추기", systemImage: "circle.lefthalf.filled")
@@ -116,7 +112,7 @@ struct SettingsView: View {
                         .disabled(notifyChecking)
                     }
                     if let notifyResult {
-                        Text(notifyResult).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text(notifyResult).font(fonts.styleFont(.caption)).foregroundStyle(.secondary).textSelection(.enabled)
                     }
                 } header: {
                     Text("알림")
@@ -155,7 +151,7 @@ struct SettingsView: View {
                         Label("가림막 꾸미기", systemImage: "paintbrush")
                     }
                     if let lockMessage {
-                        Text(lockMessage).font(.caption).foregroundStyle(.secondary)
+                        Text(lockMessage).font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("보안")
@@ -252,6 +248,7 @@ enum SettingsPage: Hashable { case account, block }
 // MARK: - 계정
 
 struct AccountSettingsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @EnvironmentObject private var router: AppRouter
     @AppStorage("autoLogin", store: Profile.defaults) private var autoLogin = false
     @State private var accounts: [LoginCredential] = CredentialStore.all()
@@ -276,7 +273,7 @@ struct AccountSettingsView: View {
                             Text(acc.id).foregroundStyle(.primary)
                             Spacer()
                             if acc.id == currentID {
-                                Text("로그인 중").font(.caption).foregroundStyle(DCTheme.accent)
+                                Text("로그인 중").font(fonts.styleFont(.caption)).foregroundStyle(DCTheme.accent)
                             }
                         }
                     }
@@ -394,7 +391,7 @@ struct BlockSettingsView: View {
                     LabeledContent("차단한 유저", value: "\(filters.settings.users.count)")
                 }
                 NavigationLink { BlockedDcconsView() } label: {
-                    LabeledContent("차단한 디시콘", value: "\(filters.settings.dccons.count)")
+                    LabeledContent("차단한 디시콘", value: "패키지 \(filters.settings.dcconPackages.count) · 개별 \(filters.settings.dccons.count)")
                 }
                 NavigationLink { BlockedImagesView() } label: {
                     LabeledContent("차단한 이미지", value: "\(filters.settings.images.count)")
@@ -481,6 +478,7 @@ struct BlockSettingsView: View {
 // MARK: - 세부 설정 (앱 + 화면 정리)
 
 struct DetailSettingsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @AppStorage("fullSwipeBack", store: Profile.defaults) private var fullSwipeBack = true
     @AppStorage("swipeSensitivity", store: Profile.defaults) private var swipeSensitivity = 3.0
@@ -488,6 +486,9 @@ struct DetailSettingsView: View {
     @AppStorage("hideSiteHeader", store: Profile.defaults) private var hideSiteHeader = true
     @AppStorage("homeRankOnly", store: Profile.defaults) private var homeRankOnly = true
     @AppStorage("hideDory", store: Profile.defaults) private var hideDory = true
+    @AppStorage("hideImgCommentButton", store: Profile.defaults) private var hideImgCommentButton = false
+    @AppStorage("deferPostImages", store: Profile.defaults) private var deferPostImages = false
+    @AppStorage(BackgroundAudio.key, store: Profile.defaults) private var mixAudio = false
     @AppStorage(ControlBarItem.autoHideKey, store: Profile.defaults) private var autoHideBar = true
     @AppStorage("barGlassTint", store: Profile.defaults) private var barGlassTint = 0.0
 
@@ -517,11 +518,11 @@ struct DetailSettingsView: View {
                             Spacer()
                             Text(sensitivityLabel).foregroundStyle(.secondary)
                         }
-                        .font(.subheadline)
+                        .font(fonts.styleFont(.subheadline))
                         HStack {
-                            Text("둔감").font(.caption).foregroundStyle(.secondary)
+                            Text("둔감").font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                             Slider(value: $swipeSensitivity, in: 1...5, step: 1)
-                            Text("민감").font(.caption).foregroundStyle(.secondary)
+                            Text("민감").font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -537,6 +538,28 @@ struct DetailSettingsView: View {
                     .onChangeCompat(of: hideDory) { _, _ in
                         NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
                     }
+                Toggle("본문 사진의 댓글 버튼 숨기기", isOn: $hideImgCommentButton)
+                    .onChangeCompat(of: hideImgCommentButton) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+            }
+
+            // 본문 이미지 숨기기 (셀룰러 데이터 절약): 사진을 자동으로 받지 않고, 자리의 버튼을 누를 때 받음 (차단과 다름)
+            Section {
+                Toggle("본문 이미지 숨기기 (눌러서 불러오기)", isOn: $deferPostImages)
+                    .onChangeCompat(of: deferPostImages) { _, _ in
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    }
+            } footer: {
+                Text("셀룰러 데이터를 아끼려고 글 속 사진을 자동으로 받지 않아요. 사진 자리의 '이미지 불러오기'를 누르면 그때 받아요. 차단과는 달라요. 글을 새로 열면 적용돼요.")
+            }
+
+            // 배경 음악 유지하며 영상 재생: 영상을 틀어도 듣고 있던 음악이 멈추지 않음
+            Section {
+                Toggle("배경 음악 유지하며 영상 재생", isOn: $mixAudio)
+                    .onChangeCompat(of: mixAudio) { _, on in BackgroundAudio.apply(on) }
+            } footer: {
+                Text("켜면 영상을 틀어도 듣고 있던 음악이 끊기지 않고 영상 소리와 함께 나요. 다만 무음 스위치를 켜 둬도 영상 소리가 나요. 끄면 iOS 기본 방식으로 돌아가요.")
             }
 
             // 컨트롤바 유리 진하기 (0 = 가장 투명)
@@ -561,6 +584,13 @@ struct DetailSettingsView: View {
                 if autoHideBar { BarAutoHideStylePicker() }
             } footer: {
                 Text(BarAutoHideStylePicker.footer)
+            }
+
+            // 글꼴 (시스템 기본 / 프리셋 받기 / 파일에서 가져오기)
+            Section {
+                FontSettingsRow()
+            } footer: {
+                Text("앱 전체와 디시 웹페이지의 글자 모양을 바꿔요. 기본은 시스템 글꼴이에요.")
             }
 
             // 글자 크기 (0 = 기본값, 되돌리기 누르면 전부 기본값)
@@ -641,6 +671,7 @@ struct AddAccountView: View {
 // MARK: - 차단한 유저
 
 struct BlockedUsersView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @State private var kind: BlockedUser.Kind = .id
     @State private var value = ""
@@ -685,7 +716,7 @@ struct BlockedUsersView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(u.memo.isEmpty ? u.value : u.memo)
                             Text("\(u.kind.label) · \(u.value) · \(GalleryScopeLabel.text(u.gallery))")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -708,28 +739,51 @@ struct BlockedUsersView: View {
 // MARK: - 차단한 디시콘
 
 struct BlockedDcconsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
 
     var body: some View {
         List {
-            if filters.settings.dccons.isEmpty {
-                Text("댓글의 디시콘을 길게 눌러서 차단할 수 있어요.")
+            if filters.settings.dccons.isEmpty && filters.settings.dcconPackages.isEmpty {
+                Text("댓글의 디시콘을 길게 눌러서 차단할 수 있어요. 패키지 전체를 한 번에 차단할 수도 있어요.")
                     .foregroundStyle(.secondary)
             }
-            ForEach(filters.settings.dccons) { d in
-                HStack(spacing: 12) {
-                    AsyncImage(url: URL(string: d.imageURL)) { image in
-                        image.resizable().scaledToFit()
-                    } placeholder: {
-                        Image(systemName: "face.smiling").foregroundStyle(.secondary)
+            // 패키지 묶음 차단 (길게 누르기 → '이 디시콘 패키지 전체 차단')
+            if !filters.settings.dcconPackages.isEmpty {
+                Section("차단한 패키지") {
+                    ForEach(filters.settings.dcconPackages) { p in
+                        HStack(spacing: 12) {
+                            Image(systemName: "square.stack.3d.up")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 36, height: 36)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.name.isEmpty ? "패키지 \(p.pkg)" : p.name)
+                                    .font(fonts.styleFont(.body))
+                                Text("디시콘 \(p.keys.count)개")
+                                    .font(fonts.styleFont(.caption))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
-                    .frame(width: 48, height: 48)
-                    Text(String(d.key.prefix(16)) + "…")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                    .onDelete { filters.settings.dcconPackages.remove(atOffsets: $0) }
                 }
             }
-            .onDelete { filters.settings.dccons.remove(atOffsets: $0) }
+            Section("개별 디시콘") {
+                ForEach(filters.settings.dccons) { d in
+                    HStack(spacing: 12) {
+                        AsyncImage(url: URL(string: d.imageURL)) { image in
+                            image.resizable().scaledToFit()
+                        } placeholder: {
+                            Image(systemName: "face.smiling").foregroundStyle(.secondary)
+                        }
+                        .frame(width: 48, height: 48)
+                        Text(String(d.key.prefix(16)) + "…")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onDelete { filters.settings.dccons.remove(atOffsets: $0) }
+            }
         }
         .navigationTitle("차단한 디시콘")
         .toolbar { EditButton() }
@@ -738,6 +792,7 @@ struct BlockedDcconsView: View {
 
 /// 글 속 사진 차단 목록: 가리는 방식, 목록(썸네일), 빼기
 struct BlockedImagesView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
 
     var body: some View {
@@ -759,7 +814,7 @@ struct BlockedImagesView: View {
                     HStack(spacing: 12) {
                         BlockedImageThumb(urlString: img.src)
                         Text(img.hash == nil ? "같은 사진 찾기 준비 중" : "다시 올린 사진도 찾아요")
-                            .font(.subheadline)
+                            .font(fonts.styleFont(.subheadline))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -800,6 +855,7 @@ private struct BlockedImageThumb: View {
 // MARK: - 차단 키워드
 
 struct KeywordsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @State private var input = ""
     @State private var galleryID = ""
@@ -835,7 +891,7 @@ struct KeywordsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(k.displayText)
                             Text((BlockMatch.terms(k.word).count >= 2 ? "모두 포함 · " : "") + GalleryScopeLabel.text(k.gallery))
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -856,6 +912,7 @@ struct KeywordsView: View {
 
 /// 차단 목록의 항목을 눌렀을 때: 모든 갤러리 / 고른 갤러리로 바꾸기, 차단 해제
 struct BlockScopeDetail: View {
+    @ObservedObject var fonts = FontStore.shared
     let title: String
     let detail: String
     @Binding var gallery: String
@@ -866,7 +923,7 @@ struct BlockScopeDetail: View {
         List {
             Section {
                 Text(title)
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                Text(detail).font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
             }
             Section {
                 GalleryScopeRow(galleryID: $gallery)
@@ -922,6 +979,7 @@ struct GalleryScopeRow: View {
 }
 
 private struct GalleryScopeSheet: View {
+    @ObservedObject var fonts = FontStore.shared
     @Binding var galleryID: String
     let galleries: [Gallery]
     @Environment(\.dismiss) private var dismiss
@@ -975,7 +1033,7 @@ private struct GalleryScopeSheet: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(g.name).foregroundStyle(.primary)
-                                    Text("\(g.kind.label) · \(g.galleryID)").font(.caption).foregroundStyle(.secondary)
+                                    Text("\(g.kind.label) · \(g.galleryID)").font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 if selected.contains(g.galleryID) { Image(systemName: "checkmark") }
@@ -1005,6 +1063,7 @@ private struct GalleryScopeSheet: View {
 // MARK: - 고급 차단 (특정 유저가 특정 단어를 말할 때만)
 
 struct AdvancedBlockView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @State private var kind: BlockedUser.Kind = .ip
     @State private var value = ""
@@ -1060,7 +1119,7 @@ struct AdvancedBlockView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(r.kind.label) \(r.value)")
                             Text(r.wordsLabel + " · " + GalleryScopeLabel.text(r.gallery))
-                                .font(.footnote).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1075,6 +1134,7 @@ struct AdvancedBlockView: View {
 // MARK: - 직접 숨긴 요소
 
 struct HiddenElementsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var filters = FilterStore.shared
     @State private var selector = ""
 
@@ -1104,6 +1164,13 @@ struct HiddenElementsView: View {
                         Text(h.memo.isEmpty ? "(내용 없음)" : h.memo).lineLimit(1)
                         Text(h.selector).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(2)
                     }
+                    .contextMenu {
+                        Button {
+                            UIPasteboard.general.string = h.selector
+                        } label: {
+                            Label("복사", systemImage: "doc.on.doc")
+                        }
+                    }
                 }
                 .onDelete { filters.settings.hiddenElements.remove(atOffsets: $0) }
             }
@@ -1116,6 +1183,7 @@ struct HiddenElementsView: View {
 
 /// 유동(비로그인)으로 쓸 때 자동으로 채울 닉네임·비밀번호 (모든 갤러리 공통 + 갤러리별)
 struct AnonInfoView: View {
+    @ObservedObject var fonts = FontStore.shared
     @State private var nick = AnonStore.nick
     @State private var password = AnonStore.password
     @State private var galleries = AnonStore.galleryIDs
@@ -1146,7 +1214,7 @@ struct AnonInfoView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(name(g))
                             Text(AnonStore.galleryNick(g).isEmpty ? "닉네임: 공통 설정 따름" : "닉네임: \(AnonStore.galleryNick(g))")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1219,6 +1287,7 @@ struct AnonGalleryEditView: View {
 
 /// 설정 → 컨트롤바 버튼 순서 (끌어서 바꾸기)
 struct ControlBarOrderView: View {
+    @ObservedObject var fonts = FontStore.shared
     @AppStorage(ControlBarItem.storageKey, store: Profile.defaults) private var raw = ""
     @AppStorage(ControlBarItem.menuInTopBarKey, store: Profile.defaults) private var menuInTopBar = true
     @AppStorage("compactTopBar", store: Profile.defaults) private var compactTopBar = true
@@ -1243,7 +1312,7 @@ struct ControlBarOrderView: View {
                 }
                 if !menuInTopBar {
                     LabeledContent {
-                        Text("맨 끝 고정").font(.caption)
+                        Text("맨 끝 고정").font(fonts.styleFont(.caption))
                     } label: {
                         Label(ControlBarItem.menu.label, systemImage: ControlBarItem.menu.icon)
                     }
@@ -1428,5 +1497,107 @@ struct BarAutoHideStylePicker: View {
             Text("스크롤하는 동안만").tag(ControlBarItem.autoHideStyleScrolling)
             Text("내리면 숨기고 올리면 표시").tag(ControlBarItem.autoHideStyleDirection)
         }
+    }
+}
+
+/// 테마 색상 선택 (기본 프리셋 + 6자리 16진법 코드 직접 지정)
+struct ThemeSettingsView: View {
+    @AppStorage(DCTheme.storageKey, store: Profile.defaults) private var themeRaw = AppTheme.dc.rawValue
+    @AppStorage(DCTheme.customHexKey, store: Profile.defaults) private var customHex = DCTheme.defaultCustomHex
+    @ObservedObject var fonts = FontStore.shared
+    @State private var hexInput = ""
+    @State private var invalidHex = false
+
+    private var previewColor: Color {
+        if let norm = DCTheme.normalizedHex(hexInput), let ui = DCTheme.color(fromHex: norm) {
+            return Color(uiColor: ui)
+        }
+        return Color(uiColor: DCTheme.customColor)
+    }
+
+    var body: some View {
+        Form {
+            Section("기본 프리셋") {
+                ForEach(AppTheme.allCases.filter { $0 != .custom }) { t in
+                    Button {
+                        themeRaw = t.rawValue
+                        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                    } label: {
+                        HStack {
+                            Image(systemName: "circle.fill")
+                                .foregroundStyle(Color(uiColor: t.bar))
+                            Text(t.name)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if themeRaw == t.rawValue {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(DCTheme.accent)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button {
+                    themeRaw = AppTheme.custom.rawValue
+                    NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+                } label: {
+                    HStack {
+                        Image(systemName: "circle.fill")
+                            .foregroundStyle(Color(uiColor: DCTheme.customColor))
+                        Text(AppTheme.custom.name)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if themeRaw == AppTheme.custom.rawValue {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(DCTheme.accent)
+                        }
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Circle()
+                        .fill(previewColor)
+                        .frame(width: 24, height: 24)
+                        .overlay(Circle().stroke(Color.primary.opacity(0.15), lineWidth: 1))
+                    Text("#")
+                        .foregroundStyle(.secondary)
+                    TextField("3B4890", text: $hexInput)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .onSubmit { applyHex() }
+                    Button("적용") { applyHex() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(previewColor)
+                }
+            } header: {
+                Text("직접 지정 (6자리 16진법)")
+            } footer: {
+                if invalidHex {
+                    Text("6자리 16진법 코드(0-9, A-F)만 입력할 수 있어요. 예: 3B4890")
+                        .foregroundStyle(.red)
+                } else {
+                    Text("예: 3B4890, FF5A5F, 03C75A (# 없이 6자리 입력)")
+                }
+            }
+        }
+        .navigationTitle("테마")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            hexInput = DCTheme.normalizedHex(customHex) ?? DCTheme.defaultCustomHex
+        }
+    }
+
+    private func applyHex() {
+        guard let norm = DCTheme.normalizedHex(hexInput) else {
+            invalidHex = true
+            return
+        }
+        invalidHex = false
+        hexInput = norm
+        customHex = norm
+        themeRaw = AppTheme.custom.rawValue
+        NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
     }
 }

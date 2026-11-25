@@ -31,6 +31,7 @@ private enum AlbumAction { case one, all }
 
 /// 글 속 사진 전체 화면 보기: 핀치·더블탭 확대 / 좌우로 넘기기 / 위아래로 쓸어서 닫기 / 저장
 struct ImageViewer: View {
+    @ObservedObject var fonts = FontStore.shared
     let item: ImageViewerItem
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var filters = FilterStore.shared
@@ -133,7 +134,7 @@ struct ImageViewer: View {
         } else if failed.contains(i) {
             VStack(spacing: 8) {
                 Image(systemName: "photo.badge.exclamationmark").font(.largeTitle)
-                Text("사진을 불러오지 못했어요").font(.subheadline)
+                Text("사진을 불러오지 못했어요").font(fonts.styleFont(.subheadline))
             }
             .foregroundStyle(.white.opacity(0.7))
         } else {
@@ -155,7 +156,7 @@ struct ImageViewer: View {
             }
             if let message {
                 Text(message)
-                    .font(.subheadline.weight(.medium))
+                    .font(fonts.styleFont(.subheadline, weight: .medium))
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)

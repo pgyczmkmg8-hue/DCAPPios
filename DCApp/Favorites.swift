@@ -15,6 +15,15 @@ enum DCGalleryID {
         let section = id.hasPrefix("mi$") ? "mini" : (id.hasPrefix("pr$") ? "person" : "board")
         return URL(string: "https://m.dcinside.com/\(section)/\(bare(id))/\(no)" + (comments ? "#comment_box" : ""))!
     }
+    /// 디시 알림의 주소. 갤로그 알림(type "G", 방명록 등)은 id가 갤로그 주인의 아이디라서 글 주소로 만들면 엉뚱한 '갤러리'가 됨
+    /// → 디시가 알림 목록에서 쓰는 것과 같은 /gallog/아이디?menu=U 로 연다. 그 밖의 알림은 글 주소
+    nonisolated static func alarmURL(_ id: String, no: Int, comments: Bool, type: String) -> URL {
+        if type == "G" {
+            let user = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+            return URL(string: "https://m.dcinside.com/gallog/\(user)?menu=U") ?? URL(string: "https://m.dcinside.com/")!
+        }
+        return postURL(id, no: no, comments: comments)
+    }
 }
 
 enum GalleryKind: String, Codable, CaseIterable, Identifiable {
@@ -57,6 +66,8 @@ struct Gallery: Codable, Identifiable, Hashable {
         guard let host = url.host?.lowercased(), host.hasSuffix("dcinside.com") else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
 
+        // 갤로그(/gallog/아이디, 방명록·활동 페이지)는 갤러리가 아님 — 아이디를 갤러리 ID로 읽지 않게 먼저 거름
+        if parts.first == "gallog" { return nil }
         if host == "m.dcinside.com" {
             guard parts.count >= 2 else { return nil }
             // 미니 갤러리 글쓰기·수정 주소(/mini/write/갤ID 등)에서 'write'를 갤러리로 잘못 읽지 않게
@@ -209,6 +220,7 @@ final class VisitedStore: ObservableObject {
 
 /// 방문한 갤러리 목록 (개별 삭제 가능)
 struct VisitedGalleriesList: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = VisitedStore.shared
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
@@ -228,7 +240,7 @@ struct VisitedGalleriesList: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(fav?.name ?? g.name).foregroundStyle(.primary)
                             Text("\(g.kind.label) · \(g.galleryID) · \(v.lastVisited.shortKorean)")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                         Spacer()
                         if fav != nil {
@@ -278,6 +290,7 @@ struct VisitedGalleriesList: View {
 
 /// 하단 바 "갤러리": 방문한 갤러리 / 즐겨찾는 갤러리 (임시저장은 글쓰기 화면의 '불러오기'에서)
 struct FavoritesView: View {
+    @ObservedObject var fonts = FontStore.shared
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
     @ObservedObject private var alarms = AlarmStore.shared
@@ -292,28 +305,28 @@ struct FavoritesView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if !galleryQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    GalleryFindResults(query: galleryQuery)    // 갤러리 검색 중
-                } else {
-                    switch section {
-                    case .visited: VisitedGalleriesList()
-                    case .galleries: galleriesList
-                    case .posts: SavedPostsList()     // 글 보관함
-                    case .read: ReadPostsList()
-                    case .written: WrittenList(kind: .post)
-                    case .commented: WrittenList(kind: .comment)
+            VStack(spacing: 0) {
+                sectionTabs
+                Group {
+                    if !galleryQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                        GalleryFindResults(query: galleryQuery)    // 갤러리 검색 중
+                    } else {
+                        switch section {
+                        case .visited: VisitedGalleriesList()
+                        case .galleries: galleriesList
+                        case .posts: SavedPostsList()     // 글 보관함
+                        case .read: ReadPostsList()
+                        case .written: WrittenList(kind: .post)
+                        case .commented: WrittenList(kind: .comment)
+                        }
                     }
                 }
             }
             .searchable(text: $galleryQuery, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "갤러리 이름이나 ID로 찾기")
-            .safeAreaInset(edge: .top, spacing: 0) {
-                sectionTabs
-                .background(.bar)
-            }
             .navigationTitle("메뉴")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 // 디시 첫 화면으로 (하단 바의 홈 버튼을 이쪽으로 옮김)
                 ToolbarItem(placement: .topBarLeading) {
@@ -343,6 +356,7 @@ struct FavoritesView: View {
                 Button("저장") { if let g = renaming { favorites.rename(g, to: renameText) } }
             }
         }
+        .presentationBackgroundCompat(Color(uiColor: .systemGroupedBackground))
     }
 
     /// 탭 6개 — 옆으로 밀어서 넘김
@@ -357,7 +371,7 @@ struct FavoritesView: View {
                             withAnimation { proxy.scrollTo(s, anchor: .center) }
                         } label: {
                             Text(s.rawValue)
-                                .font(.subheadline.weight(on ? .semibold : .regular))
+                                .font(fonts.styleFont(.subheadline, weight: on ? .semibold : .regular))
                                 .foregroundStyle(on ? .white : .primary)
                                 .padding(.horizontal, 14).padding(.vertical, 7)
                                 .background(on ? DCTheme.navy : Color(uiColor: .secondarySystemBackground), in: Capsule())
@@ -383,7 +397,7 @@ struct FavoritesView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(g.name).foregroundStyle(.primary)
                             Text("\(g.kind.label) · \(g.galleryID)")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -469,6 +483,7 @@ struct AddGalleryView: View {
             }
             .navigationTitle("갤러리 추가")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -491,6 +506,7 @@ struct AddGalleryView: View {
 // MARK: - 갤러리 찾기 (하단 바 "갤러리" 창의 검색)
 
 struct GalleryFindResults: View {
+    @ObservedObject var fonts = FontStore.shared
     let query: String
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
@@ -527,7 +543,7 @@ struct GalleryFindResults: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(g.name).foregroundStyle(.primary)
-                                    Text("\(g.kind.label) · \(g.galleryID)").font(.caption).foregroundStyle(.secondary)
+                                    Text("\(g.kind.label) · \(g.galleryID)").font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                                 }
                                 Spacer()
                                 if favorites.contains(galleryID: g.galleryID, kind: g.kind) {

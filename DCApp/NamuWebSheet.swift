@@ -38,6 +38,130 @@ nonisolated enum NamuLinkScript {
     }
 }
 
+/// 나무위키 화면 광고 숨기기 (네트워크 차단 뒤에 남는 광고 칸·광고 프레임을 가림).
+/// NamuLink는 메인 화면만 보므로 광고 프레임(iframe) 안의 파워링크는 못 가림 → 광고 서버 주소의 프레임과 '파워링크' 라벨 칸을 여기서 숨김.
+/// 제목(h1~h6) 안의 글자는 건드리지 않음.
+nonisolated enum NamuAdCosmetic {
+    static let source = #"""
+(function () {
+  if (!/(^|\.)namu\.wiki$/.test(location.hostname)) return;
+  var AD_HOST = /(^|\.)(doubleclick\.net|googlesyndication\.com|googleadservices\.com|googletagservices\.com|criteo\.(com|net)|taboola\.com|outbrain\.com|adnxs\.com|amazon-adsystem\.com|dable\.io|mobon\.net|vntsm\.com|affec\.tv|ccgateway\.net|3lift\.com|adsrvr\.org|fastclick\.net|liadm\.com|id5-sync\.com|adcr\.naver\.com|siape\.veta\.naver\.com|ad\.search\.naver\.com|searchad\.naver\.com)$/;
+  var LABEL = /^\s*(파워링크|PowerLink|Power Link)\s*$/i;
+  function hide(el) {
+    if (!el || el.hasAttribute('data-dcapp-ad')) return;
+    el.setAttribute('data-dcapp-ad', '1');
+    el.style.cssText += ';display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important';
+  }
+  // 광고 이름표(id·class의 단어가 ad·banner·gpt 등)인지
+  var AD_TOKEN = /(^|[-_\s])(ad|ads|adv|advert|advertisement|banner|gpt|sponsor|adslot)([-_\s\d]|$)/i;
+  // 주소가 없거나 빈 화면(about:blank)이고 높이가 100px 이상인 프레임 = 광고가 빠진 자리
+  function emptyFrame(f) {
+    var src = (f.getAttribute('src') || '').trim();
+    return (src === '' || src === 'about:blank') && f.getBoundingClientRect().height >= 100;
+  }
+  // 숨긴 광고 밖에 보이는 글자·사진·입력칸이 없는 상자인지 (광고만 들어 있던 빈 칸)
+  function isEmptyBox(p) {
+    if ((p.textContent || '').length > 400) return false;
+    var w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT), n;
+    while ((n = w.nextNode())) {
+      if ((n.nodeValue || '').trim() && !(n.parentElement && n.parentElement.closest('[data-dcapp-ad]'))) return false;
+    }
+    var media = p.querySelectorAll('img,video,canvas,svg,picture,iframe,embed,object,input,button,select,textarea');
+    for (var i = 0; i < media.length; i++) {
+      if (!media[i].closest('[data-dcapp-ad]')) return false;
+    }
+    return true;
+  }
+  // 광고 칸을 숨기고, 그 광고만 들어 있던 위쪽 빈 상자도 같이 접어 빈 여백이 남지 않게 함 (글자가 있는 상자는 그대로 둠)
+  function collapse(el) {
+    hide(el);
+    var box = el;
+    for (var k = 0; k < 7; k++) {
+      var p = box.parentElement;
+      if (!p || p === document.body || p === document.documentElement || p.hasAttribute('data-dcapp-ad')) break;
+      if (p.tagName === 'MAIN' || p.tagName === 'ARTICLE' || p.querySelector('h1,h2,h3,h4,h5,h6')) break;   // 제목·본문이 든 상자는 가리지 않음
+      if (!isEmptyBox(p)) break;
+      box = p;
+    }
+    hide(box);
+  }
+  function hostOf(src) {
+    try { return new URL(src, location.href).hostname; } catch (e) { return ''; }
+  }
+  // 광고가 차단돼 비어 버린 상자: 높이만 남은 div·section·aside (글자·사진·입력칸이 없고 높이 100px 이상)를 접음
+  // 광고 주소·이름표로는 못 잡는 빈 자리 (광고 스크립트가 막혀 iframe 없이 min-height만 남는 경우)
+  var GEO_MEDIA = 'img,video,canvas,table,input,button,select,textarea,iframe,embed,object,svg,picture';
+  var geoLast = 0;
+  // 기하 검사로 접은 칸은 되돌릴 수 있게 원래 style을 기억해 둠 (클라이언트가 나중에 채우는 본문이 접힌 칸에 갇히지 않도록)
+  function geoHide(el) {
+    el.setAttribute('data-dcapp-geo', el.getAttribute('style') || '');
+    el.style.cssText += ';display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important';
+  }
+  function geoRestore(el) {
+    var orig = el.getAttribute('data-dcapp-geo') || '';
+    el.removeAttribute('data-dcapp-geo');
+    if (orig) el.setAttribute('style', orig); else el.removeAttribute('style');
+  }
+  function sweepEmptyBoxes() {
+    // 접은 뒤에 글자·사진이 들어온 칸은 다시 보이게
+    document.querySelectorAll('[data-dcapp-geo]').forEach(function (el) {
+      if ((el.textContent || '').trim() !== '' || el.querySelector(GEO_MEDIA)) geoRestore(el);
+    });
+    document.querySelectorAll('div,section,aside').forEach(function (el) {
+      if (el.hasAttribute('data-dcapp-ad') || el.hasAttribute('data-dcapp-geo') || el === document.body || el === document.documentElement) return;
+      if (el.closest('h1,h2,h3,h4,h5,h6') || el.querySelector('h1,h2,h3,h4,h5,h6')) return;
+      if (el.getBoundingClientRect().height < 100) return;
+      if ((el.textContent || '').trim() !== '') return;
+      if (el.querySelector(GEO_MEDIA)) return;
+      geoHide(el);
+    });
+  }
+  function sweep() {
+    if (!document.body) return;
+    if (Date.now() - geoLast >= 500) { geoLast = Date.now(); try { sweepEmptyBoxes(); } catch (e) {} }
+    document.querySelectorAll('iframe').forEach(function (f) {
+      if (f.hasAttribute('data-dcapp-ad')) return;
+      if (AD_HOST.test(hostOf(f.getAttribute('src') || '')) || emptyFrame(f)) collapse(f);
+    });
+    document.querySelectorAll('ins.adsbygoogle, [id^="google_ads_"], [id^="aswift_"], [id^="div-gpt-ad"], [data-google-query-id]').forEach(function (el) {
+      if (!el.hasAttribute('data-dcapp-ad')) collapse(el);
+    });
+    // 광고 이름표가 붙은 빈 칸(고정 높이로 남은 광고 자리): 광고가 빠져 글자·사진이 없으면 접음
+    document.querySelectorAll('[id*="adslot" i],[id*="banner" i],[class*="banner" i],[class*="advert" i],[class*="-ad" i],[class*="ad-" i],[class*="_ad" i],[id^="ad-" i],[id^="ad_" i],[id*="gpt" i]').forEach(function (el) {
+      if (el.hasAttribute('data-dcapp-ad') || el.closest('h1,h2,h3,h4,h5,h6')) return;
+      if (!AD_TOKEN.test(el.id || '') && !AD_TOKEN.test(el.getAttribute('class') || '')) return;
+      if (isEmptyBox(el)) collapse(el);
+    });
+    document.querySelectorAll('span,b,strong,em,small,p,div,a,label,dt,th,td').forEach(function (el) {
+      if (el.hasAttribute('data-dcapp-ad') || el.children.length) return;
+      if (!LABEL.test(el.textContent || '')) return;
+      if (el.closest('h1,h2,h3,h4,h5,h6')) return;
+      var box = el;
+      for (var k = 0; k < 4 && box.parentElement && box.parentElement !== document.body; k++) {
+        var p = box.parentElement;
+        if ((p.textContent || '').trim().length > 160 || p.querySelector('h1,h2,h3,h4,h5,h6')) break;   // 제목이 든 위쪽 상자(본문 전체)는 가리지 않음
+        box = p;
+      }
+      collapse(box);
+    });
+  }
+  // 늦게 그려지는 광고 칸도 바로 접도록: 페이지에 새 노드가 붙을 때마다 (60ms 묶어서) 다시 훑음
+  var queued = false;
+  function queueSweep() {
+    if (queued) return;
+    queued = true;
+    setTimeout(function () { queued = false; sweep(); }, 60);
+  }
+  setInterval(sweep, 1000);
+  document.addEventListener('DOMContentLoaded', sweep);
+  if (document.documentElement) {
+    new MutationObserver(queueSweep).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  sweep();
+})();
+"""#
+}
+
 /// 나무위키 시트 하나를 담는 모델 (웹뷰·탐색 상태). 시트를 열 때마다 새로 만듦
 @MainActor
 final class NamuWebModel: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
@@ -80,6 +204,7 @@ final class NamuWebModel: NSObject, ObservableObject, WKNavigationDelegate, WKUI
         }
         let controller = webView.configuration.userContentController
         AdBlock.apply(to: controller)
+        controller.addUserScript(WKUserScript(source: NamuAdCosmetic.source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         Task { @MainActor in
             if let source = await NamuLinkScript.fetchIfNeeded() {
                 controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))

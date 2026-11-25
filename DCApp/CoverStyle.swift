@@ -213,6 +213,7 @@ struct CoverBackgroundView: View {
 
 /// 가림막 가운데 표시
 struct CoverCenterView: View {
+    @ObservedObject var fonts = FontStore.shared
     let style: CoverStyle
     let locked: Bool
     let color: Color
@@ -229,7 +230,7 @@ struct CoverCenterView: View {
                 .frame(width: 96, height: 96)
         case .text:
             Text(style.text.isEmpty ? "DCAPP" : style.text)
-                .font(.title2.weight(.bold))
+                .font(fonts.styleFont(.title2, weight: .bold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(color)
                 .padding(.horizontal, 24)

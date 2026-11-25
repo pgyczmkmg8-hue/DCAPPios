@@ -255,6 +255,7 @@ final class AutoImageStore: ObservableObject {
 // MARK: - 자짤 설정 화면
 
 struct AutoImageSettingsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = AutoImageStore.shared
     @EnvironmentObject private var favorites: FavoritesStore
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -324,7 +325,7 @@ struct AutoImageSettingsView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(galleryName(gid))
-                            Text(summary(gid)).font(.caption).foregroundStyle(.secondary)
+                            Text(summary(gid)).font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -365,6 +366,7 @@ struct AutoImageSettingsView: View {
 }
 
 struct AutoImageThumb: View {
+    @ObservedObject var fonts = FontStore.shared
     let image: AutoImage
     var body: some View {
         let store = AutoImageStore.shared
@@ -386,7 +388,7 @@ struct AutoImageThumb: View {
     }
 
     private func tag(_ s: String) -> some View {
-        Text(s).font(.caption2.bold()).foregroundStyle(.white)
+        Text(s).font(fonts.styleFont(.caption2, weight: .bold)).foregroundStyle(.white)
             .padding(.horizontal, 5).padding(.vertical, 2)
             .background(.black.opacity(0.55), in: Capsule())
     }

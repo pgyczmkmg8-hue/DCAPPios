@@ -13,6 +13,7 @@ struct CommentTextItem: Identifiable {
 /// 댓글 내용만 따로 띄우는 화면 — 글자를 바로 선택·복사할 수 있음 (뒤 화면은 흐리게, 닫기 버튼으로만 닫힘)
 /// 안의 링크: 디시 주소는 앱 안에서 열고(onOpenLink), 그 밖의 주소는 기본 웹브라우저로
 struct CommentTextViewer: View {
+    @ObservedObject var fonts = FontStore.shared
     let item: CommentTextItem
     let onOpenLink: (URL) -> Void
     @Environment(\.dismiss) private var dismiss
@@ -28,7 +29,7 @@ struct CommentTextViewer: View {
             VStack(spacing: 14) {
                 if !item.nick.isEmpty {
                     Text(item.nick)
-                        .font(.footnote.weight(.semibold))
+                        .font(fonts.styleFont(.footnote, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 6)
@@ -43,13 +44,13 @@ struct CommentTextViewer: View {
                         copied = true
                     } label: {
                         Label(copied ? "복사했어요" : "전체 복사", systemImage: copied ? "checkmark" : "doc.on.doc")
-                            .font(.subheadline.weight(.semibold))
+                            .font(fonts.styleFont(.subheadline, weight: .semibold))
                             .padding(.horizontal, 18).padding(.vertical, 9)
                             .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
                     }
                     Button { dismiss() } label: {
                         Text("닫기")
-                            .font(.subheadline.weight(.semibold))
+                            .font(fonts.styleFont(.subheadline, weight: .semibold))
                             .padding(.horizontal, 18).padding(.vertical, 9)
                             .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
                     }

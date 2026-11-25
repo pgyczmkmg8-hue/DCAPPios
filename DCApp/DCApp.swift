@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import WebKit
 
 /// 디시인사이드 관련 주소 모음. 사이트 구조가 바뀌면 여기만 고치면 됩니다.
 enum DC {
@@ -26,7 +27,7 @@ enum DC {
 
 /// 앱 화면 위로 띄우는 창 (보관함 / 검색 / 설정)
 enum AppSheet: String, Identifiable {
-    case library, posts, search, settings
+    case library, posts, search, settings, quickWrite
     var id: String { rawValue }
 }
 
@@ -35,6 +36,8 @@ enum AppSheet: String, Identifiable {
 @MainActor
 final class AppRouter: ObservableObject {
     @Published var sheet: AppSheet?
+    /// 퀵 글쓰기 창의 대상 (글쓰기 버튼 길게 누르기에서 채움)
+    @Published var quickWriteTarget: QuickWriteTarget?
     /// 설정을 열 때 바로 보여줄 칸 (예: "block" = 차단)
     var settingsAnchor: String?
     let mainBrowser: WebViewModel
@@ -44,6 +47,10 @@ final class AppRouter: ObservableObject {
     let detailBrowser: WebViewModel
     /// 가로로 넓은 화면에서 글 목록(왼쪽)과 글(오른쪽)을 나란히 보여 주는 중인지
     @Published private(set) var splitActive = false
+    /// 분할 화면 모드에서 갤로그(/gallog/)를 열 때는 분할하지 않고 전체 화면으로 표시
+    @Published private(set) var isGallogFullScreen = false
+    /// 분할 화면에서 왼쪽이 디시 홈이고 오른쪽 글 화면이 비어 있으면 홈을 창 전체 폭으로 씀 (오른쪽 빈 칸 숨김, 홈 카드 2×2)
+    @Published private(set) var homeFullWidth = false
     /// 한 화면으로 접었을 때 오른쪽(글) 화면이 보던 글을 새로고침 없이 그대로 이어 보려고, 그 화면을 한 화면 자리에 보여 주는 중인지
     @Published private(set) var singleUsesDetail = false
     /// 접는 판단을 기다리는 동안(900ms) 글 화면을 미리 한 화면 자리에 보여 주는 중인지 (글목록이 먼저 떴다가 글로 바뀌는 깜빡임 방지)
@@ -108,6 +115,62 @@ final class AppRouter: ObservableObject {
             guard let self, self.splitActive else { return }
             self.movePostToDetail(url)
         }
+        // 분할 화면에서 왼쪽이 홈(m.dcinside.com/)으로 이동하면 오른쪽에 열려 있던 이전 글을 비워 홈을 전체 폭(2×2)으로 표시
+        mainBrowser.$url
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] main in
+                guard let self, self.splitActive, WebViewModel.isDCHomeURL(main) else { return }
+                if let du = self.detailBrowser.url, du.scheme != "about" {
+                    self.detailBrowser.load(URL(string: "about:blank")!)
+                }
+            }
+            .store(in: &syncBag)
+        // 홈이 분할 왼쪽에 있고 오른쪽 글 화면이 비어 있으면 홈을 전체 폭으로 (오른쪽 빈 칸 숨김). 글을 열면 다시 분할
+        Publishers.CombineLatest(mainBrowser.$url, detailBrowser.$url)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] main, detail in
+                guard let self else { return }
+                let emptyDetail = detail == nil || detail?.scheme == "about"
+                let full = WebViewModel.isDCHomeURL(main) && emptyDetail
+                self.homeFullWidth = full
+                self.mainBrowser.isSplitListPane = self.splitActive && !self.isGallogFullScreen && !full
+            }
+            .store(in: &syncBag)
+        // 갤로그(/gallog/)는 분할 화면에서도 전체 화면으로 표시
+        mainBrowser.$url
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] url in
+                guard let self else { return }
+                let wasGallog = self.isGallogFullScreen
+                let nowGallog = url?.path.contains("/gallog") == true
+                self.isGallogFullScreen = nowGallog
+                self.mainBrowser.isSplitListPane = self.splitActive && !nowGallog && !self.homeFullWidth
+                if wasGallog != nowGallog {
+                    DispatchQueue.main.async { [mainBrowser, detailBrowser] in
+                        mainBrowser.applyFilters()
+                        mainBrowser.nudgeLayout()
+                        detailBrowser.applyFilters()
+                        detailBrowser.nudgeLayout()
+                    }
+                }
+                // 분할화면에서 갤로그를 보다가 회전(접기)한 뒤 뒤로 가기로 갤로그를 빠져나올 때,
+                // detailBrowser에 이전에 보던 글이 열려 있었다면 singleUsesDetail로 복원
+                if wasGallog && !nowGallog && !self.splitActive && !self.singleUsesDetail,
+                   let du = self.detailBrowser.url, PostKey.from(du) != nil {
+                    self.singleUsesDetail = true
+                    self.detailBrowser.isDetailPane = false
+                }
+            }
+            .store(in: &syncBag)
+        detailBrowser.$url
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] url in
+                guard let self, self.splitActive, let url, url.path.contains("/gallog") else { return }
+                self.mainBrowser.load(url)
+                if self.detailBrowser.canGoBack { self.detailBrowser.goBack() }
+            }
+            .store(in: &syncBag)
     }
 
     func open(_ url: URL) {
@@ -115,6 +178,12 @@ final class AppRouter: ObservableObject {
         let key = PostKey.from(url)
         // 글 주소는 분할이면 오른쪽(글) 화면, 아니면 지금 화면에서 연다 (기존과 같음)
         let target = (splitActive && key != nil) ? detailBrowser : primaryBrowser
+        // 분할 화면에서 홈에 있다가 읽은 글 보기 등으로 글을 열면 왼쪽도 그 글의 갤러리 목록으로 함께 띄움
+        if splitActive, key != nil,
+           mainBrowser.url == nil || WebViewModel.isDCHomeURL(mainBrowser.url),
+           let g = Gallery.parse(url) {
+            mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+        }
         // 그 화면에 이미 같은 글이 떠 있으면 주소만 바꿔 불러서는 아무 일도 안 일어남 (WebKit이 새로 받지 않음) → 다시 받아 옴
         if let key, let cur = target.url, PostKey.from(cur) == key {
             target.reloadPost(commentsAnchor: url.fragment == "comment_box")
@@ -123,10 +192,12 @@ final class AppRouter: ObservableObject {
         target.load(url)
     }
 
-    /// 분할 화면인데 왼쪽에 글이 떠 있으면 → 글은 오른쪽으로, 왼쪽은 목록으로 (뒤로 갈 곳이 없으면 그 갤러리 목록)
+    /// 분할 화면인데 왼쪽에 글이 떠 있으면 → 글은 오른쪽으로, 왼쪽은 그 글의 갤러리 목록으로 (뒤로 가기가 홈이면 홈 대신 목록)
     func movePostToDetail(_ url: URL) {
         detailBrowser.load(url)
-        if mainBrowser.canGoBack {
+        let backURL = mainBrowser.webView.backForwardList.backItem?.url
+        let backIsHome = backURL == nil || WebViewModel.isDCHomeURL(backURL)
+        if mainBrowser.canGoBack, !backIsHome {
             mainBrowser.goBack()
         } else if let g = Gallery.parse(url) {
             mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
@@ -141,7 +212,7 @@ final class AppRouter: ObservableObject {
 
     /// 접기가 시작됐을 때(분할 → 한 화면) 글이 있으면 글 화면을 바로 한 화면 자리에 보여 줌. 실제 접기는 scheduleSplit의 대기 뒤에 확정
     func previewFold() {
-        guard splitActive, !foldPreview, let u = detailBrowser.url, PostKey.from(u) != nil else { return }
+        guard splitActive, !foldPreview, !isGallogFullScreen, let u = detailBrowser.url, PostKey.from(u) != nil else { return }
         foldPreview = true
         detailBrowser.isDetailPane = false
     }
@@ -158,15 +229,20 @@ final class AppRouter: ObservableObject {
         if on { cancelFoldPreview() }
         guard on != splitActive else { return }
         splitActive = on
+        mainBrowser.isSplitListPane = on && !isGallogFullScreen && !homeFullWidth
         if on {
             // 접었을 때 오른쪽 화면을 한 화면 자리에서 쓰고 있었으면 그대로 오른쪽으로 돌려보냄 (왼쪽 목록은 그대로 남아 있음)
             let wasSingleDetail = singleUsesDetail
             singleUsesDetail = false
             detailBrowser.isDetailPane = true
             if wasSingleDetail {
-                // 접은 사이에 글이 아닌 곳으로 갔으면 오른쪽은 빈 화면으로
+                // 접은 사이에 글이 아닌 곳으로 갔으면 오른쪽은 빈 화면으로, 글을 보고 있었다면 왼쪽이 홈일 때 그 글의 갤러리 목록으로 맞춤
                 if let u = detailBrowser.url, PostKey.from(u) == nil, u.scheme != "about" {
                     detailBrowser.load(URL(string: "about:blank")!)
+                } else if let u = detailBrowser.url, PostKey.from(u) != nil,
+                          mainBrowser.url == nil || WebViewModel.isDCHomeURL(mainBrowser.url),
+                          let g = Gallery.parse(u) {
+                    mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
                 }
             } else if let u = mainBrowser.url, PostKey.from(u) != nil {
                 // 글을 보던 중이었으면 그 글은 오른쪽으로 옮기고 왼쪽은 목록으로 돌아감
@@ -174,14 +250,22 @@ final class AppRouter: ObservableObject {
             }
         } else {
             foldPreview = false
-            if let u = detailBrowser.url, PostKey.from(u) != nil {
+            if !isGallogFullScreen, let u = detailBrowser.url, PostKey.from(u) != nil {
                 // 접으면 오른쪽 글 화면을 그대로 한 화면 자리에 보여 줌 (새로 불러오지 않아 스크롤·입력 중이던 것이 유지됨)
                 singleUsesDetail = true
                 detailBrowser.isDetailPane = false
             }
         }
-        // 분할이 바뀐 뒤 두 웹 화면을 새 자리 크기에 맞춰 다시 배치 (전환 중 빈 화면으로 남지 않게)
+        // 분할이 바뀐 뒤 두 웹 화면을 새 자리 크기에 맞춰 다시 배치하고 duoCol/duoFlip/duoOff 설정도 즉시 동기화
         DispatchQueue.main.async { [mainBrowser, detailBrowser] in
+            mainBrowser.applyFilters()
+            detailBrowser.applyFilters()
+            mainBrowser.nudgeLayout()
+            detailBrowser.nudgeLayout()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [mainBrowser, detailBrowser] in
+            mainBrowser.applyFilters()
+            detailBrowser.applyFilters()
             mainBrowser.nudgeLayout()
             detailBrowser.nudgeLayout()
         }
@@ -207,6 +291,7 @@ final class AppRouter: ObservableObject {
 struct DCApp: App {
     @StateObject private var favorites = FavoritesStore()
     @StateObject private var router = AppRouter()
+    @StateObject private var fonts = FontStore.shared
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
@@ -215,6 +300,7 @@ struct DCApp: App {
             RootView()
                 .environmentObject(favorites)
                 .environmentObject(router)
+                .environment(\.font, fonts.swiftUIFont)     // 고른 글꼴 (nil = 시스템). .font(...)를 직접 준 곳은 그대로
                 .overlay { LockCover() }                    // 잠겨 있으면 첫 화면부터 가림 (가림막 창이 뜨기 전 깜빡임 방지)
                 .task { await AppLock.shared.startup() }    // 잠금이 켜져 있으면 켜자마자 인증
                 // 광고차단 원격 자료(디시 필터·NamuLink)는 백그라운드로 받아 캐시 (시작을 기다리지 않음, 6시간 간격)
@@ -334,7 +420,7 @@ struct RootView: View {
                 let total = geo.size.width
                 let list = (total * 0.42).rounded()
                 ZStack(alignment: .topLeading) {
-                    if isSplit {
+                    if isSplit && !router.isGallogFullScreen {
                         // 아래층: 오른쪽(글) 화면
                         HStack(spacing: 0) {
                             Color.clear.frame(width: list).allowsHitTesting(false)
@@ -347,9 +433,12 @@ struct RootView: View {
                             .id(themeRaw)
                         }
                         .frame(width: total, height: geo.size.height, alignment: .leading)
+                        // 홈을 전체 폭으로 쓸 때는 오른쪽 글 화면(빈 칸)을 숨김 — 화면 구조는 그대로 둬서 웹뷰가 빠지지 않게
+                        .opacity(router.homeFullWidth ? 0 : 1)
+                        .allowsHitTesting(!router.homeFullWidth)
                         // 위층: 왼쪽(목록) 화면을 창 전체 폭으로 (내비게이션 바 없이 SwiftUI로만) — 목록 폭 밖은 비어 있어 글 화면이 눌리고,
                         // 컨트롤바는 창 오른쪽 끝에서 글 위에 떠 있음
-                        BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true, splitListWidth: list, detailPane: router.detailBrowser)
+                        BrowserView(model: router.mainBrowser, fallbackTitle: "홈", showsMenuButton: true, splitListWidth: router.homeFullWidth ? nil : list, detailPane: router.detailBrowser)
                             .safeAreaPaddingBottomCompat(Self.windowBottomSafe)   // 내비게이션 스택이 없어진 만큼 아래 안전 영역(홈 바)을 되돌려 컨트롤바 높이를 한 화면일 때와 같게
                             .id(themeRaw)
                             .frame(width: total, height: geo.size.height, alignment: .topLeading)
@@ -381,6 +470,10 @@ struct RootView: View {
             NativeWriteHost(model: router.mainBrowser)
                 .padding(.top, topGap)
             NativeWriteHost(model: router.detailBrowser)      // 분할 화면의 글에서 연 글쓰기·수정
+                .padding(.top, topGap)
+
+            // 계정으로 로그인하는 동안 디시 로그인 화면을 가리는 '로그인 중…' (LoginCover.swift)
+            LoginCoverHost(model: router.mainBrowser)
                 .padding(.top, topGap)
 
             // 듀오: 상단바가 오른쪽 빈 줄(안전 영역)까지 늘어난 부분을 바탕색으로 덮어 사파리처럼
@@ -442,7 +535,7 @@ struct RootView: View {
             if let inc = alarms.incoming {
                 AlarmBanner(item: inc.item, more: inc.more, onTap: {
                     AlarmStore.shared.markRead(inc.item)
-                    AlarmStore.shared.markRead(galleryID: inc.item.galleryID, postNo: inc.item.postNo)
+                    if inc.item.type != "G" { AlarmStore.shared.markRead(galleryID: inc.item.galleryID, postNo: inc.item.postNo) }   // 갤로그 알림은 글이 아니라서 글 읽음과 섞지 않음
                     router.open(inc.item.url)
                     closeBanner()
                 }, onClose: closeBanner)
@@ -533,6 +626,8 @@ struct RootView: View {
                 case .posts: SavedPostsSheet()
                 case .search: SearchView()
                 case .settings: SettingsView()
+                case .quickWrite:
+                    if let t = router.quickWriteTarget { QuickWriteSheet(target: t) }
                 }
             }
             .environmentObject(router)
@@ -603,6 +698,7 @@ struct RootView: View {
 
 /// 분할 화면의 오른쪽에 아직 연 글이 없을 때 안내
 private struct DetailPlaceholder: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject var model: WebViewModel
 
     var body: some View {
@@ -610,7 +706,7 @@ private struct DetailPlaceholder: View {
             VStack(spacing: 10) {
                 Image(systemName: "rectangle.split.2x1").font(.system(size: 40)).foregroundStyle(.tertiary)
                 Text("왼쪽 목록에서 글을 누르면 여기서 열려요")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(uiColor: .dcPage))   // 다크모드에서 페이지(#272729)와 같은 색 (순검정이 튀지 않게)

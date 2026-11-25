@@ -3,7 +3,7 @@ import Combine
 
 /// 앱 테마 (설정 → 앱 → 테마). 상단바 색, 강조색(하단 바 선택 등), 웹페이지 속 디시 파란색 계열을 바꿀 색
 enum AppTheme: String, CaseIterable, Identifiable {
-    case dc, navy, green, gray
+    case dc, navy, green, gray, custom
     var id: String { rawValue }
 
     var name: String {
@@ -12,6 +12,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .navy: "남색"
         case .green: "연두"
         case .gray: "무채색"
+        case .custom: "직접 지정"
         }
     }
 
@@ -22,31 +23,40 @@ enum AppTheme: String, CaseIterable, Identifiable {
         case .navy: UIColor(red: 0.29, green: 0.33, blue: 0.64, alpha: 1)     // 예전 기본색
         case .green: UIColor(red: 0.01, green: 0.78, blue: 0.35, alpha: 1)    // 네이버 초록 (#03C75A)
         case .gray: UIColor(red: 0.33, green: 0.33, blue: 0.35, alpha: 1)
+        case .custom: DCTheme.customColor
         }
     }
 
     /// 강조색 — 밝은 화면 / 어두운 화면(다크 모드에서는 잘 보이게 밝게)
     var accentLight: UIColor {
         switch self {
-        case .dc, .navy: bar
+        case .dc, .navy, .custom: bar
         case .green: UIColor(red: 0.0, green: 0.62, blue: 0.29, alpha: 1)      // 흰 바탕 글자용으로 조금 진하게
         case .gray: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1)
         }
     }
     var accentDark: UIColor {
         switch self {
-        case .dc, .navy: UIColor(red: 0.55, green: 0.62, blue: 1.0, alpha: 1)
-        case .green: UIColor(red: 0.18, green: 0.88, blue: 0.48, alpha: 1)
-        case .gray: UIColor(red: 0.78, green: 0.78, blue: 0.80, alpha: 1)
+        case .dc, .navy: return UIColor(red: 0.55, green: 0.62, blue: 1.0, alpha: 1)
+        case .green: return UIColor(red: 0.18, green: 0.88, blue: 0.48, alpha: 1)
+        case .gray: return UIColor(red: 0.78, green: 0.78, blue: 0.80, alpha: 1)
+        case .custom:
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            bar.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            return UIColor(hue: h, saturation: min(s, 0.85), brightness: max(b, 0.78), alpha: 1)
         }
     }
 
     /// 웹페이지 속 디시 파란색 계열을 바꿀 색 (h: 색상각, s: 채도 배율). nil이면 사이트 색 그대로
     var pageTint: [String: Double]? {
         switch self {
-        case .dc, .navy: nil
-        case .green: ["h": 147, "s": 1.6]
-        case .gray: ["h": 230, "s": 0]
+        case .dc, .navy: return nil
+        case .green: return ["h": 147, "s": 1.6]
+        case .gray: return ["h": 230, "s": 0]
+        case .custom:
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            bar.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            return ["h": Double(h * 360), "s": s < 0.08 ? 0 : 1.3]
         }
     }
 }
@@ -54,8 +64,36 @@ enum AppTheme: String, CaseIterable, Identifiable {
 /// 앱 색상 — 지금 고른 테마를 따름
 enum DCTheme {
     static let storageKey = "appTheme"
+    static let customHexKey = "appThemeCustomHex"
+    static let defaultCustomHex = "3B4890"
+
     static var current: AppTheme {
         AppTheme(rawValue: Profile.defaults.string(forKey: storageKey) ?? "") ?? .dc
+    }
+
+    static var customHex: String {
+        normalizedHex(Profile.defaults.string(forKey: customHexKey) ?? "") ?? defaultCustomHex
+    }
+
+    static var customColor: UIColor {
+        color(fromHex: customHex) ?? UIColor(red: 0.231, green: 0.282, blue: 0.565, alpha: 1)
+    }
+
+    /// 6자리 16진법 코드 정규화 (# 제거, 대문자 6자리만 허용)
+    static func normalizedHex(_ raw: String) -> String? {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+            .uppercased()
+        guard s.count == 6, s.allSatisfy(\.isHexDigit) else { return nil }
+        return s
+    }
+
+    static func color(fromHex hex: String) -> UIColor? {
+        guard let norm = normalizedHex(hex), let val = UInt32(norm, radix: 16) else { return nil }
+        let r = CGFloat((val >> 16) & 0xFF) / 255
+        let g = CGFloat((val >> 8) & 0xFF) / 255
+        let b = CGFloat(val & 0xFF) / 255
+        return UIColor(red: r, green: g, blue: b, alpha: 1)
     }
     /// 상단바 색 (이름은 예전 그대로 navy)
     static var navy: Color { Color(uiColor: current.bar) }
@@ -130,92 +168,105 @@ struct HeadTab: Hashable, Identifiable {
     var id: String { name }
 }
 
-/// 갤러리 안 검색 창: 검색어 입력칸 하나(공통) + 상단 세그먼트(갤러리 내 글 검색 ↔ 통합검색)
+/// 검색 창: 세그먼트(갤러리 내 글 검색 · 통합검색 · 식별코드·IP) + 검색어 입력칸 하나(공통)
 /// 입력칸은 탭과 무관하게 같은 자리에 있어서, 탭을 바꿔도 키보드가 내려가지 않고 검색어도 그대로 남음
+/// 상단 '나무위키' 버튼은 지금 적은 검색어를 넘겨 나무위키 입력 창을 띄움
 struct GallerySearchSheet: View {
+    @ObservedObject var fonts = FontStore.shared
     let gallery: Gallery
     var heads: [HeadTab] = []
     let onSearch: (URL) -> Void
-    /// 식별코드(IP)로 작성글 찾기 창 열기 (입력해 둔 검색어를 넘김)
-    var onIdSearch: ((String) -> Void)? = nil
     @State private var head: HeadTab?
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var favorites: FavoritesStore
+    @ObservedObject private var visited = VisitedStore.shared
+    @ObservedObject private var idSearch = IdPostSearcher.shared
     @AppStorage("gallerySearchType", store: Profile.defaults) private var typeRaw = GallerySearchType.subjectMemo.rawValue
-    /// 공통 검색어 (두 탭이 같이 씀)
+    /// 공통 검색어 (세 탭이 같이 씀)
     @State private var keyword = ""
     @State private var recommendOnly = false
     @State private var recent: [String] = Profile.defaults.stringArray(forKey: "gallerySearchRecent") ?? []
+    /// 식별코드 탭에서 찾을 갤러리 (nil = 지금 보고 있는 갤러리)
+    @State private var idGallery: Gallery?
     @FocusState private var focused: Bool
 
     /// 상단 세그먼트
-    private enum SearchTab: String { case gallery, all }
+    private enum SearchTab: String { case gallery, all, id }
     @State private var tab: SearchTab = .gallery
 
     private var type: GallerySearchType { GallerySearchType(rawValue: typeRaw) ?? .subjectMemo }
     private var keywordEmpty: Bool { keyword.trimmingCharacters(in: .whitespaces).isEmpty }
+    private var trimmedKeyword: String { keyword.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// 식별코드 탭에서 찾을 갤러리
+    private var pickedGallery: Gallery { idGallery ?? gallery }
+    /// 찾을 갤러리 목록: 지금 갤러리 → 즐겨찾기 → 방문한 갤러리 (같은 갤러리는 한 번만)
+    private var galleryChoices: [Gallery] {
+        var seen = Set<String>()
+        return ([gallery] + favorites.items + visited.items.map(\.gallery)).filter { seen.insert($0.id).inserted }
+    }
     /// 검색창 placeholder: 이름에 이미 '갤러리'가 있으면 한 번만 붙임
     private var galleryPlaceholder: String {
         gallery.name.contains("갤러리") ? "\(gallery.name) 글 검색" : "\(gallery.name) 갤러리 글 검색"
+    }
+    private var fieldPlaceholder: String {
+        switch tab {
+        case .gallery: return galleryPlaceholder
+        case .all: return "갤러리 & 통합검색"
+        case .id: return "식별코드 또는 IP"
+        }
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 공통 입력칸: 여기는 탭 전환에 따라 다시 만들어지지 않음 (키보드 유지)
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField(tab == .gallery ? galleryPlaceholder : "갤러리 & 통합검색", text: $keyword)
-                        .focused($focused)
-                        .submitLabel(.search)
-                        .onSubmit { submit() }
-                    if !keywordEmpty {
-                        Button { keyword = "" } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(uiColor: .secondarySystemBackground), in: Capsule())   // 메뉴 탭 검색창과 같은 둥근 알약 모양
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-
                 Picker("검색 종류", selection: $tab) {
                     Text("갤러리 내 글 검색").tag(SearchTab.gallery)
                     Text("통합검색").tag(SearchTab.all)
+                    Text("식별코드·IP").tag(SearchTab.id)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-
-                // 탭별 내용만 바뀜
-                if tab == .gallery {
-                    galleryForm
-                } else {
-                    SearchPanel(query: $keyword) { url in
-                        onSearch(url)      // 지금 화면에서 열고 창을 닫음
-                        dismiss()
+                Group {
+                    // 탭별 내용만 바뀜
+                    switch tab {
+                    case .gallery:
+                        galleryForm
+                    case .all:
+                        SearchPanel(query: $keyword) { url in
+                            onSearch(url)      // 지금 화면에서 열고 창을 닫음
+                            dismiss()
+                        }
+                    case .id:
+                        idForm
                     }
                 }
             }
+            // 검색어 칸은 검색 탭과 같은 시스템 검색창 (취소·지우기 버튼 포함)
+            .searchable(text: $keyword, placement: .navigationBarDrawer(displayMode: .always), prompt: Text(fieldPlaceholder))
+            .autoFocusSearch($focused)
+            .onSubmit(of: .search) { submit() }
             .navigationTitle("검색")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("검색") { submit() }
-                        .disabled(keywordEmpty)
-                }
+            }
+            .onChangeCompat(of: tab) { _, new in
+                if new == .id { enterIdTab() }
+            }
+            .onChangeCompat(of: keyword) { _, _ in
+                if tab == .id { idSearch.code = trimmedKeyword }   // 식별코드 탭에서는 이 칸이 식별코드 칸
             }
             .onAppear {
                 Task { try? await Task.sleep(for: .milliseconds(80)); focused = true }
             }
         }
+        .presentationBackgroundCompat(Color(uiColor: .systemGroupedBackground))
         .sheetUnderBlueBar(medium: true)
     }
 
-    /// '갤러리 내 글 검색' 탭 내용 (말머리 · 검색 범위 · 개념글 · 최근 검색어 · 식별코드 작성글)
+    /// '갤러리 내 글 검색' 탭 내용 (말머리 · 검색 범위 · 개념글 · 최근 검색어)
     @ViewBuilder
     private var galleryForm: some View {
         Form {
@@ -235,20 +286,6 @@ struct GallerySearchSheet: View {
                 Text(gallery.name.contains("갤러리") ? "\(gallery.name)에서 검색" : "\(gallery.name) 갤러리에서 검색")
             }
 
-            if let onIdSearch {
-                Section {
-                    Button {
-                        let k = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-                        dismiss()
-                        onIdSearch(k)
-                    } label: {
-                        Label("식별코드·IP로 작성글 찾기", systemImage: "person.text.rectangle")
-                    }
-                } footer: {
-                    Text("디시는 식별코드 검색이 없어서, 목록을 여러 쪽 받아 같은 식별코드의 글만 모아요. 위 검색창에 식별코드를 적고 누르면 그대로 넘어가요.")
-                }
-            }
-
             if !recent.isEmpty {
                 Section {
                     ForEach(recent, id: \.self) { w in
@@ -261,14 +298,54 @@ struct GallerySearchSheet: View {
                     HStack {
                         Text("최근 검색어")
                         Spacer()
-                        Button("전체 삭제") { recent.removeAll(); saveRecent() }.font(.caption)
+                        Button("전체 삭제") { recent.removeAll(); saveRecent() }.font(fonts.styleFont(.caption))
                     }
                 }
             }
         }
     }
 
-    /// 엔터·검색 버튼: 지금 탭에 맞는 검색
+    /// '식별코드·IP' 탭: 찾을 갤러리 고르기 + 식별코드 찾기 (결과는 이 안에 나오고, 찾은 글을 누르면 그 화면으로 감)
+    @ViewBuilder
+    private var idForm: some View {
+        List {
+            Section {
+                Picker("갤러리", selection: idGalleryBinding) {
+                    ForEach(galleryChoices) { g in Text(g.name).tag(g.id) }
+                }
+                .disabled(idSearch.running)
+            } header: {
+                Text("찾을 갤러리")
+            } footer: {
+                Text("기본은 지금 보고 있는 갤러리예요. 즐겨찾기나 방문한 갤러리로 바꿀 수 있어요. 찾는 중에는 바꿀 수 없어요.")
+            }
+            IdPostSearchSections(showsCodeField: false) { url in
+                onSearch(url)
+                dismiss()
+            }
+        }
+    }
+
+    /// 갤러리 고르기 칸 (갤러리 ID로 주고받음)
+    private var idGalleryBinding: Binding<String> {
+        Binding(
+            get: { pickedGallery.id },
+            set: { id in
+                guard !idSearch.running, let g = galleryChoices.first(where: { $0.id == id }) else { return }
+                idGallery = g
+                idSearch.setGallery(g)
+            }
+        )
+    }
+
+    /// 식별코드 탭을 열 때: 찾을 갤러리(기본은 지금 갤러리)와 검색어를 맞춰 둠 (찾는 중이면 그대로)
+    private func enterIdTab() {
+        guard !idSearch.running else { return }
+        idSearch.setGallery(pickedGallery)
+        idSearch.code = trimmedKeyword
+    }
+
+    /// 엔터: 지금 탭에 맞는 검색
     private func submit() {
         guard !keywordEmpty else { return }
         switch tab {
@@ -280,7 +357,18 @@ struct GallerySearchSheet: View {
                 dismiss()
             }
             keyword = ""
+        case .id:
+            startIdSearch()
         }
+    }
+
+    /// 식별코드 탭에서 찾기 (이미 찾는 중이면 그대로 둠)
+    private func startIdSearch() {
+        guard !idSearch.running else { return }
+        idSearch.setGallery(pickedGallery)
+        idSearch.code = trimmedKeyword
+        focused = false
+        idSearch.start()
     }
 
     private func search(_ text: String) {
@@ -326,6 +414,7 @@ struct BrowserView: View {
     @ObservedObject private var savedPosts = SavedPostStore.shared
     @ObservedObject private var alarms = AlarmStore.shared
     @ObservedObject private var hwKeyboard = HardwareKeyboard.shared
+    @ObservedObject private var fonts = FontStore.shared
     @AppStorage("compactMode", store: Profile.defaults) private var compactMode = false
     /// 오른쪽 세로 버튼 막대 (끄면 ⋮ 메뉴가 상단바로 감)
     /// 오른쪽 세로 버튼 막대는 없앰 (⋮는 상단바, 한손 모드는 제목 길게 누르기, 글 볼 때만 댓글 새로고침 버튼)
@@ -516,7 +605,8 @@ struct BrowserView: View {
             if router.barOverlayWidth != barCoverWidth { router.barOverlayWidth = barCoverWidth }
             if router.barOverlayLeft != barMirrored { router.barOverlayLeft = barMirrored }
         }
-        let w: CGFloat = model.isDetailPane ? router.barOverlayWidth : ((showsMenuButton && !router.splitActive) ? barCoverWidth : 0)
+        let detailW = router.barOverlayWidth > 0 ? router.barOverlayWidth : ((usesSideBar && !barCollapsed) ? barCoverWidth : 0)
+        let w: CGFloat = model.isDetailPane ? detailW : ((showsMenuButton && !router.splitActive) ? barCoverWidth : 0)
         let left = model.isDetailPane ? router.barOverlayLeft : barMirrored
         model.setBarInset(left: left ? w : 0, right: left ? 0 : w)
     }
@@ -537,6 +627,7 @@ struct BrowserView: View {
         syncCommentPin()   // 컨트롤바 가로 ↔ 세로 전환 시 댓글 입력칸 아래 고정도 바로 따라감
         let duoOff = Self.duoHorizontalBarNow
         if duoOff != lastDuoOff { lastDuoOff = duoOff; model.applyFilters() }
+        model.pushDuoFlags()   // 화면 자리(분할·회전)에 맞춰 이 화면의 옆 줄 여백을 다시 맞춤 (회전 뒤 늦게 정해지는 값도 300·700ms 뒤에 다시 읽음)
         guard showsMenuButton else { return }
         SideColumnLayout.shared.update(width: 0, topBarBottom: lastTopBarBottom)
     }
@@ -622,7 +713,8 @@ struct BrowserView: View {
 
     /// 분할 화면 왼쪽(목록) 상단바: 목록 폭 안에 제목(+글 목록이면 필터 버튼)
     /// 앱 창의 위쪽 안전 영역 높이 (듀오: 옆 세로 줄 때문에 비어 있는 위쪽 띠 높이)
-    private static var windowTopInset: CGFloat {
+    /// 창의 위쪽 안전 영역(상태바 높이). 웹 화면 상단바와 글쓰기 상단바가 같은 값을 씀
+    static var windowTopInset: CGFloat {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
             .map(\.safeAreaInsets.top).max() ?? 0
@@ -748,7 +840,7 @@ struct BrowserView: View {
                         .accessibilityLabel("게시물 필터")
                     }
                     if menuInTopBarShown {
-                        Menu { moreMenu } label: {
+                        MorePopoverButton { close in morePopover(dismiss: close) } label: {
                             Image(systemName: "ellipsis").rotationEffect(.degrees(90))
                                 .frame(width: slot, height: slot)
                                 .contentShape(Rectangle())
@@ -762,7 +854,7 @@ struct BrowserView: View {
                                 .contentShape(Rectangle())
                         }
                     }
-                    Menu { moreMenu } label: {
+                    MorePopoverButton { close in morePopover(dismiss: close) } label: {
                         Image(systemName: "ellipsis").rotationEffect(.degrees(90))
                             .frame(width: slot, height: slot)
                             .contentShape(Rectangle())
@@ -812,11 +904,11 @@ struct BrowserView: View {
     private func badgeView(_ b: GalleryBadge) -> some View {
         switch b {
         case .minor:
-            Text("M").font(.system(size: 12, weight: .bold))
+            Text("M").font(fonts.uiFont(size: 12, weight: .bold))
                 .frame(width: 20, height: 20)
                 .overlay(Circle().stroke(.white, lineWidth: 1.5))
         case .mini:
-            Text("mi").font(.system(size: 11, weight: .bold))
+            Text("mi").font(fonts.uiFont(size: 11, weight: .bold))
                 .frame(width: 22, height: 18)
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(.white, lineWidth: 1.5))
         case .person:
@@ -852,6 +944,11 @@ struct BrowserView: View {
     /// 웹뷰 + 상단바 + 하단 바 + 키보드 감지
     private var layer1: some View {
         WebView(model: model)
+            .overlay {
+                if model.isRateLimited {
+                    RateLimitOverlayView(tries: model.rateLimitTries) { model.reload() }
+                }
+            }
             .modifier(SplitPane(width: splitListWidth))
             // 로딩 게이지(topOverlay)는 상단바 안쪽에 붙여서, 상단바 제일 아래(웹뷰 맨 위)에 나오게 함
             .overlay(alignment: .top) { topOverlay }
@@ -908,7 +1005,7 @@ struct BrowserView: View {
                             Image(systemName: "chevron.right").frame(width: 58, height: 46).contentShape(Rectangle())
                         }
                     }
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(fonts.uiFont(size: 20, weight: .semibold))
                     .foregroundStyle(Color.primary)
                     .buttonStyle(.plain)
                     .background(.regularMaterial, in: Capsule())
@@ -926,7 +1023,7 @@ struct BrowserView: View {
                         model.submitWrite()
                     } label: {
                         Text("등록")
-                            .font(.subheadline.bold())
+                            .font(fonts.styleFont(.subheadline, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 9)
@@ -1299,13 +1396,7 @@ struct BrowserView: View {
         AnyView(layer5)
             .sheet(isPresented: $showGallerySearch) {
                 if let g = gallery {
-                    GallerySearchSheet(gallery: g, heads: galleryHeads, onSearch: { url in model.load(url) }, onIdSearch: { code in
-                        // 검색 창이 닫힌 뒤에 다음 창을 띄움 (바로 띄우면 무시될 때가 있음)
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(450))
-                            idSearchTarget = IdSearchTarget(gallery: g, code: code)
-                        }
-                    })
+                    GallerySearchSheet(gallery: g, heads: galleryHeads, onSearch: { url in model.load(url) })
                 }
             }
             .sheet(isPresented: $showListFilter) {
@@ -1313,8 +1404,8 @@ struct BrowserView: View {
                     .sheetUnderBlueBar(medium: true)
             }
             // 나무위키 검색어 입력 → 확인하면 입력 시트를 닫고 인앱 사파리로 검색 결과를 연다 (닫으면 디시 화면 그대로)
-            .sheet(isPresented: $showNamuSearch) {
-                NamuSearchInputSheet { url in
+            .sheet(isPresented: $showNamuSearch, onDismiss: { namuInitial = "" }) {
+                NamuSearchInputSheet(initialText: namuInitial) { url in
                     Task { @MainActor in
                         // 입력 시트가 완전히 닫힌 뒤에 나무위키 시트를 띄움 (겹쳐 띄우면 무시될 때가 있음)
                         try? await Task.sleep(for: .milliseconds(450))
@@ -1393,7 +1484,7 @@ struct BrowserView: View {
                     model.commentText = item
                 } label: {
                     Label("텍스트 선택", systemImage: "text.cursor")
-                        .font(.subheadline.weight(.semibold))
+                        .font(fonts.styleFont(.subheadline, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16).padding(.vertical, 10)
                         .background(Color.black.opacity(0.82), in: Capsule())
@@ -1417,7 +1508,11 @@ struct BrowserView: View {
         .onChangeCompat(of: Double(barCoverWidth) + (barMirrored ? 1000 : 0)) { _, _ in applyBarInset() }
         .onChangeCompat(of: router.barOverlayWidth) { _, _ in applyBarInset() }
         .onChangeCompat(of: router.barOverlayLeft) { _, _ in applyBarInset() }
-        .onChangeCompat(of: router.splitActive) { _, _ in applyBarInset() }
+        .onChangeCompat(of: router.splitActive) { _, _ in
+            applyBarInset()
+            model.applyFilters()
+            model.nudgeLayout()
+        }
         .onChangeCompat(of: compactRaw) { _, _ in settleCompact() }
     }
 
@@ -1428,7 +1523,7 @@ struct BrowserView: View {
                     ProgressView()
                     Text("전체 페이지 캡처 중…")
                 }
-                .font(.subheadline)
+                .font(fonts.styleFont(.subheadline))
                 .padding(10)
                 .background(.thinMaterial, in: Capsule())
                 .padding(.top, 8)
@@ -1448,7 +1543,7 @@ struct BrowserView: View {
                     .font(.system(size: 19, weight: .medium))
                     .frame(height: 24)
                 if !compact {
-                    Text(currentAccount == nil ? "로그인" : "계정").font(.system(size: 11, weight: .semibold))
+                    Text(currentAccount == nil ? "로그인" : "계정").font(fonts.uiFont(size: 11, weight: .semibold, relativeTo: .caption2))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -1457,6 +1552,7 @@ struct BrowserView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .id("\(DCTheme.current.rawValue)-\(DCTheme.customHex)")
     }
 
     private var accountMenu: some View {
@@ -1522,7 +1618,7 @@ struct BrowserView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .font(.subheadline)
+                .font(fonts.styleFont(.subheadline))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(.thinMaterial)
@@ -1537,7 +1633,7 @@ struct BrowserView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                 }
-                .font(.subheadline)
+                .font(fonts.styleFont(.subheadline))
                 .padding(10)
                 .background(.thinMaterial)
                 .overlay(alignment: .top) { Divider() }
@@ -1552,7 +1648,7 @@ struct BrowserView: View {
                         .tint(.red)
                         .controlSize(.small)
                 }
-                .font(.subheadline)
+                .font(fonts.styleFont(.subheadline))
                 .padding(10)
                 .background(.thinMaterial)
                 .overlay(alignment: .top) { Divider() }
@@ -1584,7 +1680,7 @@ struct BrowserView: View {
                 if let b = titleParts.badge { badgeView(b) }
             }
         }
-            .font(.headline)
+            .font(fonts.styleFont(.headline))
             .foregroundStyle(.white)
             .contentShape(Rectangle())
             // 갤러리 이름을 0.5초 누르면 한손 모드 켜기/끄기
@@ -1646,7 +1742,7 @@ struct BrowserView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .font(.subheadline)
+                    .font(fonts.styleFont(.subheadline))
                     .foregroundStyle(.white)
                     .fixedSize()
                 }
@@ -1690,7 +1786,7 @@ struct BrowserView: View {
                             }
                             // ⋮ 메뉴: 설정에서 '상단바에 두기'를 켰을 때만 (아니면 컨트롤바 안)
                             if menuInTopBarShown {
-                                Menu { moreMenu } label: {
+                                MorePopoverButton { close in morePopover(dismiss: close) } label: {
                                     Image(systemName: "ellipsis")
                                         .rotationEffect(.degrees(90))
                                         .frame(width: Self.topSlotWidth, height: Self.topSlotWidth)
@@ -1923,7 +2019,11 @@ struct BrowserView: View {
     @State private var barMenuMode = false
     /// 나무위키 검색: 검색어 입력 시트 / 인앱 사파리로 열 주소
     @State private var showNamuSearch = false
+    /// 나무위키 입력 창에 미리 넣을 검색어 (지금은 항상 빈 칸으로 열림)
+    @State private var namuInitial = ""
     @State private var namuTarget: NamuTarget?
+    /// 글쓰기 버튼 한 번 탭을 기다리는 중인 작업 (기다리는 동안 두 번째 탭이 오면 퀵 글쓰기)
+    @State private var writeTapTask: Task<Void, Never>?
     @State private var barMenuChangedAt = Date.distantPast
     @State private var barMenuIdleSince = Date.distantPast
     @State private var galleryBarWidth: CGFloat = 0
@@ -2220,6 +2320,7 @@ struct BrowserView: View {
 
     private func updateBottomInset() {
         syncCommentPin()
+        model.syncTopInset()   // 위쪽 상단바 높이를 페이지에 넘김 (디시콘 정보 창이 바 밑으로 잘리지 않게)
         if splitListWidth != nil {
             // 분할 화면: 하단 바는 오른쪽(글) 화면 아래에 떠 있으므로 여백은 글 화면 쪽에 줌
             model.setBottomBarInset(0)
@@ -2361,20 +2462,28 @@ struct BrowserView: View {
             }
         case .write:
             barItem("square.and.pencil", "square.and.pencil", "글쓰기", selected: section == .write, enabled: g != nil) {
+                if let g { writeTapped(g) }      // 한 번: 일반 글쓰기 · 두 번: 퀵 글쓰기
+            }
+            // 길게 누르면 퀵 글쓰기 (글쓰기 화면 없이 제목·본문을 바로 등록)
+            .contextMenu {
                 if let g {
-                    model.focusTitleOnWrite = true      // 열리면 제목 칸에 바로 키보드
-                    model.load(g.writeURL)
+                    Button {
+                        router.quickWriteTarget = QuickWriteTarget(gallery: g, model: model)
+                        router.sheet = .quickWrite
+                    } label: {
+                        Label("퀵 글쓰기", systemImage: "bolt")
+                    }
                 }
             }
         case .menu:
             // ⋮ 메뉴 (상단바에서 컨트롤바로 옮김)
             let compact = compactSideBar
-            Menu { moreMenu } label: {
+            MorePopoverButton { close in morePopover(dismiss: close) } label: {
                 VStack(spacing: 2) {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 19, weight: .medium))
                         .frame(height: 24)
-                    if !compact { Text("설정").font(.system(size: 11, weight: .semibold)) }
+                    if !compact { Text("설정").font(fonts.uiFont(size: 11, weight: .semibold, relativeTo: .caption2)) }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, compact ? 10 : 7)
@@ -2382,6 +2491,24 @@ struct BrowserView: View {
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
+        }
+    }
+
+    /// 글쓰기 버튼: 한 번 탭하면 0.3초 기다렸다가 일반 글쓰기, 그 안에 한 번 더 탭하면 퀵 글쓰기 (글쓰기 화면 없이 바로 등록)
+    private func writeTapped(_ g: Gallery) {
+        if let pending = writeTapTask {
+            pending.cancel()
+            writeTapTask = nil
+            router.quickWriteTarget = QuickWriteTarget(gallery: g, model: model)
+            router.sheet = .quickWrite
+            return
+        }
+        writeTapTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            writeTapTask = nil
+            model.focusTitleOnWrite = true      // 열리면 제목 칸에 바로 키보드
+            model.load(g.writeURL)
         }
     }
 
@@ -2394,7 +2521,7 @@ struct BrowserView: View {
                     .frame(height: 24)
                 // 듀오 빈 줄 안에서는 글자를 빼서 막대를 짧게 (위쪽 애플 시계·와이파이 표시와 겹치지 않게)
                 if !compactSideBar {
-                    Text(title).font(.system(size: 11, weight: .semibold))
+                    Text(title).font(fonts.uiFont(size: 11, weight: .semibold, relativeTo: .caption2))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -2413,6 +2540,116 @@ struct BrowserView: View {
     }
 
     // MARK: - ⋮ 메뉴
+
+    private func morePopoverHeader(_ title: String) -> some View {
+        Text(title)
+            .font(fonts.styleFont(.caption))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+    }
+
+    private func morePopoverRow(_ title: String, systemImage: String, dismiss: @escaping () -> Void,
+                                action: @escaping () -> Void) -> some View {
+        Button {
+            dismiss()
+            action()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 16))
+                    .frame(width: 22)
+                    .foregroundStyle(.primary)
+                Text(title)
+                    .font(fonts.styleFont(.body))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 커스텀 팝오버 메뉴: 시스템 Menu 대신 SwiftUI 뷰로 띄워 선택한 글꼴이 그대로 적용됨
+    private func morePopover(dismiss: @escaping () -> Void) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                morePopoverRow("설정", systemImage: "gearshape", dismiss: dismiss) { router.sheet = .settings }
+                if !darkFollowSystem {
+                    morePopoverRow(darkMode ? "다크모드 끄기" : "다크모드 켜기",
+                                   systemImage: darkMode ? "sun.max" : "moon",
+                                   dismiss: dismiss) { DarkMode.toggle() }
+                }
+
+                Divider().padding(.vertical, 4)
+
+                if isPostPage {
+                    morePopoverRow(isPostSaved ? "보관한 글 (옮기기 / 빼기)" : "이 글 보관하기",
+                                   systemImage: isPostSaved ? "bookmark.fill" : "bookmark",
+                                   dismiss: dismiss) { bookmarkTapped() }
+                } else if currentGallery != nil {
+                    morePopoverRow(isFavorite ? "갤러리 즐겨찾기 해제" : "갤러리 즐겨찾기 추가",
+                                   systemImage: isFavorite ? "star.fill" : "star",
+                                   dismiss: dismiss) { toggleFavorite() }
+                }
+                if isPostPage {
+                    morePopoverRow("신고하기", systemImage: "exclamationmark.bubble", dismiss: dismiss) { model.reportPost() }
+                } else if currentGallery != nil {
+                    morePopoverRow("갤러리 공지 보기", systemImage: "megaphone", dismiss: dismiss) { model.openNotice() }
+                    morePopoverRow("갤러리 정보 보기", systemImage: "info.circle", dismiss: dismiss) { model.openGalleryInfo() }
+                }
+                if currentGallery != nil {
+                    morePopoverRow("갤러리 관리 내역", systemImage: "list.bullet.clipboard", dismiss: dismiss) { model.openManageLog() }
+                }
+                if footerGalleryID != nil {
+                    morePopoverRow("꼬릿말 설정", systemImage: "text.append", dismiss: dismiss) { showFooterEditor = true }
+                }
+                if let url = model.url {
+                    morePopoverRow("링크 공유", systemImage: "link", dismiss: dismiss) { model.share(shareTarget ?? url) }
+                }
+
+                Divider().padding(.vertical, 4)
+                morePopoverHeader("캡처")
+                morePopoverRow("보이는 화면 캡처", systemImage: "camera.viewfinder", dismiss: dismiss) {
+                    Task { await model.captureVisible() }
+                }
+                morePopoverRow("전체 페이지 캡처", systemImage: "doc.viewfinder", dismiss: dismiss) {
+                    Task { await model.captureFullPage() }
+                }
+
+                Divider().padding(.vertical, 4)
+                morePopoverHeader("차단")
+                morePopoverRow(model.isBlockPickMode ? "탭해서 차단 끝내기" : "탭해서 유저 차단",
+                               systemImage: "hand.tap", dismiss: dismiss) {
+                    model.setBlockPickMode(!model.isBlockPickMode)
+                }
+                morePopoverRow("차단 설정 가기", systemImage: "hand.raised", dismiss: dismiss) {
+                    router.settingsAnchor = "block"
+                    router.sheet = .settings
+                }
+
+                Divider().padding(.vertical, 4)
+                morePopoverHeader("화면 정리")
+                morePopoverRow(model.isPickMode ? "요소 숨기기 끝내기" : "요소 숨기기",
+                               systemImage: "eye.slash", dismiss: dismiss) {
+                    model.setPickMode(!model.isPickMode)
+                }
+
+                if showDiagnoseMenu {
+                    Divider().padding(.vertical, 4)
+                    morePopoverRow("페이지 구조 진단", systemImage: "stethoscope", dismiss: dismiss) {
+                        Task { diagnosticText = await model.diagnose() }
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .frame(width: 260)
+        .frame(maxHeight: 520)
+    }
 
     @ViewBuilder
     private var moreMenu: some View {
@@ -2448,6 +2685,9 @@ struct BrowserView: View {
             } else if currentGallery != nil {
                 Button { model.openNotice() } label: {
                     Label("갤러리 공지 보기", systemImage: "megaphone")
+                }
+                Button { model.openGalleryInfo() } label: {
+                    Label("갤러리 정보 보기", systemImage: "info.circle")
                 }
             }
             if currentGallery != nil {
@@ -2574,6 +2814,13 @@ struct BrowserView: View {
                 }
             }
         }
+        // 본문 사진 위 디시 기본 '댓글' 버튼 보임/숨김 (설정 → 세부 설정과 같은 값, Profile.defaults)
+        let commentHidden = Profile.defaults.bool(forKey: "hideImgCommentButton")
+        Button(commentHidden ? "사진 댓글 버튼 보이기" : "사진 댓글 버튼 숨기기") {
+            Profile.defaults.set(!commentHidden, forKey: "hideImgCommentButton")
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+            model.showToast(commentHidden ? "사진 댓글 버튼을 보여요" : "사진 댓글 버튼을 숨겼어요")
+        }
         Button("취소", role: .cancel) {}
     }
 
@@ -2586,10 +2833,16 @@ struct BrowserView: View {
                 model.showToast("\(u.memo.isEmpty ? u.value : u.memo) 차단을 풀었어요")
             }
         }
-        if filters.isDcconBlocked(req.dcconKey) {
+        if filters.settings.dccons.contains(where: { $0.key == req.dcconKey }) {
             Button("디시콘 차단 해제") {
                 filters.removeDccon(key: req.dcconKey)
                 model.showToast("디시콘 차단을 풀었어요")
+            }
+        }
+        if let p = filters.dcconPackage(containing: req.dcconKey) {
+            Button("디시콘 패키지 차단 해제: \(p.name.isEmpty ? p.pkg : p.name)") {
+                filters.removeDcconPackage(pkg: p.pkg)
+                model.showToast("디시콘 패키지 차단을 풀었어요")
             }
         }
         ForEach(filters.blockedKeywords(in: req.snippet, gallery: currentGallery?.id)) { k in
@@ -2628,6 +2881,9 @@ struct BrowserView: View {
                 filters.addDccon(key: req.dcconKey, imageURL: req.dcconSrc)
                 model.showToast("디시콘을 차단했어요")
             }
+            Button("이 디시콘 패키지 전체 차단", role: .destructive) {
+                blockDcconPackage(req)
+            }
         }
         Button("키워드로 차단…") {
             keywordInput = ""
@@ -2637,6 +2893,20 @@ struct BrowserView: View {
         memoButton(req)
         gallogButton(req)
         Button("취소", role: .cancel) {}
+    }
+
+    /// 길게 누른 디시콘이 속한 패키지 전체를 차단 (디시 목록에서 패키지와 디시콘 번호들을 찾아 저장)
+    private func blockDcconPackage(_ req: BlockRequest) {
+        model.showToast("디시콘 패키지를 찾는 중이에요")
+        Task { @MainActor in
+            guard let p = await model.dcconPackage(forKey: req.dcconKey) else {
+                model.showToast("이 디시콘의 패키지를 찾지 못했어요. 이 디시콘만 차단해 주세요")
+                return
+            }
+            let keys = p.keys.isEmpty ? [req.dcconKey] : p.keys
+            filters.addDcconPackage(pkg: p.pkg, name: p.name, keys: keys)
+            model.showToast("디시콘 패키지 '\(p.name.isEmpty ? p.pkg : p.name)' 전체를 차단했어요 (\(keys.count)개)")
+        }
     }
 
     /// 디시 메뉴에 있던 '작성글 검색' (이 갤러리에서 글쓴이로 검색)
@@ -2660,7 +2930,7 @@ struct BrowserView: View {
     @ViewBuilder
     private func gallogButton(_ req: BlockRequest) -> some View {
         if !req.userID.isEmpty, let url = URL(string: "https://m.dcinside.com/gallog/\(req.userID)") {
-            Button("갤로그 가기") { model.load(url) }
+            Button("갤로그 가기") { router.open(url) }
         }
     }
 
@@ -2742,6 +3012,7 @@ extension ToolbarContent {
 
 /// 페이지 구조 진단 결과 (차단이 잘 안 될 때 이 내용을 복사해서 보내주면 선택자를 맞출 수 있어요)
 struct DiagnosticView: View {
+    @ObservedObject var fonts = FontStore.shared
     let text: String
     @Environment(\.dismiss) private var dismiss
 
@@ -3021,10 +3292,11 @@ private struct SplitBottom: ViewModifier {
 
 /// 가로 띠 왼쪽 끝의 시계 (TimelineView로 1분마다 다시 그림)
 private struct BandClockText: View {
+    @ObservedObject var fonts = FontStore.shared
     var body: some View {
         TimelineView(.everyMinute) { ctx in
             Text(ctx.date, style: .time)
-                .font(.system(size: 13, weight: .semibold))
+                .font(fonts.uiFont(size: 13, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -3034,13 +3306,14 @@ private struct BandClockText: View {
 
 /// 가로 띠 오른쪽 끝의 배터리 (배터리 값이 바뀌면 알림으로 갱신)
 private struct BandBatteryText: View {
+    @ObservedObject var fonts = FontStore.shared
     @State private var level: Float = UIDevice.current.batteryLevel
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "battery.100")
             Text(level < 0 ? "--" : "\(Int((level * 100).rounded()))%")
         }
-        .font(.system(size: 12, weight: .semibold))
+        .font(fonts.uiFont(size: 12, weight: .semibold))
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .onAppear {
@@ -3062,17 +3335,18 @@ enum ListBarMetrics {
 
 /// 알림 말풍선: 첫 줄은 제목(굵게), 나머지 줄은 설명 ("\n"으로 구분). 여러 줄이어도 둥근 사각형 안에서 가운데 정렬
 struct ToastBubble: View {
+    @ObservedObject var fonts = FontStore.shared
     let text: String
 
     var body: some View {
         let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         VStack(spacing: 4) {
             Text(lines.first ?? "")
-                .font(.subheadline.weight(.semibold))
+                .font(fonts.styleFont(.subheadline, weight: .semibold))
                 .multilineTextAlignment(.center)
             if lines.count > 1 {
                 Text(lines.dropFirst().joined(separator: "\n"))
-                    .font(.footnote)
+                    .font(fonts.styleFont(.footnote))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -3112,11 +3386,12 @@ struct ToastOverlay: View {
 
 /// 429로 막힌 댓글을 자동으로 다시 누르는 동안 떠 있는 말풍선: 톱니바퀴 + 문구 (댓글이 달리거나 멈출 때까지 계속)
 struct RetryingBubble: View {
+    @ObservedObject var fonts = FontStore.shared
     var body: some View {
         HStack(spacing: 10) {
             ProgressView()
             Text("댓글을 다는 중입니다")
-                .font(.subheadline.weight(.semibold))
+                .font(fonts.styleFont(.subheadline, weight: .semibold))
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -3156,5 +3431,71 @@ struct BrowserCovers: View {
                 }
                 .presentationBackgroundCompat(Color.black.opacity(0.4))   // 뒤 화면을 어둡게 (실시간 흐림 효과는 웹뷰 위에서 끌 때 버벅여서 뺌)
             }
+            // 투표 보기 사진: 디시 전체 화면 대신 적당한 크기의 앱 창
+            .sheet(item: $model.votePreview) { item in
+                VoteImagePreviewSheet(item: item)
+            }
+    }
+}
+
+/// 시스템 Menu 대신 커스텀 SwiftUI 팝오버를 띄워 선택한 글꼴이 그대로 적용되도록 하는 버튼
+private struct MorePopoverButton<Label: View, MenuContent: View>: View {
+    @State private var open = false
+    @ViewBuilder let menuContent: (@escaping () -> Void) -> MenuContent
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Button { open = true } label: { label() }
+            .popover(isPresented: $open) {
+                menuContent { open = false }
+                    .popoverAdaptationCompat()
+            }
+    }
+}
+
+/// 429 "너무 많은 요청으로 이용하실 수 없습니다" 전용 안내 오버레이 (다크모드·테마색 지원)
+private struct RateLimitOverlayView: View {
+    let tries: Int
+    let onRetry: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(uiColor: .systemBackground).ignoresSafeArea()
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(DCTheme.accent.opacity(0.12))
+                        .frame(width: 68, height: 68)
+                    Image(systemName: "clock.arrow.2.circlepath")
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(DCTheme.accent)
+                }
+                VStack(spacing: 6) {
+                    Text("잠시 요청이 몰려 있어요")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("디시인사이드에서 일시적으로 접속을 제한하고 있어요.\n정상화될 때까지 자동으로 다시 불러오는 중이에요.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("자동 재시도 중… (\(max(1, tries))회)")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 2)
+                Button("지금 다시 시도", action: onRetry)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(DCTheme.accent)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(DCTheme.accent.opacity(0.12), in: Capsule())
+                    .padding(.top, 4)
+            }
+            .padding(.horizontal, 28)
+        }
     }
 }

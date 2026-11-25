@@ -241,6 +241,7 @@ struct AlarmsScreen: View {
 
 /// 갤러리 창 → 읽은 글
 struct ReadPostsList: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = ReadPostStore.shared
     @EnvironmentObject private var router: AppRouter
     @State private var confirmAll = false
@@ -256,7 +257,7 @@ struct ReadPostsList: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(p.title.isEmpty ? p.key : p.title).foregroundStyle(.primary).lineLimit(2)
                             Text("\(GalleryNames.name(PostKey.gallery(p.key))) · \(p.date.shortKorean)")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                     .swipeActions {
@@ -303,6 +304,7 @@ struct ReadPostsList: View {
 
 /// 갤러리 창 → 작성한 글 / 댓글 작성한 글 (쓸 때의 계정·유동 닉네임·IP로 골라 보기)
 struct WrittenList: View {
+    @ObservedObject var fonts = FontStore.shared
     let kind: WrittenItem.Kind
     @ObservedObject private var store = WrittenStore.shared
     @EnvironmentObject private var router: AppRouter
@@ -325,10 +327,10 @@ struct WrittenList: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(it.title.isEmpty ? it.key : it.title).foregroundStyle(.primary).lineLimit(2)
                             if kind == .comment, !it.snippet.isEmpty {
-                                Text("💬 " + it.snippet).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                                Text("💬 " + it.snippet).font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary).lineLimit(2)
                             }
                             Text("\(GalleryNames.name(PostKey.gallery(it.key))) · \(it.date.shortKorean) · \(it.who.label)")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                         }
                     }
                     .swipeActions {

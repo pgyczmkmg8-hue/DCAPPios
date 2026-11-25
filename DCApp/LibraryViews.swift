@@ -9,6 +9,7 @@ enum PostFolderFilter: Hashable {
 }
 
 struct SavedPostsList: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = SavedPostStore.shared
     @EnvironmentObject private var favorites: FavoritesStore
     @EnvironmentObject private var router: AppRouter
@@ -50,7 +51,7 @@ struct SavedPostsList: View {
                                     Image(systemName: "arrow.down.circle.fill").foregroundStyle(.green)
                                 }
                             }
-                            .font(.caption)
+                            .font(fonts.styleFont(.caption))
                             .foregroundStyle(.secondary)
                         }
                     }
@@ -141,7 +142,7 @@ struct SavedPostsList: View {
                     showNewFolder = true
                 } label: {
                     Label("새 폴더", systemImage: "folder.badge.plus")
-                        .font(.subheadline)
+                        .font(fonts.styleFont(.subheadline))
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [4])))
                 }
@@ -155,7 +156,7 @@ struct SavedPostsList: View {
     private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.subheadline.weight(selected ? .semibold : .regular))
+                .font(fonts.styleFont(.subheadline, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? Color.white : Color.primary)
                 .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(selected ? DCTheme.navy : Color.secondary.opacity(0.12), in: Capsule())
@@ -214,6 +215,7 @@ struct ArchiveWebView: UIViewRepresentable {
 // MARK: - 임시저장 목록
 
 struct DraftRow: View {
+    @ObservedObject var fonts = FontStore.shared
     let draft: Draft
 
     var body: some View {
@@ -224,7 +226,7 @@ struct DraftRow: View {
                     .lineLimit(1)
                 if draft.isAuto {
                     Text("자동")
-                        .font(.caption2.bold())
+                        .font(fonts.styleFont(.caption2, weight: .bold))
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.tint.opacity(0.15), in: Capsule())
                         .foregroundStyle(.tint)
@@ -232,12 +234,12 @@ struct DraftRow: View {
             }
             if !draft.preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(draft.preview)
-                    .font(.caption)
+                    .font(fonts.styleFont(.caption))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             Text("\(draft.galleryID) · \(draft.updatedAt.shortKorean)" + (draft.imageCount > 0 ? " · 사진 \(draft.imageCount)장" : ""))
-                .font(.caption2)
+                .font(fonts.styleFont(.caption2))
                 .foregroundStyle(.tertiary)
         }
     }

@@ -186,6 +186,7 @@ final class GalleryLiveSearch: ObservableObject {
 
 /// 실시간 갤러리 검색 결과 섹션 (List 안에서 씀). 즐겨찾기·방문 갤러리와 겹치는 것은 빼서 중복을 막음
 struct GalleryLiveResults: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject var live: GalleryLiveSearch
     /// 이미 위에 보여 준 로컬 갤러리 ID (앞머리 뗀 것)
     let excluded: Set<String>
@@ -205,7 +206,7 @@ struct GalleryLiveResults: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(hit.title).foregroundStyle(.primary)
                                 Text("\(hit.typeLabel) · \(hit.galleryID)")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                             }
                             Spacer()
                         }
@@ -219,7 +220,7 @@ struct GalleryLiveResults: View {
                 }
                 if live.failed {
                     Text("디시 갤러리 목록을 못 받았어요. 아래 버튼으로 디시 검색을 열 수 있어요.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                 }
             }
         }

@@ -92,6 +92,7 @@ final class PhotoGridModel: NSObject, ObservableObject, PHPhotoLibraryChangeObse
 }
 
 struct PhotoGridPicker: View {
+    @ObservedObject var fonts = FontStore.shared
     let maxCount: Int
     /// 고른 사진 (고른 순서대로)
     let onPick: ([PHAsset]) -> Void
@@ -142,7 +143,7 @@ struct PhotoGridPicker: View {
             .overlay {
                 VStack(spacing: 6) {
                     Image(systemName: "camera.fill").font(.system(size: 28))
-                    Text("촬영").font(.caption.weight(.semibold))
+                    Text("촬영").font(fonts.styleFont(.caption, weight: .semibold))
                 }
                 .foregroundStyle(.primary)
             }
@@ -155,7 +156,7 @@ struct PhotoGridPicker: View {
     private var header: some View {
         HStack {
             Button("취소") { dismiss() }
-                .font(.title3)
+                .font(fonts.styleFont(.title3))
                 .frame(minWidth: 70, minHeight: 44, alignment: .leading)
             Spacer(minLength: 8)
             albumMenu
@@ -165,7 +166,7 @@ struct PhotoGridPicker: View {
                 dismiss()
                 onPick(list)
             }
-            .font(.title3.weight(.semibold))
+            .font(fonts.styleFont(.title3, weight: .semibold))
             .disabled(selected.isEmpty)
             .frame(minWidth: 70, minHeight: 44, alignment: .trailing)
         }
@@ -183,7 +184,7 @@ struct PhotoGridPicker: View {
                 grid
                 if cameraNotice {
                     Text("찍은 사진을 글에 넣었어요")
-                        .font(.footnote)
+                        .font(fonts.styleFont(.footnote))
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(.thinMaterial)
@@ -191,7 +192,7 @@ struct PhotoGridPicker: View {
                 }
                 if limitNotice {
                     Text("사진은 \(maxCount)장까지 고를 수 있어요")
-                        .font(.footnote)
+                        .font(fonts.styleFont(.footnote))
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity)
                         .background(.thinMaterial)
@@ -224,7 +225,7 @@ struct PhotoGridPicker: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text(model.album?.title ?? "사진").font(.title3.weight(.semibold))
+                Text(model.album?.title ?? "사진").font(fonts.styleFont(.title3, weight: .semibold))
                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(.primary)
@@ -235,7 +236,7 @@ struct PhotoGridPicker: View {
     private var limitedBar: some View {
         HStack {
             Text("고른 사진만 보여요")
-                .font(.footnote)
+                .font(fonts.styleFont(.footnote))
                 .foregroundStyle(.secondary)
             Spacer()
             Button("사진 더 보이게") {
@@ -245,7 +246,7 @@ struct PhotoGridPicker: View {
                     PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: top)
                 }
             }
-            .font(.footnote.weight(.semibold))
+            .font(fonts.styleFont(.footnote, weight: .semibold))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -308,6 +309,7 @@ struct PhotoGridPicker: View {
 }
 
 private struct PhotoGridCell: View {
+    @ObservedObject var fonts = FontStore.shared
     let asset: PHAsset
     let manager: PHCachingImageManager
     let order: Int?
@@ -330,7 +332,7 @@ private struct PhotoGridCell: View {
             .overlay(alignment: .bottomLeading) {
                 if asset.playbackStyle == .imageAnimated {
                     Text("GIF")
-                        .font(.caption2.bold())
+                        .font(fonts.styleFont(.caption2, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4).padding(.vertical, 1)
                         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 3))
@@ -348,7 +350,7 @@ private struct PhotoGridCell: View {
     @ViewBuilder private var badge: some View {
         if let order {
             Text("\(order)")
-                .font(.system(size: 13, weight: .bold))
+                .font(fonts.uiFont(size: 13, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 24, height: 24)
                 .background(DCTheme.accent, in: Circle())

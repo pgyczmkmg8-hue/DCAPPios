@@ -32,6 +32,11 @@ enum AdBlock {
         // 국내 광고 네트워크
         "dable.io", "mobon.net", "realclick.co.kr", "tenping.kr", "adpnut.com", "adop.cc",
         "display.ad.daum.net", "adcr.naver.com", "siape.veta.naver.com", "ad.about.co.kr",
+        // 나무위키 등에서 실제로 나오는 광고 네트워크 (헤더 입찰·광고 동기화 포함)
+        "hb.vntsm.com", "vntsm.com", "affec.tv", "ccgateway.net", "3lift.com", "adsrvr.org",
+        "fastclick.net", "liadm.com", "id5-sync.com",
+        // 네이버 검색 광고(파워링크) 서버
+        "ad.search.naver.com", "searchad.naver.com",
         // 디시 자체 광고 서버
         "addc.dcinside.com", "ads.dcinside.com", "ad.dcinside.com",
     ]
@@ -60,6 +65,7 @@ enum AdBlock {
     /// 웹뷰에 차단 규칙 적용 (끄면 빼기). 처음 한 번은 규칙을 컴파일함
     static func apply(to controller: WKUserContentController) {
         controller.removeAllContentRuleLists()
+        DeferredImages.attach(to: controller)      // 본문 이미지 숨기기(눌러서 불러오기)는 광고 차단과 따로 켜짐
         guard active else { return }
         // 원격 필터(애드가드 디시 필터)의 차단 목록: 캐시가 있고 컴파일이 끝난 조각만 붙임 (기본 규칙과 함께 동작)
         for list in AdFilterStore.shared.ruleLists {

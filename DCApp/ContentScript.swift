@@ -86,7 +86,7 @@ enum ContentScript {
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-time:not(.dcapp-after-head){margin-left:auto}',
       'ul.gall-detail-lst > li ul.ginfo > li.dcapp-head-default{display:none!important}',
       // 페이지 구분선(더보기·당기기로 이어 붙인 페이지 앞): "N페이지 ───" 한 줄, 글자 12px 회색, 다크모드·듀오 안전 영역 대응
-      'ul.gall-detail-lst > li.dcapp-pg-sep{display:flex!important;align-items:center;gap:8px;list-style:none!important;margin:0!important;padding:8px 12px!important;border:0!important;background:transparent!important;color:#8a8f99!important;font-size:12px!important;line-height:1.2!important;box-sizing:border-box!important;min-height:0!important;height:auto!important}',
+      'ul.gall-detail-lst > li.dcapp-pg-sep{display:flex!important;align-items:center;gap:8px;list-style:none!important;margin:0!important;padding:8px 12px!important;border:0!important;background-color:transparent!important;color:#8a8f99!important;font-size:12px!important;line-height:1.2!important;box-sizing:border-box!important;min-height:0!important;height:auto!important}',
       'ul.gall-detail-lst > li.dcapp-pg-sep > span{flex:0 0 auto;font-weight:600}',
       'ul.gall-detail-lst > li.dcapp-pg-sep::after{content:"";flex:1 1 auto;height:1px;background:var(--dcapp-hl)}',
       'html.darkmode ul.gall-detail-lst > li.dcapp-pg-sep{color:#9aa0ab!important}',
@@ -99,12 +99,12 @@ enum ContentScript {
       'ul.gall-detail-lst + ul.gall-detail-lst,.detail-sel-box + .gall-detail-lst{border-top-color:transparent!important}',
       'ul.gall-detail-lst{border-bottom:0!important}',
       // 글 종류 아이콘: 이미지 없는 글은 문서, 사진·영상 글은 단색 사진·영상 (디시 초록 스프라이트 대신). 색은 글자색을 따라감
-      'ul.gall-detail-lst > li .sp-lst-txt,ul.gall-detail-lst > li .sp-lst-recotxt{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTQgMS43NWg1LjFMMTIuNzUgNS40VjEzLjVhLjc1Ljc1IDAgMCAxLS43NS43NUg0YS43NS43NSAwIDAgMS0uNzUtLjc1VjIuNUEuNzUuNzUgMCAwIDEgNCAxLjc1WiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik02IDguMjVoNE02IDEwLjc1aDQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==)}',
-      'ul.gall-detail-lst > li .sp-lst-img,ul.gall-detail-lst > li .sp-lst-recoimg{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48Y2lyY2xlIGN4PSI1LjYiIGN5PSI2LjIiIHI9IjEuMjUiIGZpbGw9IiMwMDAiLz48cGF0aCBkPSJNMi42IDEyLjJsMy40LTMuMyAyLjIgMi4xIDEuNi0xLjUgMy42IDIuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==)}',
-      'ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-recoplay,ul.gall-detail-lst > li .sp-lst-mov,ul.gall-detail-lst > li .sp-lst-recommov{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48cGF0aCBkPSJNNi42IDUuNnY0LjhsMy45LTIuNHoiIGZpbGw9IiMwMDAiLz48L3N2Zz4=)}',
-      'ul.gall-detail-lst > li .sp-lst-txt,ul.gall-detail-lst > li .sp-lst-recotxt,ul.gall-detail-lst > li .sp-lst-img,ul.gall-detail-lst > li .sp-lst-recoimg,ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-recoplay,ul.gall-detail-lst > li .sp-lst-mov,ul.gall-detail-lst > li .sp-lst-recommov{background:none!important;display:block!important;width:14px!important;height:14px!important;font-size:0!important;line-height:0!important;overflow:hidden!important;color:#7a808c!important;top:50%!important;transform:translateY(-50%)!important}',
-      'ul.gall-detail-lst > li .sp-lst-txt::before,ul.gall-detail-lst > li .sp-lst-recotxt::before,ul.gall-detail-lst > li .sp-lst-img::before,ul.gall-detail-lst > li .sp-lst-recoimg::before,ul.gall-detail-lst > li .sp-lst-play::before,ul.gall-detail-lst > li .sp-lst-recoplay::before,ul.gall-detail-lst > li .sp-lst-mov::before,ul.gall-detail-lst > li .sp-lst-recommov::before{content:"";display:block;width:100%;height:100%;background:currentColor;-webkit-mask:var(--dcapp-ico) center/contain no-repeat;mask:var(--dcapp-ico) center/contain no-repeat}',
-      'html.darkmode ul.gall-detail-lst > li .sp-lst-txt,html.darkmode ul.gall-detail-lst > li .sp-lst-recotxt,html.darkmode ul.gall-detail-lst > li .sp-lst-img,html.darkmode ul.gall-detail-lst > li .sp-lst-recoimg,html.darkmode ul.gall-detail-lst > li .sp-lst-play,html.darkmode ul.gall-detail-lst > li .sp-lst-recoplay,html.darkmode ul.gall-detail-lst > li .sp-lst-mov,html.darkmode ul.gall-detail-lst > li .sp-lst-recommov{color:#a3a9b6!important}',
+      'ul.gall-detail-lst > li .sp-lst-txt{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZD0iTTQgMS43NWg1LjFMMTIuNzUgNS40VjEzLjVhLjc1Ljc1IDAgMCAxLS43NS43NUg0YS43NS43NSAwIDAgMS0uNzUtLjc1VjIuNUEuNzUuNzUgMCAwIDEgNCAxLjc1WiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuNCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik02IDguMjVoNE02IDEwLjc1aDQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPg==)}',
+      'ul.gall-detail-lst > li .sp-lst-img{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48Y2lyY2xlIGN4PSI1LjYiIGN5PSI2LjIiIHI9IjEuMjUiIGZpbGw9IiMwMDAiLz48cGF0aCBkPSJNMi42IDEyLjJsMy40LTMuMyAyLjIgMi4xIDEuNi0xLjUgMy42IDIuNyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEuMyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==)}',
+      'ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-mov{--dcapp-ico:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHJlY3QgeD0iMS43NSIgeT0iMi43NSIgd2lkdGg9IjEyLjUiIGhlaWdodD0iMTAuNSIgcng9IjIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIxLjQiLz48cGF0aCBkPSJNNi42IDUuNnY0LjhsMy45LTIuNHoiIGZpbGw9IiMwMDAiLz48L3N2Zz4=)}',
+      'ul.gall-detail-lst > li .sp-lst-txt,ul.gall-detail-lst > li .sp-lst-img,ul.gall-detail-lst > li .sp-lst-play,ul.gall-detail-lst > li .sp-lst-mov{background:none!important;display:block!important;width:14px!important;height:14px!important;font-size:0!important;line-height:0!important;overflow:hidden!important;color:#7a808c!important;top:50%!important;transform:translateY(-50%)!important}',
+      'ul.gall-detail-lst > li .sp-lst-txt::before,ul.gall-detail-lst > li .sp-lst-img::before,ul.gall-detail-lst > li .sp-lst-play::before,ul.gall-detail-lst > li .sp-lst-mov::before{content:"";display:block;width:100%;height:100%;background:currentColor;-webkit-mask:var(--dcapp-ico) center/contain no-repeat;mask:var(--dcapp-ico) center/contain no-repeat}',
+      'html.darkmode ul.gall-detail-lst > li .sp-lst-txt,html.darkmode ul.gall-detail-lst > li .sp-lst-img,html.darkmode ul.gall-detail-lst > li .sp-lst-play,html.darkmode ul.gall-detail-lst > li .sp-lst-mov{color:#a3a9b6!important}',
       '#dcapp-headbar #dcapp-filterbtn{flex:0 0 auto;border:0;margin:6px 4px 6px 0;padding:0 7px;height:30px;border-radius:999px;background:transparent;color:#5b6170;display:flex;align-items:center;justify-content:center;-webkit-appearance:none}',
       '#dcapp-headbar #dcapp-filterbtn svg{width:19px;height:19px;display:block}',
       '#dcapp-headbar #dcapp-filterbtn.dcapp-on{background:rgba(59,72,144,.12);color:#3b4890}',
@@ -118,7 +118,7 @@ enum ContentScript {
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt{display:block!important;width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important;box-sizing:border-box!important}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .gall-detail-lnktb,ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .gall-detail-lnk{width:100%!important;max-width:none!important;box-sizing:border-box!important}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .subject-add{max-width:100%!important}',
-      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .subjectin{max-width:100%!important;box-sizing:border-box!important;flex:1 1 auto!important;min-width:0!important}',
+      'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li .subjectin{max-width:100%!important;box-sizing:border-box!important;flex:0 1 auto!important;min-width:0!important}',
       'svg.dcapp-cmt-ico{width:12px!important;height:12px!important;flex:none!important;display:block!important}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt .subject-add{padding-right:72px!important;box-sizing:border-box!important}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{position:absolute!important;top:6px!important;right:12px!important;display:block!important;width:auto!important;min-width:0!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important;text-align:right!important;white-space:nowrap!important;line-height:1!important;vertical-align:middle!important}',
@@ -126,8 +126,9 @@ enum ContentScript {
       // 듀오 외부 화면: 안전 영역(시계·독 쪽) 안쪽으로 같은 오른쪽 끝선 (dcapp-duoflip은 안전 영역이 왼쪽에 있어 left 기준)
       'html.dcapp-duocol ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{right:calc(12px + env(safe-area-inset-right))!important}',
       'html.dcapp-duocol ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{right:calc(12px + env(safe-area-inset-right))!important}',
-      'html.dcapp-duoflip ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{right:calc(12px + env(safe-area-inset-left))!important}',
-      'html.dcapp-duoflip ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{right:calc(12px + env(safe-area-inset-left))!important}',
+      // 뒤집힌 옆 줄의 오른쪽 여백은 화면 오른쪽 끝에 닿을 때만 (분할 화면의 왼쪽 목록은 닿지 않으니 붙이지 않음 → 오른쪽 요소가 밀리지 않음)
+      'html.dcapp-duoflip-r ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge{right:calc(12px + env(safe-area-inset-left))!important}',
+      'html.dcapp-duoflip-r ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.lt ul.ginfo > li.dcapp-time{right:calc(12px + env(safe-area-inset-left))!important}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge .ct{display:inline-flex!important;align-items:center;justify-content:center;gap:3px;height:20px;box-sizing:border-box;padding:0 7px 0 6px!important;margin:0!important;border-radius:999px;background:rgba(59,72,144,.09)!important;color:#3b4890!important;font-size:12px!important;font-weight:600!important;line-height:1!important;vertical-align:middle}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge .ct svg{width:12px;height:12px;flex:none;display:block}',
       'ul.gall-detail-lst:not(.thum):not(.sch-comment) > li a.rt.dcapp-cmtbadge.dcapp-cmt-zero .ct{background:rgba(0,0,0,.04)!important;color:#9aa0ab!important;font-weight:400!important}',
@@ -147,7 +148,7 @@ enum ContentScript {
       'html.dcapp-duocol #dcapp-headbar,html.dcapp-duoflip #dcapp-headbar{padding-left:calc(6px + env(safe-area-inset-left))!important}',
       '#dcapp-headbar .dcapp-hscroll::after{content:"";flex:0 0 6px}',
       'html.dcapp-duocol #dcapp-headbar .dcapp-hscroll::after{flex:0 0 calc(6px + env(safe-area-inset-right))}',
-      'html.dcapp-duoflip #dcapp-headbar .dcapp-hscroll::after{flex:0 0 calc(6px + env(safe-area-inset-left))}',
+      'html.dcapp-duoflip-r #dcapp-headbar .dcapp-hscroll::after{flex:0 0 calc(6px + env(safe-area-inset-left))}',
       '.dcapp-cmt{margin-left:.3em;color:rgb(41,121,255)!important;font-weight:600;white-space:nowrap}',
       // 오른쪽 댓글 칸을 없앤 자리까지 제목이 쓰도록
       '.gall-detail-lnk:has(> .rt.dcapp-hide) > .lt{width:100%!important;max-width:none!important;padding-right:0!important;margin-right:0!important}',
@@ -170,7 +171,9 @@ enum ContentScript {
       '.dcapp-dory{display:none!important}',
       // 메모: 상자 없이 글자만 (닉네임 뒤에 주황 글씨)
       // 글목록: 닉네임 칸의 오른쪽 여백을 빼서 메모와의 간격을 글·댓글과 같게
-      'ul.ginfo > li.list-nick:has(+ .dcapp-memo){padding-right:0!important}',
+      // 글목록: 고닉 아이콘 뒤 구분선 | (li.list-nick::after, 오른쪽 6px) 자리를 비워 아이콘과 겹치지 않게 하고, 메모는 구분선 바로 뒤에 붙임
+      'ul.ginfo > li.list-nick:has(+ .dcapp-memo){padding-right:10px!important}',
+      'ul.gall-detail-lst > li ul.ginfo > .dcapp-memo{margin-left:4px!important}',
       '.dcapp-memo{display:inline;margin:0 8px 0 8px;padding:0;background:none;border-radius:0;font-size:12px;color:#c56a00;font-weight:normal;white-space:nowrap}',
       'html.darkmode .dcapp-memo{color:#ffaa45}',
       // 글 제목 블록: 폴더(스크랩)·갤로그 가기 숨김, 닉네임 아래 한 줄에 조회수|추천|작성일, 오른쪽에 댓글 수 칸
@@ -206,18 +209,67 @@ enum ContentScript {
       'html.dcapp-duocol::before{content:"";position:fixed;top:0;bottom:0;right:0;width:env(safe-area-inset-right);z-index:2147483646;touch-action:none;pointer-events:auto}',
       'html.dcapp-duocol::after{content:"";position:fixed;top:0;bottom:0;left:0;width:env(safe-area-inset-left);z-index:2147483646;touch-action:none;pointer-events:auto}',
       // 돌려서 줄이 왼쪽에 생긴 상태: 글자 여백은 왼쪽이 아니라 오른쪽으로 (컨트롤바가 오른쪽 여백에 들어가게)
-      'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      'html.dcapp-duoflip .gall-detail-lnktb,html.dcapp-duoflip .thum-txtin,html.dcapp-duoflip li.comment,html.dcapp-duoflip li.comment-add{border-left:0!important}',
+      'html.dcapp-duoflip-r .gall-detail-lnktb,html.dcapp-duoflip-r .thum-txtin,html.dcapp-duoflip-r li.comment,html.dcapp-duoflip-r li.comment-add{border-right:env(safe-area-inset-left) solid transparent!important}',
       // 글 아래 목록보기·수정·삭제 버튼 줄: 오른쪽 끝(삭제)이 세로 줄 터치 차단막 밑에 깔려 안 눌림 → 다른 글자칸처럼 줄 밖으로
       'html.dcapp-duocol .btn-justify-area{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
-      'html.dcapp-duoflip .btn-justify-area{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      'html.dcapp-duoflip .btn-justify-area{border-left:0!important}',
+      'html.dcapp-duoflip-r .btn-justify-area{border-right:env(safe-area-inset-left) solid transparent!important}',
       // 세로 컨트롤바가 페이지 위에 떠 있는 화면(일반 폰·아이패드·분할): 수정·삭제 줄을 바 폭만큼 비움 (앱이 --dcapp-bar-l/r 값을 넣어 줌)
-      '.dcapp-btnrow{box-sizing:border-box!important;border-left:var(--dcapp-bar-l,0px) solid transparent!important;border-right:var(--dcapp-bar-r,0px) solid transparent!important}',
-      'html.dcapp-duocol .dcapp-btnrow{box-sizing:border-box!important;border-left:env(safe-area-inset-left) solid transparent!important;border-right:env(safe-area-inset-right) solid transparent!important}',
-      'html.dcapp-duoflip .dcapp-btnrow{border-left:0!important;border-right:env(safe-area-inset-left) solid transparent!important}',
+      '.dcapp-btnrow,.view-btn-box,.gallview-btn-box{box-sizing:border-box!important;border-left:var(--dcapp-bar-l,0px) solid transparent!important;border-right:var(--dcapp-bar-r,0px) solid transparent!important}',
+      'html.dcapp-duocol .dcapp-btnrow,html.dcapp-duocol .view-btn-box,html.dcapp-duocol .gallview-btn-box{box-sizing:border-box!important;border-left:max(env(safe-area-inset-left),var(--dcapp-bar-l,0px)) solid transparent!important;border-right:max(env(safe-area-inset-right),var(--dcapp-bar-r,0px)) solid transparent!important}',
+      'html.dcapp-duoflip .dcapp-btnrow,html.dcapp-duoflip .view-btn-box,html.dcapp-duoflip .gallview-btn-box{border-left:var(--dcapp-bar-l,0px) solid transparent!important}',
+      'html.dcapp-duoflip-r .dcapp-btnrow,html.dcapp-duoflip-r .view-btn-box,html.dcapp-duoflip-r .gallview-btn-box{border-right:max(env(safe-area-inset-left),var(--dcapp-bar-r,0px)) solid transparent!important}',
       'html.dcapp-duoflip::before{width:env(safe-area-inset-left)!important}',
       // 화면 전체 폭으로 뜨는 창(디시콘 정보 등)은 세로 줄 밑으로 깔려 오른쪽 끝 버튼(사용·X)이 터치 차단막에 막힘 → 창 안쪽을 줄 밖으로 비움
       'html.dcapp-duocol .layer-center-popup.full{box-sizing:border-box!important;padding-left:env(safe-area-inset-left)!important;padding-right:env(safe-area-inset-right)!important}',
-      'html.dcapp-duoflip .layer-center-popup.full{padding-left:0!important;padding-right:env(safe-area-inset-left)!important}',
+      'html.dcapp-duoflip .layer-center-popup.full{padding-left:0!important}',
+      'html.dcapp-duoflip-r .layer-center-popup.full{padding-right:env(safe-area-inset-left)!important}',
+      // 디시콘 정보 창(#dcconPop, v353): 다른 띠·정렬바보다 위, 상단바 밑으로 안 잘리게(--dcapp-top), 앱 카드 모양, 설명과 스티커 사이 빈 간격 줄임
+      '#dcconPop.layer-center-popup{z-index:2147483647!important;padding-top:calc(var(--dcapp-top,0px) + 16px)!important;padding-bottom:16px!important;box-sizing:border-box!important;background-color:rgba(0,0,0,.4)!important;text-align:center!important}',
+      '#dcconPop.layer-center-popup::after{display:none!important}',
+      '#dcconPop .layer-popup-inner{display:block!important;vertical-align:top!important;width:calc(100% - 24px)!important;max-width:460px!important;margin:0 auto!important;background:#fff!important;border-radius:18px!important;overflow:hidden!important;box-shadow:0 12px 32px rgba(0,0,0,.2)!important;text-align:left!important;white-space:normal!important;font-size:14px!important}',
+      '#dcconPop .pp-box,#dcconPop .dccon-info-wrap{background:#fff!important;height:auto!important;min-height:0!important;padding-bottom:0!important}',
+      '#dcconPop .dccon-caption-box > *,#dcconPop .dccon-caption-box div{height:auto!important;min-height:0!important;max-height:none!important;padding-bottom:0!important;margin-bottom:0!important}',
+      '#dcconPop .dccon-caption-box br{display:none!important}',
+      '#dcconPop .dccon-caption-box + div:empty,#dcconPop .dccon-price-box:empty{display:none!important}',
+      '#dcconPop .pp-tit-box{border-bottom:0!important;padding:0!important}',
+      '#dcconPop .pp-tit2{padding:14px 56px 10px 18px!important;font-size:17px!important;font-weight:700!important;color:#222!important;letter-spacing:-.3px!important}',
+      '#dcconPop .pp-tit-box .rt{position:absolute!important;right:14px!important;top:14px!important;transform:none!important}',
+      '#dcconPop .btn-x-close{position:relative!important;display:block!important;width:30px!important;height:30px!important;border-radius:15px!important;background:#eef0f5!important;background-image:none!important;transform:none!important;overflow:hidden!important}',
+      '#dcconPop .btn-x-close::before,#dcconPop .btn-x-close::after{content:""!important;position:absolute!important;left:50%!important;top:50%!important;width:14px!important;height:2px!important;margin:-1px 0 0 -7px!important;background:#555!important;border-radius:1px!important;transform:rotate(45deg)!important}',
+      '#dcconPop .btn-x-close::after{transform:rotate(-45deg)!important}',
+      '#dcconPop .dccon-caption-box{background:#fff!important;padding:0 18px!important;border:0!important;height:auto!important;min-height:0!important;margin:0!important}',
+      '#dcconPop .dccon-caption-box .top-info{display:flex!important;align-items:flex-start!important;gap:14px!important;overflow:visible!important;height:auto!important;min-height:0!important;max-height:none!important;padding:0!important;margin:0!important}',
+      '#dcconPop .dccon-caption-box .top-info::after{display:none!important}',
+      '#dcconPop .dccon-caption-box .top-tit{flex:1 1 auto!important;min-width:0!important;height:auto!important;min-height:0!important;max-height:none!important;padding:0!important;margin:0!important}',
+      '#dcconPop .dccon-caption-box .thum-img{float:none!important;flex:0 0 88px!important;width:88px!important;height:88px!important;margin:0!important;border-radius:14px!important;overflow:hidden!important;background:#f2f2f7!important}',
+      '#dcconPop .dccon-caption-box .thum-img::after{display:none!important}',
+      '#dcconPop .dccon-caption-box .thum-img img{width:100%!important;height:100%!important;object-fit:contain!important}',
+      '#dcconPop .dccon-caption-box .top-tit .name{font-size:16px!important;font-weight:700!important;color:#222!important;margin:0!important;padding:0!important}',
+      '#dcconPop .dccon-caption-box .make{margin:4px 0 0!important;padding:0!important}',
+      '#dcconPop .dccon-caption-box .make span{font-size:12px!important;color:#8e8e93!important}',
+      '#dcconPop .dccon-caption-box .make .lnk{color:#3b4890!important;text-decoration:none!important}',
+      '#dcconPop .dccon-caption-box .txt{font-size:13px!important;color:#555!important;margin:6px 0 0!important;padding:0!important;height:auto!important;min-height:0!important;max-height:none!important;letter-spacing:-.2px!important}',
+      '#dcconPop .dccon-btn-box{position:static!important;margin:12px 0 0!important;padding:0 18px!important;height:auto!important;min-height:0!important;border-bottom:0!important;text-align:left!important;background:#fff!important}',
+      '#dcconPop .dccon-btn-box .btn-buy,#dcconPop .dccon-btn-box button{display:block!important;width:100%!important;height:38px!important;border:0!important;border-radius:12px!important;background:#3b4890!important;color:#fff!important;font-size:15px!important;font-weight:700!important;padding:0!important;letter-spacing:0!important}',
+      '#dcconPop .dccon-img-slider{padding:14px 10px 16px!important;height:auto!important;background:#fff!important}',
+      '#dcconPop #swiper-dccon-detail,#dcconPop .dccon-img-lst-wrap{height:auto!important}',
+      '#dcconPop .dccon-img-lst{height:auto!important;line-height:0!important;font-size:0!important;background:none!important}',
+      '#dcconPop .dccon-img-lst li{padding:6px!important}',
+      '#dcconPop .dccon-img-lst li .sm-img{display:block!important;border-radius:14px!important;overflow:hidden!important;background:#f7f7fa!important}',
+      '#dcconPop .dccon-img-lst li .sm-img img{border:0!important;border-radius:14px!important}',
+      '#dcconPop .dccon-img-lst li.on .sm-img img{border:2px solid #3b4890!important}',
+      'html.darkmode #dcconPop .layer-popup-inner,html.darkmode #dcconPop .pp-box,html.darkmode #dcconPop .dccon-caption-box,html.darkmode #dcconPop .dccon-btn-box,html.darkmode #dcconPop .dccon-img-slider{background:#1c1c1e!important}',
+      'html.darkmode #dcconPop .pp-tit2,html.darkmode #dcconPop .dccon-caption-box .top-tit .name{color:#f2f2f7!important}',
+      'html.darkmode #dcconPop .dccon-caption-box .txt{color:#aeaeb2!important}',
+      'html.darkmode #dcconPop .dccon-caption-box .make span{color:#8e8e93!important}',
+      'html.darkmode #dcconPop .dccon-caption-box .make .lnk{color:#9db0ff!important}',
+      'html.darkmode #dcconPop .dccon-caption-box .thum-img{background:#2c2c2e!important}',
+      'html.darkmode #dcconPop .btn-x-close{background:#3a3a3c!important}',
+      'html.darkmode #dcconPop .btn-x-close::before,html.darkmode #dcconPop .btn-x-close::after{background:#e5e5ea!important}',
+      'html.darkmode #dcconPop .dccon-img-lst li .sm-img{background:#2c2c2e!important}',
+      'html.darkmode #dcconPop .dccon-btn-box .btn-buy,html.darkmode #dcconPop .dccon-btn-box button{background:#5a6ad0!important}',
       'html.dcapp-duoflip::after{width:0!important}',
       '.gallview-tit-box .btm{margin-top:8px!important}',
       // 페이지 전체가 좌우로 넘쳐 밀리지 않게 (말머리 탭 등 개별 요소의 가로 스크롤은 그대로)
@@ -228,8 +280,8 @@ enum ContentScript {
       'li.comment-add::before{content:""!important;display:block!important;position:absolute!important;left:20px!important;top:9px!important;width:8px!important;height:8px!important;box-sizing:border-box!important;background:none!important;border:0!important;border-left:1px solid rgba(0,0,0,.2)!important;border-bottom:1px solid rgba(0,0,0,.2)!important;border-radius:0!important}',
       'html.darkmode li.comment-add::before{border-left-color:rgba(255,255,255,.26)!important;border-bottom-color:rgba(255,255,255,.26)!important}',
       // 고닉·반고닉·매니저 아이콘 축소 (힛갤로콘 아이콘 제외): transform은 그려지는 모양만 줄이고 스프라이트 background-position은 건드리지 않음.
-      // 레이아웃 박스(14px)는 그대로라 오른쪽 여백만 음수 margin으로 줄여 옆 글자와의 간격이 남지 않게 함 (14 × 0.75 = 10.5)
-      '.sp-nick:not(.sp_hitnickcon),.gonick:not(.sp_hitnickcon),.nogonick:not(.sp_hitnickcon),.m-gonick:not(.sp_hitnickcon),.m-nogonick:not(.sp_hitnickcon),.sub-gonick:not(.sp_hitnickcon),.sub-nogonick:not(.sp_hitnickcon){transform:scale(.75)!important;transform-origin:left center!important;margin-right:-3.5px!important}',
+      // 레이아웃 박스(14px)의 오른쪽 여백을 0으로 두어 축소된 아이콘(10.5px) 뒤에 약 3.5px 간격이 남아 구분선(|)과 겹치지 않게 함
+      '.sp-nick:not(.sp_hitnickcon),.gonick:not(.sp_hitnickcon),.nogonick:not(.sp_hitnickcon),.m-gonick:not(.sp_hitnickcon),.m-nogonick:not(.sp_hitnickcon),.sub-gonick:not(.sp_hitnickcon),.sub-nogonick:not(.sp_hitnickcon){transform:scale(.75)!important;transform-origin:left center!important;margin-right:-1.5px!important}',
       // 본문이 짧아도 글목록 5칸 정도(약 300px)는 보이게 (댓글 영역이 위로 붙지 않도록)
       '.thum-txt{min-height:300px!important}',
       '.thum-txtin img{max-width:100%!important;height:auto!important}',
@@ -249,8 +301,17 @@ enum ContentScript {
       '.darkmode .dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"]{background:#3a3a3c}',
       '.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"] > img,.dcapp-imgblk[data-dcapp-blocked="1"]:not([data-dcapp-img-revealed="1"])[data-dcapp-style="gray"] > video{visibility:hidden!important}',
       // 경고 칸 아래쪽 안내 (디시 사진에는 '스크롤 해주세요'라고만 적혀 있어서, 눌러야 풀린다는 걸 알려 줌)
-      '.thum-txtin #spoiler > .spoiler-wrap::after{content:"누르면 스포일러가 보여요";position:absolute;left:50%;bottom:14px;transform:translateX(-50%);white-space:nowrap;font-size:13px;line-height:1;letter-spacing:0;font-weight:600;color:#333;padding:8px 14px;border:1px solid #888;border-radius:16px;pointer-events:none}',
+      // 스포일러 경고 칸: 디시 경고 그림 대신 앱 스타일 카드 (문구 + 탭하여 보기, 다크모드). 누르면 보이는 동작(revealSpoiler)은 그대로
+      '.thum-txtin #spoiler{height:auto!important;min-height:0!important;max-height:none!important;padding:0!important;margin:0 0 10px!important;background:none!important;border:0!important;box-sizing:border-box!important}',
+      '.thum-txtin #spoiler *{display:none!important;height:auto!important;min-height:0!important;max-height:none!important;background-image:none!important}',
+      '.thum-txtin #spoiler > .spoiler-wrap{display:flex!important;position:relative!important;height:auto!important;min-height:0!important;box-sizing:border-box!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:center!important;gap:8px!important;padding:9px 14px!important;margin:0 0 10px!important;border-radius:12px!important;background:#f2f3f8!important;text-align:center!important}',
+      '.thum-txtin #spoiler > .spoiler-wrap::before{content:"스포일러 주의";font-size:14px;font-weight:700;line-height:1.2;color:#222;letter-spacing:0;white-space:nowrap}',
+      '.thum-txtin #spoiler > .spoiler-wrap::after{content:"탭하여 보기";position:static;transform:none;font-size:12px;font-weight:600;line-height:1.2;color:#3b4890;padding:4px 10px;border-radius:999px;background:rgba(59,72,144,.10);letter-spacing:0;white-space:nowrap}',
+      'html.darkmode .thum-txtin #spoiler > .spoiler-wrap{background:#2c2c2e!important}',
+      'html.darkmode .thum-txtin #spoiler > .spoiler-wrap::before{color:#e5e5ea}',
+      'html.darkmode .thum-txtin #spoiler > .spoiler-wrap::after{color:#9db0ff;background:rgba(157,176,255,.14)}',
       '.gall-thum-btm{padding-top:14px!important}',
+      'html.dcapp-pwauto body{visibility:hidden!important}',   // 유동 글 수정 비밀번호 자동 확인 중
       // 댓글 입력 칸: 한 줄에서 시작해 줄이 늘면 같이 커지고, 10줄을 넘으면 스크롤 (높이는 fitCommentBox가 맞춤)
       '#comment_memo.comment-caption{min-height:44px!important;resize:none!important;white-space:pre-wrap!important;padding:12px 8px!important;box-sizing:border-box!important;line-height:20px!important}',
       // 디시가 글·댓글 등록을 막을 때(차단된 IP 등) 띄우는 안내 창은 안 보이게 — 앱이 같은 문구를 따로 띄우고 이전 화면으로 돌아감
@@ -260,10 +321,10 @@ enum ContentScript {
       // 컨트롤바가 세로 막대일 때: 댓글 입력칸을 화면(분할이면 글 화면) 아래에 고정 — 입력칸만 (댓글 수·새로고침·본문·댓글 위로 머리글은 없음)
       // 입력칸은 화면 아래에 고정하되, 원래 자리에는 '글 목록' 띠를 남겨 댓글과 아래 글 목록이 섞여 보이지 않게
       'html.dcapp-nc.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]){position:relative!important;display:flex!important;align-items:center!important;box-sizing:border-box!important;height:44px!important;min-height:0!important;padding:0 14px!important;background:#e9ebf2!important;border-top:1px solid #d3d6e0!important;border-bottom:1px solid #d3d6e0!important}',
-      'html.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{content:"▼ 글 목록";font-size:13px;line-height:1;font-weight:700;color:#6b6f80}',
+      'html.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{content:"▼ 글 목록";display:inline-flex;align-items:center;box-sizing:border-box;height:28px;padding:0 14px;border:1px solid #d3d6e0;border-radius:14px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);font-size:13px;line-height:1;font-weight:700;color:#6b6f80}',
       'html.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]) .comment-write{position:fixed!important;left:0!important;right:0!important;bottom:0!important;z-index:9000!important;padding:8px 12px 22px!important;background:#f9fafc!important;border-top:1px solid #e1e3ea!important;box-sizing:border-box!important}',
       'html.darkmode.dcapp-nc.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]){background:#2a2a2d!important;border-color:#3d3d40!important}',
-      'html.darkmode.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{color:#9a9ca6}',
+      'html.darkmode.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"])::after{color:#9a9ca6;background:#2c2c2e;border-color:#48484c;box-shadow:none}',
       'html.darkmode.dcapp-pin .comment-write-btm:not([id^="img_comment_write_div"]) .comment-write{background:#1c1c1e!important;border-top-color:#2c2c2e!important}',
       'html.dcapp-pin body{padding-bottom:84px!important}',
       'html.dcapp-nc .comment-write-btm:not([id^="img_comment_write_div"]){padding:10px 12px!important}',
@@ -286,9 +347,48 @@ enum ContentScript {
       '.dcapp-cmtin{margin-left:8px;height:24px;padding:0 9px;border:1px solid #c9c9cf;border-radius:4px;background:none;color:#3b4890;font-size:12px;font-weight:600;flex:none}',
       'html.darkmode .dcapp-cmtin{border-color:#55565c;color:#9db0ff}',
       '#comment_box .all-comment-tit .rt>*:not(.dcapp-sort){display:none!important}',
+      // 본문 사진 위 '댓글' 버튼: 디시 원본(검은 각진 그림) 대신 반투명 둥근 캡슐 (다크모드도 같은 모양, 글자 크기는 앱 기준)
+      '.btn-imgcomment{box-sizing:border-box!important;height:26px!important;width:auto!important;min-width:0!important;padding:0 11px!important;border:0!important;border-radius:13px!important;background:rgba(20,20,22,.58)!important;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);color:#fff!important;font-family:inherit!important;font-size:12px!important;font-weight:600!important;line-height:26px!important;letter-spacing:0!important;text-align:center!important;white-space:nowrap!important;-webkit-appearance:none!important;box-shadow:none!important}',
+      'html.darkmode .btn-imgcomment{background:rgba(255,255,255,.22)!important;color:#f2f2f7!important}',
+      // 본문 사진의 '댓글' 영역(img-comment): 디시 원본 회색 판 대신 앱 댓글창과 같은 카드 모양 (헤더·목록·입력칸·다크모드)
+      '.img-comment{margin:10px 0 4px!important;border:1px solid #e3e5ee!important;border-radius:12px!important;background:#fff!important;overflow:hidden!important;box-sizing:border-box!important}',
+      '.img-comment .all-comment{background:transparent!important;padding:0!important}',
+      '.img-comment .all-comment-tit{display:flex!important;align-items:center!important;height:40px!important;min-height:40px!important;padding:0 12px!important;margin:0!important;background:#f9fafc!important;border-bottom:1px solid #eceef5!important;box-sizing:border-box!important}',
+      '.img-comment .all-comment-tit .tit-box{flex:1 1 auto;min-width:0}',
+      '.img-comment .all-comment-tit .tit{font-size:14px!important;font-weight:600!important;color:#222!important;line-height:1!important}',
+      '.img-comment .all-comment-tit .tit .ct{color:#3b4890!important;font-weight:600!important;margin-left:3px}',
+      '.img-comment .all-comment-tit .tit .ct.dcapp-ct{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:20px!important;height:18px!important;padding:0 6px!important;margin-left:6px!important;border-radius:9px!important;background:rgba(59,72,144,.12)!important;color:#3b4890!important;font-size:12px!important;font-weight:600!important;line-height:1!important;vertical-align:middle!important;box-sizing:border-box!important}',
+      'html.darkmode .img-comment .all-comment-tit .tit .ct.dcapp-ct{background:rgba(157,176,255,.16)!important;color:#9db0ff!important}',
+      '.img-comment .all-comment-tit .rt{margin-left:auto;font-size:13px!important}',
+      '.img-comment .all-comment-tit .comment-close{color:#8a8a90!important;font-size:13px!important}',
+      '.img-comment .all-comment-tit .sp-reload{width:18px!important;height:18px!important;margin-left:4px!important}',
+      '.img-comment .all-comment-lst{border:0!important;background:#fff!important}',
+      '.img-comment .all-comment-lst > li{border-top:1px solid #eef0f6!important}',
+      '.img-comment .all-comment-lst > li:first-child{border-top:0!important}',
+      '.img-comment .all-comment-lst .comment{padding:8px 12px!important;background:#fff!important}',
+      '.img-comment .all-comment-lst .nick{font-size:13px!important;color:#222!important}',
+      '.img-comment .all-comment-lst .txt{font-size:14px!important;line-height:1.5!important;color:#222!important;margin-top:2px!important}',
+      '.img-comment .all-comment-lst .ip,.img-comment .all-comment-lst .date{font-size:12px!important;color:#9a9aa3!important}',
+      '.img-comment .all-comment-lst .comment-add{padding:6px 12px 6px 36px!important;background:#f9fafc!important}',
+      '.img-comment .all-comment-lst .comment-write-btm,.img-comment .comment-write-btm{border:0!important;background:#fff!important;padding:8px 12px 10px!important;margin:0!important}',
+      '.img-comment .comment-write{border:1px solid #d6d8e2!important;border-radius:10px!important;background:#f2f3f8!important;padding:6px 8px!important;box-sizing:border-box!important}',
+      '.img-comment textarea,.img-comment input[type=text],.img-comment input[type=password]{font-size:14px!important;border:0!important;background:transparent!important;color:#222!important;box-shadow:none!important}',
+      '.img-comment .btn-comment-write,.img-comment .comment-write button[type=submit]{height:32px!important;min-width:56px!important;padding:0 12px!important;margin:0!important;border:0!important;border-radius:8px!important;background:#3b4890!important;color:#fff!important;font-size:13px!important;font-weight:600!important;line-height:32px!important;vertical-align:middle!important}',
+      'html.darkmode .img-comment{background:#1c1c1e!important;border-color:#2c2c2e!important}',
+      'html.darkmode .img-comment .all-comment-tit{background:#1c1c1e!important;border-bottom-color:#2c2c2e!important}',
+      'html.darkmode .img-comment .all-comment-tit .tit{color:#e5e5ea!important}',
+      'html.darkmode .img-comment .all-comment-tit .tit .ct{color:#9db0ff!important}',
+      'html.darkmode .img-comment .all-comment-tit .comment-close{color:#8e8e93!important}',
+      'html.darkmode .img-comment .all-comment-lst,html.darkmode .img-comment .all-comment-lst .comment,html.darkmode .img-comment .comment-write-btm{background:#1c1c1e!important}',
+      'html.darkmode .img-comment .all-comment-lst > li{border-top-color:#2c2c2e!important}',
+      'html.darkmode .img-comment .all-comment-lst .nick,html.darkmode .img-comment .all-comment-lst .txt{color:#e5e5ea!important}',
+      'html.darkmode .img-comment .all-comment-lst .ip,html.darkmode .img-comment .all-comment-lst .date{color:#8e8e93!important}',
+      'html.darkmode .img-comment .all-comment-lst .comment-add{background:#1c1c1e!important}',
+      'html.darkmode .img-comment .comment-write{background:#2c2c2e!important;border-color:#3d3d40!important}',
+      'html.darkmode .img-comment textarea,html.darkmode .img-comment input[type=text],html.darkmode .img-comment input[type=password]{color:#e5e5ea!important}',
       '.dcapp-sort{display:flex;align-items:center;gap:15px}',
       // 듀오 안전 영역의 터치 차단막(z 2147483646)이 정렬 줄(답글순)을 덮을 때만 정렬 줄을 위로 (다른 상태의 디시 팝업은 그대로)
-      'html.dcapp-duocol .dcapp-sort,html.dcapp-duoflip .dcapp-sort{position:relative;z-index:2147483647}',
+      'html.dcapp-duocol .dcapp-sort,html.dcapp-duoflip .dcapp-sort{position:relative;z-index:10}',
       '.dcapp-sort button{display:inline-flex;align-items:center;gap:3px;border:0;background:none;padding:6px 0;font-size:16px;color:#8a8a90}',
       '.dcapp-sort button.on{color:#222;font-weight:600}',
       '.dcapp-sort svg{width:24px;height:24px;flex:none;color:#b5b5bb}',
@@ -398,16 +498,456 @@ enum ContentScript {
       '.dcapp-docked .all-comment-tit{display:none!important}',
       '.dcapp-docked{position:fixed!important;left:0!important;right:0!important;bottom:auto!important;width:auto!important;max-width:none!important;margin:0!important;z-index:2147483000!important;max-height:60vh!important;overflow-y:auto!important;box-shadow:0 -4px 14px rgba(0,0,0,.14)!important;box-sizing:border-box!important;transform:none!important}'
     ];
+    // 댓글: 고닉 아이콘·IP 뒤의 메모(식별코드)를 아이콘에 바짝 붙임 (기본 8px 여백이 벌어져 보였음). 글목록 메모는 그대로
+    rules.push(
+      'li.comment .ginfo-area .dcapp-memo,li.comment-add .ginfo-area .dcapp-memo{margin:0 0 0 4px!important}',
+      // 고닉·반고닉 아이콘 스프라이트 상자(14px)는 오른쪽에 빈 여백이 있어서, 뒤따르는 메모와의 사이를 2px 당겨 바짝 붙임
+      'li.comment .ginfo-area > .sp-nick:has(+ .dcapp-memo),li.comment-add .ginfo-area > .sp-nick:has(+ .dcapp-memo){margin-right:-2px!important}',
+      // 댓글 고닉·반고닉 아이콘 수직 높이를 닉네임 글자 중앙에 맞춤
+      'li.comment .ginfo-area > .sp-nick:not(.sp_hitnickcon),li.comment-add .ginfo-area > .sp-nick:not(.sp_hitnickcon),li.comment .ginfo-area .gonick:not(.sp_hitnickcon),li.comment-add .ginfo-area .gonick:not(.sp_hitnickcon),li.comment .ginfo-area .nogonick:not(.sp_hitnickcon),li.comment-add .ginfo-area .nogonick:not(.sp_hitnickcon){vertical-align:middle!important;position:relative!important;top:1.5px!important}'
+    );
+    // 홈 순위 카드 (v350): 실북갤·흥한갤 한 블록 + 갤러리·마이너갤·미니갤·인물갤 4칸 (좁은 화면은 세로, 700px 이상은 2×2)
+    rules.push(
+      '.dcapp-hc-raw{position:absolute!important;left:-9999px!important;top:0!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important}',
+      '.main-wrapping section.rank-group.dcapp-hc-host{background:transparent!important;box-shadow:none!important;border:0!important;padding:0!important;margin:0!important;position:relative}',
+      '.dcapp-hc{display:flex;flex-direction:column;gap:12px;padding:12px 12px 16px;box-sizing:border-box}',
+      '.dcapp-hc-card{background:#fff;border-radius:16px;padding:14px 14px 8px;box-shadow:0 1px 3px rgba(0,0,0,.05);box-sizing:border-box;margin:0;min-width:0;overflow:hidden}',
+      '.dcapp-hc-top{padding:10px}',
+      '.dcapp-hc-seg{display:flex;background:#f0f0f4;border-radius:12px;padding:3px}',
+      '.dcapp-hc-seg button{flex:1;border:0;background:transparent;height:34px;border-radius:10px;font-size:15px;font-weight:600;color:#6b6b72}',
+      '.dcapp-hc-seg button.on{background:#fff;color:#222;box-shadow:0 1px 2px rgba(0,0,0,.08)}',
+      '.dcapp-hc-grid{display:flex;flex-direction:column;gap:12px}',
+      '.dcapp-hc-title{margin:0 0 6px;font-size:16px;font-weight:700;color:#222;letter-spacing:-.3px}',
+      '.dcapp-hc-list{list-style:none;margin:0;padding:0}',
+      '.dcapp-hc-list li{border-bottom:1px solid #f0f0f4}',
+      '.dcapp-hc-list li:last-child{border-bottom:0}',
+      '.dcapp-hc-link{display:flex;align-items:center;gap:8px;padding:10px 2px;font-size:15px;color:#222;text-decoration:none;min-width:0}',
+      '.dcapp-hc-no{flex:0 0 auto;min-width:20px;color:#8a8a90;font-weight:600;text-align:right}',
+      '.dcapp-hc-tt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.dcapp-hc-ch{flex:0 0 auto;min-width:44px;font-size:12px;font-weight:700;text-align:right}',
+      '.dcapp-hc-up{color:#e5484d}',
+      '.dcapp-hc-down{color:#3b82f6}',
+      '.dcapp-hc-new{color:#16a34a}',
+      '.dcapp-hc-same{color:#9aa0a6}',
+      'html.darkmode .dcapp-hc-up{color:#ff7b72}',
+      'html.darkmode .dcapp-hc-down{color:#6ea8ff}',
+      'html.darkmode .dcapp-hc-new{color:#4ade80}',
+      'html.darkmode .dcapp-hc-same{color:#7d8290}',
+      '.main-wrapping .sec-wrap .brick-lf{float:none!important;width:100%!important;max-width:none!important}',
+      '.main-wrapping .sec-wrap .brick-rt{display:none!important}',
+      '.main-wrapping,.main-wrapping .container,.main-wrapping .sec-wrap{max-width:none!important;width:100%!important}',
+      '.dcapp-hc-empty{padding:12px 2px;color:#8a8a90;font-size:14px}',
+      '.dcapp-hc-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;margin:0 -14px}',
+      '.dcapp-hc-track::-webkit-scrollbar{display:none}',
+      '.dcapp-hc-page{flex:0 0 100%;min-width:100%;box-sizing:border-box;scroll-snap-align:start;padding:0 14px;margin:0;list-style:none}',
+      '.dcapp-hc-dots{display:flex;justify-content:center;gap:6px;margin:6px 0 2px}',
+      '.dcapp-hc-dot{width:6px;height:6px;border-radius:3px;background:#d1d1d6}',
+      '.dcapp-hc-dot.on{background:#8e8e93;width:14px}',
+      'html.darkmode .dcapp-hc-dot{background:#48484a}',
+      'html.darkmode .dcapp-hc-dot.on{background:#aeaeb2}',
+      '@media (min-width:700px){.dcapp-hc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}}',
+      'html.darkmode .dcapp-hc-card{background:#2c2c2e;box-shadow:none}',
+      'html.darkmode .dcapp-hc-seg{background:#1c1c1e}',
+      'html.darkmode .dcapp-hc-seg button{color:#9a9ca6}',
+      'html.darkmode .dcapp-hc-seg button.on{background:#3a3a3c;color:#f2f2f7}',
+      'html.darkmode .dcapp-hc-title{color:#f2f2f7}',
+      'html.darkmode .dcapp-hc-link{color:#e5e5ea}',
+      'html.darkmode .dcapp-hc-list li{border-bottom-color:rgba(255,255,255,.08)}'
+    );
+    // 디시 모바일 홈(m.dcinside.com/): 실북갤·흥한갤 등 칸을 앱 카드 모양으로 (회색 바탕 위 흰 카드, 둥근 모서리, 얇은 구분선). 다크모드도 같은 톤
+    // .main-wrapping은 홈에만 있어서 다른 화면에는 나가지 않음
+    rules.push(
+      '.main-wrapping{background:#f2f2f7!important}',
+      'html.darkmode .main-wrapping{background:#1c1c1e!important}',
+      '.main-wrapping .sec-wrap .grid{margin:10px 12px!important;padding:14px 14px 8px!important;border:0!important;border-radius:16px!important;background:#fff!important;box-shadow:0 1px 3px rgba(0,0,0,.05)!important;box-sizing:border-box!important}',
+      'html.darkmode .main-wrapping .sec-wrap .grid{background:#2c2c2e!important;box-shadow:none!important}',
+      '.main-wrapping .rank-tit-box{padding:0 0 10px!important;margin:0 0 6px!important;border-bottom:1px solid #f0f0f4}',
+      'html.darkmode .main-wrapping .rank-tit-box{border-bottom-color:rgba(255,255,255,.08)}',
+      '.main-wrapping .rank-tit{font-size:16px!important;font-weight:700!important;color:#222!important;letter-spacing:-.3px}',
+      'html.darkmode .main-wrapping .rank-tit{color:#f2f2f7!important}',
+      '.main-wrapping .tab-basic{background:transparent!important;border:0!important}',
+      '.main-wrapping .tab-basic .tab-lst{border-bottom:1px solid #f0f0f4}',
+      'html.darkmode .main-wrapping .tab-basic .tab-lst{border-bottom-color:rgba(255,255,255,.08)}',
+      '.main-wrapping .tab-child-lst > li{border-bottom:1px solid #f0f0f4}',
+      '.main-wrapping .tab-child-lst > li:last-child{border-bottom:0}',
+      'html.darkmode .main-wrapping .tab-child-lst > li{border-bottom-color:rgba(255,255,255,.08)}',
+      '.main-wrapping .child-lnk .num{color:#8a8a90;font-weight:600}',
+      'html.darkmode .main-wrapping .child-lnk .num{color:#9a9ca6}',
+      'html.darkmode .main-wrapping .child-lnk{color:#e5e5ea}'
+    );
+    // 로그인 페이지(msign): 디시 헤더·광고·푸터는 숨기고 입력 카드를 앱 스타일로 다듬음.
+    // 입력 칸(#code·#password)·로그인 버튼(#loginAction)·폼은 그대로 둬서 디시 로그인 스크립트와 자동 로그인이 그대로 동작함
+    rules.push(
+      'body:has(.login-group){background:#f2f2f7!important}',
+      'html.darkmode body:has(.login-group){background:#1c1c1e!important}',
+      '.login-group{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px!important;box-sizing:border-box;background:none!important}',
+      '.login-group .login-group-inner{width:100%;max-width:380px;box-sizing:border-box;padding:26px 22px 18px!important;border-radius:18px;background:#fff;box-shadow:0 6px 24px rgba(0,0,0,.08)}',
+      'html.darkmode .login-group-inner{background:#2c2c2e;box-shadow:none}',
+      '.login-group .dclogo{display:none!important}',
+      '.login-group-inner::before{content:"디시인사이드 로그인";display:block;margin:0 0 22px;text-align:center;font-size:20px;font-weight:700;color:#3b4890}',
+      'html.darkmode .login-group-inner::before{color:#a9b4f0}',
+      '.login-brick-wid{width:100%!important;max-width:none!important;margin:0!important}',
+      '.login-form3{border:0;margin:0;padding:0;min-width:0}',
+      '.login-ipt-box{position:relative;margin:0 0 10px}',
+      '.login-group .ipt{display:block;width:100%;height:48px;box-sizing:border-box;padding:0 14px;border:1px solid #d6d6dc;border-radius:12px;background:#fff;color:#222;font-size:16px;outline:0;-webkit-appearance:none}',
+      '.login-group .ipt:focus{border-color:#3b4890;box-shadow:0 0 0 3px rgba(59,72,144,.16)}',
+      '.login-group .ipt::placeholder{color:#9a9aa2}',
+      'html.darkmode .login-group .ipt{background:#1c1c1e;border-color:#48484c;color:#eee}',
+      '.login-group .btn-ico-del{display:none!important}',
+      '.login-group .btn-login{display:block;width:100%;height:48px;margin:12px 0 0;border:0;border-radius:12px;background:#3b4890;color:#fff;font-size:16px;font-weight:700}',
+      '.login-group .btn-login:active{opacity:.85}',
+      '.login-check-box{margin:14px 0 0;text-align:center}',
+      '.check-login{display:inline-flex;align-items:center;gap:6px}',
+      '.chklbl{font-size:14px;color:#6e6e76}',
+      'html.darkmode .chklbl{color:#b5b5bb}',
+      '.login-search{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 14px;margin:20px 0 0}',
+      '.login-search a{font-size:13px;color:#8a8a90;text-decoration:none}',
+      'html.darkmode .login-search a{color:#a5a5ab}',
+      '.grid.adv-group,.kakao_ad_area,.footer,.menu_privacy{display:none!important}'
+    );
+    // 댓글 ⋯ 메뉴(수정·삭제)와 댓글 수정 칸: 디시 기능은 그대로 두고 모양만 앱 카드(둥근 모서리·여백·강조색·다크모드)로
+    rules.push(
+      '.comment-option{top:30px!important;right:0!important;width:124px!important;margin:0!important;padding:4px 0!important;border:0!important;border-radius:12px!important;background:#fff!important;box-shadow:0 6px 20px rgba(0,0,0,.14)!important;box-sizing:border-box!important;overflow:hidden!important;z-index:50!important}',
+      '.comment-option li+li{border-top:1px solid #f0f0f4!important}',
+      '.comment-option button{display:flex!important;align-items:center!important;gap:8px!important;width:100%!important;height:auto!important;margin:0!important;padding:10px 14px!important;border:0!important;background:none!important;font-size:14px!important;line-height:18px!important;font-weight:500!important;color:#222!important;text-align:left!important;box-sizing:border-box!important}',
+      '.comment-option button:has(.opt-del),.comment-option button.opt-del{color:#e53935!important}',
+      'html.darkmode .comment-option{background:#2c2c2e!important;box-shadow:0 6px 20px rgba(0,0,0,.45)!important}',
+      'html.darkmode .comment-option li+li{border-color:#3d3d41!important}',
+      'html.darkmode .comment-option button{color:#eee!important}',
+      'html.darkmode .comment-option button:has(.opt-del),html.darkmode .comment-option button.opt-del{color:#ff7b72!important}',
+      '.all-comment-lst li.edit{background:#f2f6ff!important}',
+      'html.darkmode .all-comment-lst li.edit{background:#1f2433!important}',
+      '.comment-edit{margin:8px 0 4px!important;border:1px solid #d6d8e2!important;border-radius:12px!important;background:#fff!important;overflow:hidden!important;box-sizing:border-box!important}',
+      '.comment-edit-caption{display:block!important;width:100%!important;height:76px!important;margin:0!important;padding:10px 12px!important;border:0!important;outline:0!important;border-radius:0!important;background:transparent!important;font-size:15px!important;line-height:21px!important;color:#222!important;resize:none!important;box-sizing:border-box!important}',
+      '.comment-edit .btm-wrt-btns{display:flex!important;align-items:center!important;justify-content:space-between!important;height:auto!important;padding:8px 10px!important;border-top:1px solid #eef0f6!important;background:#fafafc!important;box-sizing:border-box!important}',
+      '.comment-edit .btm-wrt-btns .rt{position:static!important;display:flex!important;align-items:center!important;gap:8px!important;margin-left:auto!important}',
+      '.comment-timer{font-size:13px!important;line-height:32px!important;color:#6e6e76!important;font-variant-numeric:tabular-nums}',
+      '.comment-timer.red{color:#e53935!important}',
+      '.btn-comment-cancel,.comment-edit .btn-comment-write{height:32px!important;min-width:56px!important;margin:0!important;padding:0 14px!important;border-radius:16px!important;font-size:14px!important;font-weight:700!important;line-height:30px!important;box-sizing:border-box!important}',
+      '.btn-comment-cancel{border:1px solid #d6d8e2!important;background:#fff!important;color:#555!important}',
+      '.comment-edit .btn-comment-write{border:0!important;background:#3b4890!important;color:#fff!important}',
+      'html.darkmode .comment-edit{background:#1c1c1e!important;border-color:#48484c!important}',
+      'html.darkmode .comment-edit-caption{color:#eee!important}',
+      'html.darkmode .comment-edit .btm-wrt-btns{background:#252528!important;border-color:#3d3d41!important}',
+      'html.darkmode .btn-comment-cancel{background:#2c2c2e!important;border-color:#48484c!important;color:#ddd!important}',
+      'html.darkmode .comment-edit .btn-comment-write{background:#5a6bc4!important}',
+      'html.darkmode .comment-timer{color:#a5a5ab!important}',
+      'html.darkmode .comment-timer.red{color:#ff7b72!important}'
+    );
+    // 갤로그(고닉을 눌러 들어가는 개인 페이지, /gallog/…: 홈·게시물·댓글·스크랩·방명록 탭): 디시 머리글 줄·광고·푸터는 숨기고,
+    // 탭과 카드·방명록 쓰기 칸·댓글을 앱 스타일로 (탭 구조·링크·입력 칸 id는 그대로라 디시 기능은 그대로 동작)
+    rules.push(
+      'body:has(.gallog-wrapping) .footer,.gallog-wrapping .footer,.gallog-wrapping .flex-header .lnk-lf,.gallog-wrapping .gotop,.gallog-wrapping .tip_box2,.gallog-wrapping .sns-box,.gallog-wrapping .adv-group,.gallog-wrapping .kakao_ad_area{display:none!important}',
+      '.gallog-wrapping{background:#f2f2f7!important;min-height:100vh}',
+      'html.darkmode .gallog-wrapping{background:#1c1c1e!important}',
+      '.gallog-wrapping .flex-header{display:flex!important;align-items:center!important;justify-content:space-between!important;height:48px!important;padding:0 12px!important;background:#fff!important;border-bottom:1px solid #e6e6ea!important;box-sizing:border-box!important}',
+      'html.darkmode .gallog-wrapping .flex-header{background:#1c1c1e!important;border-color:#2c2c2e!important}',
+      '.gallog-wrapping .flex-header .ct{flex:1 1 auto!important;min-width:0!important;margin:0!important;padding:0 8px!important;text-align:center!important}',
+      '.gallog-wrapping .flex-header .tit{display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:16px!important;font-weight:700!important;color:#222!important}',
+      'html.darkmode .gallog-wrapping .flex-header .tit{color:#eee!important}',
+      '.gallog-wrapping .flex-header .rt{flex:none!important}',
+      '.gallog-wrapping .set-setting{width:32px!important;height:32px!important;padding:0!important;border:0!important;background:none!important}',
+      '.gallog-wrapping .profile-img img{width:28px!important;height:28px!important;border-radius:50%!important;object-fit:cover!important}',
+      '.gallog-wrapping .nav{height:auto!important;line-height:normal!important;background:#fff!important;border-bottom:1px solid #e6e6ea!important}',
+      'html.darkmode .gallog-wrapping .nav{background:#1c1c1e!important;border-color:#2c2c2e!important}',
+      '.gallog-wrapping .menu-box ul{display:flex!important;overflow-x:auto!important;margin:0!important;padding:0 4px!important;list-style:none!important;-webkit-overflow-scrolling:touch}',
+      '.gallog-wrapping .menu-box li{flex:1 0 auto!important;margin:0!important;padding:0!important;border:0!important}',
+      '.gallog-wrapping .menu-box a{display:block!important;padding:12px 10px!important;font-size:14px!important;font-weight:600!important;color:#8a8a90!important;text-align:center!important;white-space:nowrap!important;text-decoration:none!important}',
+      '.gallog-wrapping .menu-box li.on a{color:#3b4890!important;box-shadow:inset 0 -2px 0 #3b4890!important}',
+      'html.darkmode .gallog-wrapping .menu-box a{color:#8e8e93!important}',
+      'html.darkmode .gallog-wrapping .menu-box li.on a{color:#a9b4f0!important;box-shadow:inset 0 -2px 0 #a9b4f0!important}',
+      '.gallog-wrapping .sec-wrap-sub{margin:0!important;padding:10px 12px 28px!important;background:none!important}',
+      '.gallog-wrapping .brick-wid{width:100%!important;max-width:none!important;margin:0!important;padding:0!important;min-width:0!important}',
+      '.gallog-wrapping .brick-wid > section.grid{display:block!important;float:none!important;width:auto!important;margin:0 0 12px!important;padding:14px 16px!important;box-sizing:border-box!important;border:0!important;border-radius:14px!important;background:#fff!important;box-shadow:0 1px 4px rgba(0,0,0,.06)!important}',
+      'html.darkmode .gallog-wrapping .brick-wid > section.grid{background:#2c2c2e!important;box-shadow:none!important}',
+      '.gallog-wrapping .gall-tit-box{display:flex!important;align-items:center!important;justify-content:space-between!important;padding:0 44px 2px 0!important}',
+      '.gallog-wrapping .gall-tit{font-size:16px!important;font-weight:700!important;color:#222!important}',
+      '.gallog-wrapping .gall-tit .count2,.gallog-wrapping .md-tit .ct2{color:#3b4890!important;font-weight:600!important;margin-left:4px!important;font-size:14px!important}',
+      'html.darkmode .gallog-wrapping .gall-tit{color:#eee!important}',
+      'html.darkmode .gallog-wrapping .gall-tit .count2,html.darkmode .gallog-wrapping .md-tit .ct2{color:#a9b4f0!important}',
+      '.gallog-wrapping .today-visit{font-size:12px!important;color:#8a8a90!important}',
+      '.gallog-wrapping .today-visit .ct{color:#3b4890!important;font-weight:700!important}',
+      'html.darkmode .gallog-wrapping .today-visit .ct{color:#a9b4f0!important}',
+      '.gallog-wrapping .md-tit-box{display:block!important;padding:0 0 10px!important;margin:0!important;border:0!important;background:none!important}',
+      '.gallog-wrapping .md-tit-box .md-lnk{display:block!important;width:100%!important}',
+      '.gallog-wrapping .gall-tit-box,.gallog-wrapping .gall-detail-lst,.gallog-wrapping .gall-detail-lst > li,.gallog-wrapping .no-mgall,.gallog-wrapping .today-visit{background:none!important}',
+      '.gallog-wrapping .md-tit{display:block!important;margin:0!important;font-size:16px!important;font-weight:700!important;color:#222!important;line-height:22px!important}',
+      '.gallog-wrapping .md-tit a{display:inline!important;font-size:16px!important;font-weight:700!important;color:#222!important;text-decoration:none!important}',
+      '.gallog-wrapping .md-tit .ct2{vertical-align:middle!important}',
+      'html.darkmode .gallog-wrapping .md-tit a{color:#eee!important}',
+      '.gallog-wrapping .btn-mline{display:inline-block!important;margin:0 0 0 auto!important;padding:2px 8px!important;border:1px solid #d6d6dc!important;border-radius:10px!important;background:none!important;font-size:12px!important;font-weight:500!important;color:#8a8a90!important}',
+      'html.darkmode .gallog-wrapping .btn-mline{border-color:#48484c!important;color:#a5a5ab!important}',
+      '.gallog-wrapping .no-mgall{padding:22px 0 8px!important;text-align:center!important}',
+      '.gallog-wrapping .no-mgall .txt{font-size:14px!important;color:#8a8a90!important}',
+      '.gallog-wrapping ul.gall-detail-lst{margin:0!important;padding:0!important;list-style:none!important}',
+      '.gallog-wrapping ul.gall-detail-lst > li{margin:0!important;padding:12px 0!important;background-image:none!important;border-top:1px solid #f0f0f4!important;list-style:none!important}',
+      '.gallog-wrapping ul.gall-detail-lst > li:first-child{border-top:0!important}',
+      'html.darkmode .gallog-wrapping ul.gall-detail-lst > li{border-color:#3d3d41!important}',
+      '.gallog-wrapping .gall-detail-lnktb,.gallog-wrapping .gall-detail-lnktb .lt{display:block!important;position:static!important;width:auto!important;max-width:none!important;table-layout:auto!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;padding:0!important}',
+      '.gallog-wrapping .gall-detail-lnktb .txt{display:block!important;font-size:15px!important;line-height:21px!important;color:#222!important;word-break:break-all!important;overflow-wrap:anywhere!important;white-space:normal!important}',
+      'html.darkmode .gallog-wrapping .gall-detail-lnktb .txt{color:#eee!important}',
+      '.gallog-wrapping .gall-detail-lnktb ul.ginfo{display:flex!important;flex-wrap:wrap!important;gap:8px!important;margin:4px 0 0!important;padding:0!important;font-size:12px!important;color:#8a8a90!important}',
+      '.gallog-wrapping .gall-detail-lnktb ul.ginfo li{font-size:12px!important;color:#8a8a90!important}',
+      '.gallog-wrapping #guest_write{margin:0!important}',
+      '.gallog-wrapping .comment-write-btm.nomg:not(:has(textarea)){display:none!important}',
+      '.gallog-wrapping .comment-write-btm.nomg{padding:0!important;border:0!important;background:none!important}',
+      '.gallog-wrapping #guest_write .comment-write{border:0!important;border-radius:0!important;background:none!important;padding:0!important;box-sizing:border-box!important}',
+      '.gallog-wrapping #guest_write .who-lst{display:flex!important;gap:8px!important;margin:0 0 8px!important;padding:0!important;list-style:none!important}',
+      '.gallog-wrapping #guest_write .who-lst li{flex:1 1 0!important;min-width:0!important;margin:0!important}',
+      '.gallog-wrapping #guest_write .ipt{display:block!important;width:100%!important;height:38px!important;box-sizing:border-box!important;padding:0 10px!important;border:1px solid #d6d6dc!important;border-radius:10px!important;background:#fff!important;color:#222!important;font-size:15px!important;outline:0!important}',
+      'html.darkmode .gallog-wrapping #guest_write .ipt{background:#2c2c2e!important;border-color:#48484c!important;color:#eee!important}',
+      '.gallog-wrapping #guest_write .comment-caption{display:block!important;width:100%!important;min-height:64px!important;margin:0!important;padding:10px!important;border:1px solid #d6d6dc!important;border-radius:10px!important;background:#fff!important;color:#222!important;font-size:15px!important;line-height:21px!important;box-sizing:border-box!important;resize:none!important;outline:0!important}',
+      'html.darkmode .gallog-wrapping #guest_write .comment-caption{background:#2c2c2e!important;border-color:#48484c!important;color:#eee!important}',
+      '.gallog-wrapping #guest_write .btm-wrt-btns{display:flex!important;justify-content:flex-end!important;height:auto!important;margin:8px 0 0!important;padding:0!important;border:0!important}',
+      '.gallog-wrapping #guest_write .btm-wrt-btns .rt{position:static!important}',
+      'html.darkmode .gallog-wrapping #guest_write .btm-wrt-btns,html.darkmode .gallog-wrapping .comment-write-btm{background:transparent!important}',
+      '.gallog-wrapping .sel-box,.gallog-wrapping .sel-wrap,.gallog-wrapping .gallog-sel,.gallog-wrapping .btm-sel-box,.gallog-wrapping .list-sel-box,.gallog-wrapping .sort-box,.gallog-wrapping .sub-menu,.gallog-wrapping .gallog-menu-box,.gallog-wrapping div:has(> .sel-box),.gallog-wrapping div:has(> select.sel),.gallog-wrapping div:has(> .btn-mline),.gallog-wrapping section:has(> .sel-box){border:0!important;border-top:0!important;border-bottom:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;outline:0!important}',
+      'html.darkmode .gallog-wrapping .sel-box,html.darkmode .gallog-wrapping .sel-wrap,html.darkmode .gallog-wrapping .gallog-sel,html.darkmode .gallog-wrapping .btm-sel-box,html.darkmode .gallog-wrapping .list-sel-box,html.darkmode .gallog-wrapping .sort-box,html.darkmode .gallog-wrapping .sub-menu,html.darkmode .gallog-wrapping .gallog-menu-box,html.darkmode .gallog-wrapping div:has(> .sel-box),html.darkmode .gallog-wrapping div:has(> select.sel),html.darkmode .gallog-wrapping div:has(> .btn-mline),html.darkmode .gallog-wrapping section:has(> .sel-box){border:0!important;border-top:0!important;border-bottom:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important}',
+      '.gallog-wrapping select.sel{border:0!important;background:none!important;background-color:transparent!important;box-shadow:none!important;outline:0!important;margin-right:44px!important}',
+      'html.darkmode .gallog-wrapping select.sel{color:#eee!important;border:0!important;background:none!important;background-color:transparent!important}',
+      '.dcapp-gallog-hide{display:none!important}',
+      // 갤러리 관리 내역(/managehistory/...): 앱 카드 스타일 + 다크모드 대응
+      'html.dcapp-managehistory body{background:#f2f2f7!important}',
+      'html.darkmode.dcapp-managehistory body{background:#000!important}',
+      'html.dcapp-managehistory header,html.dcapp-managehistory .header,html.dcapp-managehistory footer,html.dcapp-managehistory .footer,html.dcapp-managehistory .all-tit-box{display:none!important}',
+      'html.dcapp-managehistory .tab-twoline{background:transparent!important;border:0!important;padding:10px 12px 8px!important}',
+      'html.dcapp-managehistory .tab-twoline ul.tab-lst{display:flex!important;gap:4px!important;padding:4px!important;border-radius:12px!important;background:rgba(120,120,128,.12)!important;border:0!important}',
+      'html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst{background:rgba(120,120,128,.24)!important}',
+      'html.dcapp-managehistory .tab-twoline ul.tab-lst > li{flex:1 1 0!important;border:0!important;background:transparent!important;border-radius:9px!important;overflow:hidden!important}',
+      'html.dcapp-managehistory .tab-twoline ul.tab-lst > li > a,html.dcapp-managehistory .tab-twoline ul.tab-lst > li > button{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;height:34px!important;border:0!important;border-radius:9px!important;font-size:13px!important;font-weight:600!important;background:transparent!important;color:#636366!important}',
+      'html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst > li > a,html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst > li > button{color:#aeaeb2!important}',
+      'html.dcapp-managehistory .tab-twoline ul.tab-lst > li.on > a,html.dcapp-managehistory .tab-twoline ul.tab-lst > li.on > button,html.dcapp-managehistory .tab-twoline ul.tab-lst > li > a.on{background:#fff!important;color:#1c1c1e!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important}',
+      'html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst > li.on > a,html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst > li.on > button,html.darkmode.dcapp-managehistory .tab-twoline ul.tab-lst > li > a.on{background:#2c2c2e!important;color:#f5f5f7!important}',
+      'html.dcapp-managehistory .ct-info-box{margin:4px 12px 10px!important;padding:12px 14px!important;border-radius:12px!important;border:0!important;background:rgba(120,120,128,.08)!important;font-size:13px!important;line-height:1.45!important}',
+      'html.darkmode.dcapp-managehistory .ct-info-box{background:#1c1c1e!important;color:#aeaeb2!important}',
+      'html.dcapp-managehistory .adm-detail-lst{background:#fff!important;border-radius:14px!important;margin:0 12px 10px!important;padding:10px 14px!important;border:1px solid rgba(0,0,0,.05)!important;box-shadow:0 1px 2px rgba(0,0,0,.04)!important}',
+      'html.darkmode.dcapp-managehistory .adm-detail-lst{background:#1c1c1e!important;border-color:rgba(255,255,255,.08)!important;box-shadow:none!important}',
+      'html.dcapp-managehistory ul.adm-detail-inr{display:flex!important;flex-direction:column!important;gap:0!important;background:transparent!important;border:0!important;padding:0!important;margin:0!important}',
+      'html.dcapp-managehistory ul.adm-detail-inr > li{background:transparent!important;border:0!important;border-bottom:1px solid rgba(120,120,128,.12)!important;border-radius:0!important;padding:6px 0!important;margin:0!important;box-shadow:none!important}',
+      'html.dcapp-managehistory ul.adm-detail-inr > li:last-child{border-bottom:0!important}',
+      'html.dcapp-managehistory .con-search-box{margin:0 12px 10px!important;padding:0!important;background:transparent!important;border:0!important}',
+      'html.dcapp-managehistory .con-search-box > div,html.dcapp-managehistory .con-search-box .search-box,html.dcapp-managehistory .con-search-box .sch-box{display:flex!important;align-items:center!important;border-radius:12px!important;border:1px solid rgba(120,120,128,.22)!important;background:#fff!important;overflow:hidden!important;padding:0 10px!important;height:40px!important;box-sizing:border-box!important}',
+      'html.darkmode.dcapp-managehistory .con-search-box > div,html.darkmode.dcapp-managehistory .con-search-box .search-box,html.darkmode.dcapp-managehistory .con-search-box .sch-box{background:#1c1c1e!important;border-color:rgba(255,255,255,.14)!important}',
+      'html.dcapp-managehistory .con-search-box input[type="text"],html.dcapp-managehistory .con-search-box input[type="search"],html.dcapp-managehistory #search{border:0!important;outline:0!important;background:transparent!important;font-size:14px!important;height:38px!important;flex:1 1 auto!important}',
+      'html.darkmode.dcapp-managehistory .con-search-box input[type="text"],html.darkmode.dcapp-managehistory .con-search-box input[type="search"],html.darkmode.dcapp-managehistory #search{color:#f5f5f7!important}',
+      // 마이너/메이저 갤러리 정보 팝업: 앱 둥근 카드 스타일 + 다크모드
+      '#minor_info_pop .layer-popup-inner,#major_info_pop .layer-popup-inner,#minor_info_pop .popup-inner,#major_info_pop .popup-inner,.layer-center-popup[id*="info_pop"] .layer-popup-inner{border-radius:18px!important;overflow:hidden!important;box-shadow:0 14px 40px rgba(0,0,0,.32)!important;border:1px solid rgba(0,0,0,.06)!important;background:#fff!important}',
+      'html.darkmode #minor_info_pop .layer-popup-inner,html.darkmode #major_info_pop .layer-popup-inner,html.darkmode #minor_info_pop .popup-inner,html.darkmode #major_info_pop .popup-inner,html.darkmode .layer-center-popup[id*="info_pop"] .layer-popup-inner{background:#1c1c1e!important;border-color:rgba(255,255,255,.12)!important}',
+      '#minor_info_pop .pp-box,#major_info_pop .pp-box,.layer-center-popup[id*="info_pop"] .pp-box{background:#fff!important;border-radius:18px!important;padding-bottom:16px!important;border:0!important}',
+      'html.darkmode #minor_info_pop .pp-box,html.darkmode #major_info_pop .pp-box,html.darkmode .layer-center-popup[id*="info_pop"] .pp-box{background:#1c1c1e!important;color:#f5f5f7!important}',
+      '#minor_info_pop .pp-tit-box,#major_info_pop .pp-tit-box,.layer-center-popup[id*="info_pop"] .pp-tit-box{background:transparent!important;border-bottom:1px solid rgba(120,120,128,.16)!important;padding:14px 16px!important;display:flex!important;align-items:center!important;justify-content:space-between!important}',
+      '#minor_info_pop .pp-tit2,#major_info_pop .pp-tit2,.layer-center-popup[id*="info_pop"] .pp-tit2{font-size:16px!important;font-weight:700!important;letter-spacing:-.01em!important}',
+      '#minor_info_pop .btn-x-close,#major_info_pop .btn-x-close,.layer-center-popup[id*="info_pop"] .btn-x-close{border-radius:999px!important;background-color:rgba(120,120,128,.14)!important}',
+      'html.darkmode #minor_info_pop .btn-x-close,html.darkmode #major_info_pop .btn-x-close,html.darkmode .layer-center-popup[id*="info_pop"] .btn-x-close{background-color:rgba(255,255,255,.14)!important}',
+      '#minor_info_pop .gall_history_btn,#major_info_pop .gall_history_btn,.layer-center-popup[id*="info_pop"] button[onclick*="managehistory"]{border-radius:12px!important;font-weight:600!important;height:40px!important}',
+      'div.container > div.sec-wrap-sub > div.brick-wid > section.grid.clkhigh > div{display:none!important}',
+      '.gallog-wrapping #guest_write .btn-comment-write{height:34px!important;min-width:64px!important;padding:0 16px!important;border:0!important;border-radius:17px!important;background:#3b4890!important;color:#fff!important;font-size:14px!important;font-weight:700!important}',
+      'html.darkmode .gallog-wrapping #guest_write .btn-comment-write{background:#5a6bc4!important}',
+      '.gallog-wrapping .all-comment-lst li.comment{position:relative!important;padding:12px 0!important;background:none!important;border-top:1px solid #f0f0f4!important}',
+      '.gallog-wrapping .all-comment-lst li.comment:first-child{border-top:0!important}',
+      'html.darkmode .gallog-wrapping .all-comment-lst li.comment{border-color:#3d3d41!important}',
+      '.gallog-wrapping .all-comment-lst .nick{font-size:14px!important;font-weight:600!important;color:#222!important;text-decoration:none!important}',
+      'html.darkmode .gallog-wrapping .all-comment-lst .nick{color:#eee!important}',
+      '.gallog-wrapping .all-comment-lst .txt{margin:4px 0 0!important;font-size:15px!important;line-height:21px!important;color:#222!important;word-break:break-all!important}',
+      'html.darkmode .gallog-wrapping .all-comment-lst .txt{color:#eee!important}',
+      '.gallog-wrapping .gallog-wrap-lst{background:none!important}',
+      '.gallog-wrapping .gallog-wrap-lst .all-comment-lst li .date,.gallog-wrapping .gallog-wrap-lst .all-comment-lst .comment-add .date{position:static!important;left:auto!important;bottom:auto!important;display:inline-block!important;margin-top:6px!important;font-size:12px!important;color:#8a8a90!important}',
+      '.gallog-wrapping .gallog-wrap-lst .all-comment-lst li .modify{position:static!important;top:auto!important;right:auto!important;bottom:auto!important;display:inline-flex!important;align-items:center!important;margin:6px 0 0 8px!important}',
+      '.gallog-wrapping .all-comment-lst .modify button,.gallog-wrapping .all-comment-lst .modify a{height:24px!important;padding:0 8px!important;border:1px solid #d6d6dc!important;border-radius:12px!important;background:none!important;font-size:12px!important;color:#8a8a90!important}',
+      'html.darkmode .gallog-wrapping .all-comment-lst .modify button,html.darkmode .gallog-wrapping .all-comment-lst .modify a{border-color:#48484c!important;color:#a5a5ab!important}'
+    );
+    // 글 본문의 디시 투표 상자(제목·보기·썸네일·득표 막대·투표하기/공유): 디시 클래스는 그대로 두고 모양만 앱 카드로
+    rules.push(
+      '.vote-view-scope{margin:14px 0!important;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important}',
+      'iframe[id^="vote_iframe"],.thum-txtin iframe[src*="vote"],.thum-txtin iframe[src*="poll"]{width:100%!important;border:0!important;background:transparent!important;box-shadow:none!important;border-radius:16px!important;overflow:hidden!important}',
+      '.vote-view-inner{border:1px solid rgba(0,0,0,0.12)!important;border-radius:16px!important;background:#fff!important;box-shadow:none!important;overflow:hidden!important;padding:0!important;box-sizing:border-box!important}',
+      '.vote-view-top{padding:14px 16px!important;border-bottom:1px solid #f0f0f4!important;background:#fff!important}',
+      '.vote-view-top .vote-tit-inner{font-size:16px!important;font-weight:700!important;color:#222!important;letter-spacing:-.3px!important}',
+      '.vote-date-lst li{font-size:12px!important;color:#8a8a90!important;letter-spacing:0!important}',
+      '.vote-date-lst li::before{background:#d6d6dc!important}',
+      '.vote-view-result .all-ct{padding:12px 16px!important}',
+      '.vote-view-result .vote-join{font-size:13px!important;color:#666!important;letter-spacing:0!important}',
+      '.vote-view-result .vote-join .ct{color:#3b4890!important;font-weight:700!important}',
+      '.vote-view-result .vote-join:before{background-color:#d6d6dc!important}',
+      '.vote-view-result .vote-go-txt{font-size:13px!important;color:#3b4890!important;font-weight:600!important;text-decoration:none!important;letter-spacing:0!important}',
+      '.vote-ask-wrap{background:#f7f8fb!important;padding:14px!important;border-radius:12px!important;border:0!important}',
+      '.vote-ask-lst li+li{margin-top:8px!important}',
+      '.vote-ask-lst li .lnk{box-sizing:border-box!important;min-height:52px!important;height:auto!important;padding:8px 12px!important;border:1px solid #e3e5ee!important;border-radius:12px!important;background:#fff!important}',
+      '.vote-ask-lst li.on .lnk,.vote-ask-lst li.pick{border:2px solid #3b4890!important;padding:7px 11px!important}',
+      '.vote-ask-lst .vote-thum{width:40px!important;height:40px!important;border:0!important;border-radius:10px!important;overflow:hidden!important;margin-right:10px!important}',
+      '.vote-ask-lst .vote-txt{font-size:15px!important;color:#222!important;height:auto!important;min-height:40px!important;line-height:1.3!important;letter-spacing:0!important}',
+      '.vote-ask-lst li.on .vote-txt{color:#3b4890!important;font-weight:700!important}',
+      '.vote-gp-lst li{margin-top:8px!important;padding:12px 14px!important;border-radius:12px!important;background:#fff!important;box-shadow:0 1px 3px rgba(0,0,0,.05)!important}',
+      '.vote-gp-lst li:first-child{margin-top:0!important;padding-top:12px!important}',
+      '.vote-gp-lst .vote-txt{font-size:15px!important;color:#222!important;font-weight:600!important;letter-spacing:0!important}',
+      '.vote-gp-lst .gp-img{height:10px!important;border-radius:6px!important;background:#ececf1!important}',
+      '.vote-gp-lst .gp-percent{height:10px!important;border-radius:6px!important;background:#a9b0c8!important}',
+      '.vote-gp-lst li:first-child .gp-percent{background:#3b4890!important}',
+      '.vote-gp-lst .percent{font-size:14px!important;color:#3b4890!important;font-weight:700!important}',
+      '.vote-gp-lst .vote-ct{font-size:12px!important;color:#8a8a90!important}',
+      '.vote-thum-img{width:44px!important;height:44px!important;border:0!important;border-radius:10px!important;margin-right:10px!important}',
+      '.vote-btn-box{margin:0!important;padding:14px 16px 16px!important;text-align:center!important}',
+      '.btn-vote-go{height:38px!important;padding:0 28px!important;border:0!important;border-radius:19px!important;background:#3b4890!important;color:#fff!important;font-size:15px!important;font-weight:700!important}',
+      '.btn-vote-sns,.vote-btn-box .sp-sharesns,.vote-btn-box button[class*="share"],.vote-btn-box a[class*="share"]{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:38px!important;height:38px!important;border:1px solid rgba(0,0,0,0.08)!important;border-radius:50%!important;background:#f2f3f8!important;box-sizing:border-box!important;vertical-align:middle!important}',
+      '.vote-btn-box .btn-vote-go + .sp-sharesns{margin-left:8px!important}',
+      '.vote-status-info{padding:12px 16px 18px!important;background:#fff!important}',
+      '.vote-sns-txt{color:#8a8a90!important}',
+      '.vote-day{color:#8a8a90!important}',
+      '.vote-orilnk-box{margin:0 0 12px!important;padding:0 16px!important}',
+      '.vote-ori-lnk,.vote-ori-lnk2{color:#8a8a90!important}',
+      'html.darkmode .vote-view-inner{background:#2c2c2e!important;border-color:rgba(255,255,255,0.16)!important;box-shadow:none!important}',
+      'html.darkmode .vote-view-top{background:#2c2c2e!important;border-color:#3d3d41!important}',
+      'html.darkmode .vote-view-top .vote-tit-inner{color:#eee!important}',
+      'html.darkmode .vote-date-lst li{color:#a5a5ab!important}',
+      'html.darkmode .vote-date-lst li::before,html.darkmode .vote-view-result .vote-join:before{background-color:#55565c!important}',
+      'html.darkmode .vote-view-result .vote-join{color:#c7c7cc!important}',
+      'html.darkmode .vote-view-result .vote-join .ct,html.darkmode .vote-view-result .vote-go-txt{color:#a9b4f0!important}',
+      'html.darkmode .vote-ask-wrap{background:#1c1c1e!important}',
+      'html.darkmode .vote-ask-lst li .lnk{background:#2c2c2e!important;border-color:#48484c!important}',
+      'html.darkmode .vote-ask-lst li.on .lnk,html.darkmode .vote-ask-lst li.pick{border-color:#7d8ee0!important}',
+      'html.darkmode .vote-ask-lst .vote-txt{color:#eee!important}',
+      'html.darkmode .vote-ask-lst li.on .vote-txt{color:#a9b4f0!important}',
+      'html.darkmode .vote-gp-lst li{background:#2c2c2e!important;box-shadow:none!important}',
+      'html.darkmode .vote-gp-lst .vote-txt{color:#eee!important}',
+      'html.darkmode .vote-gp-lst .gp-img{background:#48484c!important}',
+      'html.darkmode .vote-gp-lst .gp-percent{background:#7a7d8c!important}',
+      'html.darkmode .vote-gp-lst li:first-child .gp-percent{background:#7d8ee0!important}',
+      'html.darkmode .vote-gp-lst .percent{color:#a9b4f0!important}',
+      'html.darkmode .vote-gp-lst .vote-ct{color:#a5a5ab!important}',
+      'html.darkmode .btn-vote-sns,html.darkmode .vote-btn-box .sp-sharesns,html.darkmode .vote-btn-box button[class*="share"],html.darkmode .vote-btn-box a[class*="share"]{background:#3a3a3c!important;border-color:rgba(255,255,255,0.12)!important}',
+      'html.darkmode .vote-status-info{background:#2c2c2e!important}',
+      'html.darkmode .vote-sns-txt,html.darkmode .vote-day,html.darkmode .vote-ori-lnk,html.darkmode .vote-ori-lnk2{color:#a5a5ab!important}',
+      // 본문 내 인라인 투표([class*="vote"] / [class*="poll"]): 바깥 래퍼 이중 테두리·패딩 제거
+      '.thum-txtin > div[class*="vote"],.thum-txtin > div[class*="poll"]{margin:14px 0!important;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;box-sizing:border-box!important}',
+      '.vote_box,.vote-box,.dc_vote,.vote_wrap,.vote-wrap,.poll_box,.poll-box{margin:14px 0!important;border:1px solid rgba(0,0,0,0.12)!important;border-radius:16px!important;background:#fff!important;box-shadow:none!important;overflow:hidden!important;padding:14px 16px!important;box-sizing:border-box!important}',
+      'html.darkmode .vote_box,html.darkmode .vote-box,html.darkmode .dc_vote,html.darkmode .vote_wrap,html.darkmode .vote-wrap,html.darkmode .poll_box,html.darkmode .poll-box{background:#2c2c2e!important;border-color:rgba(255,255,255,0.16)!important;box-shadow:none!important;color:#eee!important}',
+      '.thum-txtin [class*="vote"] [class*="tit"],.thum-txtin [class*="poll"] [class*="tit"],.vote_box .vote_tit,.vote-box .vote-tit,.dc_vote .vote_tit{font-size:16px!important;font-weight:700!important;color:#222!important;margin:0 0 10px!important}',
+      '.thum-txtin [class*="vote"] li,.thum-txtin [class*="poll"] li,.vote_box .vote_list li,.vote-box .vote-list li,.dc_vote li{margin-top:8px!important;padding:10px 12px!important;border:1px solid #e3e5ee!important;border-radius:12px!important;background:#f7f8fb!important}',
+      '.thum-txtin [class*="vote"] [class*="bar"],.thum-txtin [class*="poll"] [class*="bar"],.vote_box .vote_bar,.vote-box .vote-bar{height:10px!important;border-radius:6px!important;background:#ececf1!important;overflow:hidden!important}',
+      '.thum-txtin [class*="vote"] [class*="bar"] > span,.thum-txtin [class*="poll"] [class*="bar"] > span,.vote_box .vote_bar > span,.vote-box .vote-bar > span,.vote_box .vote_per,.vote-box .vote-per{border-radius:6px!important;background:#3b4890!important}',
+      '.thum-txtin [class*="vote"] button,.thum-txtin [class*="poll"] button,.vote_box .btn_vote,.vote-box .btn-vote{border-radius:18px!important}',
+      'html.darkmode .thum-txtin [class*="vote"] [class*="tit"],html.darkmode .thum-txtin [class*="poll"] [class*="tit"],html.darkmode .vote_box .vote_tit,html.darkmode .vote-box .vote-tit,html.darkmode .dc_vote .vote_tit{color:#eee!important}',
+      'html.darkmode .thum-txtin [class*="vote"] li,html.darkmode .thum-txtin [class*="poll"] li,html.darkmode .vote_box .vote_list li,html.darkmode .vote-box .vote-list li,html.darkmode .dc_vote li{background:#1c1c1e!important;border-color:#48484c!important;color:#eee!important}',
+      'html.darkmode .thum-txtin [class*="vote"] [class*="bar"],html.darkmode .thum-txtin [class*="poll"] [class*="bar"],html.darkmode .vote_box .vote_bar,html.darkmode .vote-box .vote-bar{background:#48484c!important}',
+      'html.darkmode .thum-txtin [class*="vote"] [class*="bar"] > span,html.darkmode .thum-txtin [class*="poll"] [class*="bar"] > span,html.darkmode .vote_box .vote_bar > span,html.darkmode .vote-box .vote-bar > span{background:#7d8ee0!important}'
+    );
+    // 투표 '공유하기' 버튼(투표 완료 줄의 공유 아이콘): 기본 네모 회색 테두리 대신 둥근 원형 버튼 + 앱 색 아이콘 (아이콘은 마스크로 그려 스프라이트에 기대지 않음)
+    rules.push(
+      '.vote-status-info .sp-sharesns,.vote-btn-box .sp-sharesns,.btn-vote-sns{display:inline-flex!important;align-items:center!important;justify-content:center!important;position:relative!important;box-sizing:border-box!important;width:38px!important;height:38px!important;min-width:38px!important;margin:0 0 0 8px!important;padding:0!important;border:1px solid #e3e5ee!important;border-radius:50%!important;background-color:#fff!important;background-image:none!important;box-shadow:none!important;font-size:0!important;line-height:0!important;text-indent:-9999px!important;overflow:hidden!important;vertical-align:middle!important}',
+      '.vote-status-info .sp-sharesns::after,.vote-btn-box .sp-sharesns::after,.btn-vote-sns::after{content:none!important;display:none!important}',
+      '.vote-status-info .sp-sharesns::before,.vote-btn-box .sp-sharesns::before,.btn-vote-sns::before{content:""!important;display:block!important;width:18px!important;height:18px!important;background-color:#3b4890!important;background-image:none!important;-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7%27 fill=%27none%27 stroke=%27%23000%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E")!important;-webkit-mask-repeat:no-repeat!important;-webkit-mask-position:center!important;-webkit-mask-size:contain!important;mask-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath d=%27M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7%27 fill=%27none%27 stroke=%27%23000%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E")!important;mask-repeat:no-repeat!important;mask-position:center!important;mask-size:contain!important;text-indent:0!important}',
+      'html.darkmode .vote-status-info .sp-sharesns,html.darkmode .vote-btn-box .sp-sharesns,html.darkmode .btn-vote-sns{background-color:#3a3a3c!important;border-color:rgba(255,255,255,0.12)!important}',
+      'html.darkmode .vote-status-info .sp-sharesns::before,html.darkmode .vote-btn-box .sp-sharesns::before,html.darkmode .btn-vote-sns::before{background-color:#a9b4f0!important}'
+    );
+    // 갤로그 '방명록 차단 설정' 팝업: 각진 박스 대신 둥근 카드, 둥근 X, 둥근 입력창, 알약형 저장 버튼 (다크모드 포함)
+    rules.push(
+      '#guestbook_block_setting .layer-popup-inner{box-sizing:border-box!important;max-width:calc(100% - 32px)!important;width:340px!important;border-radius:18px!important;background:#fff!important;overflow:hidden!important;box-shadow:0 10px 30px rgba(0,0,0,.2)!important;text-align:left!important;white-space:normal!important}',
+      'html.darkmode #guestbook_block_setting .layer-popup-inner{background:#2c2c2e!important;box-shadow:none!important}',
+      '#guestbook_block_setting .ly-tit-box{border:0!important;background:none!important;padding:16px 56px 0 18px!important;min-height:0!important}',
+      '#guestbook_block_setting .ly-tit-box .tit{padding:0!important;font-size:17px!important;font-weight:700!important;color:#222!important;letter-spacing:0!important}',
+      'html.darkmode #guestbook_block_setting .ly-tit-box .tit{color:#eee!important}',
+      '#guestbook_block_setting .ly-tit-box .rt{top:12px!important;right:12px!important;transform:none!important}',
+      '#guestbook_block_setting .btn-x-close{width:28px!important;height:28px!important;border:0!important;border-radius:14px!important;background:#f0f0f4!important;position:relative!important}',
+      'html.darkmode #guestbook_block_setting .btn-x-close{background:#3a3a3c!important}',
+      '#guestbook_block_setting .gallog-set-ly{padding:12px 18px 18px!important}',
+      '#guestbook_block_setting .form-minifx-lst > li{border:0!important;padding:0 0 10px!important}',
+      '#guestbook_block_setting .txtlbl{font-size:13px!important;color:#6e6e76!important;margin:0 0 6px!important}',
+      'html.darkmode #guestbook_block_setting .txtlbl{color:#a5a5ab!important}',
+      '#guestbook_block_setting .txt-box textarea{display:block!important;width:100%!important;min-height:120px!important;box-sizing:border-box!important;padding:12px!important;border:1px solid #d6d6dc!important;border-radius:14px!important;background:#f7f8fb!important;color:#222!important;font-size:15px!important;line-height:1.4!important;resize:none!important;outline:0!important}',
+      '#guestbook_block_setting .txt-box textarea:focus{border-color:#3b4890!important;box-shadow:0 0 0 3px rgba(59,72,144,.16)!important}',
+      'html.darkmode #guestbook_block_setting .txt-box textarea{background:#1c1c1e!important;border-color:#48484c!important;color:#eee!important}',
+      '#guestbook_block_setting .ipt{border:1px solid #d6d6dc!important;border-radius:12px!important;padding:8px 12px!important;font-size:15px!important;box-sizing:border-box!important;background:#fff!important;color:#222!important}',
+      'html.darkmode #guestbook_block_setting .ipt{background:#1c1c1e!important;border-color:#48484c!important;color:#eee!important}',
+      '#guestbook_block_setting .dashlst li{color:#8a8a90!important;font-size:12px!important}',
+      '#guestbook_block_setting .btn-line-blue{height:34px!important;min-width:56px!important;padding:0 14px!important;border:0!important;border-radius:17px!important;background:#3b4890!important;color:#fff!important;font-size:13px!important;font-weight:700!important;width:auto!important}',
+      '#guestbook_block_setting .btm-btns-ctr{border:0!important;padding:10px 0 4px!important;text-align:center!important}',
+      '#guestbook_block_setting .btn-line-inblue{height:40px!important;min-width:120px!important;padding:0 28px!important;border:0!important;border-radius:20px!important;background:#3b4890!important;color:#fff!important;font-size:15px!important;font-weight:700!important}',
+      'html.darkmode #guestbook_block_setting .btn-line-inblue,html.darkmode #guestbook_block_setting .btn-line-blue{background:#5a6bc4!important}'
+    );
+    // 갤로그 방명록 입력 띠: '▼ 글 목록' 라벨은 앱이 CSS(::after)로 그린 것이라 DOM 버튼이 없음 → 라벨과 띠(44px 자리·배경·테두리)를 없애고 입력칸만 남김
+    rules.push(
+      'html.dcapp-nc.dcapp-pin .gallog-wrapping .comment-write-btm.nomg::after{content:none!important;display:none!important}',
+      // 입력칸이 화면 아래로 고정되면 그 자리를 감싸던 흰 카드(section.grid)가 비어 남음 → 카드 자체를 접음 (입력 폼은 고정되어 그대로 씀. display:none은 폼까지 숨기므로 쓰지 않음)
+      'html.dcapp-pin .gallog-wrapping .brick-wid > section.grid:has(> .comment-write-btm.nomg){padding:0!important;margin:0!important;height:0!important;min-height:0!important;border:0!important;border-radius:0!important;background:none!important;box-shadow:none!important;overflow:visible!important}',
+      'html.dcapp-nc.dcapp-pin .gallog-wrapping .comment-write-btm.nomg{height:auto!important;min-height:0!important;padding:0!important;border:0!important;background:none!important}',
+      'html.darkmode.dcapp-nc.dcapp-pin .gallog-wrapping .comment-write-btm.nomg{background:none!important;border:0!important}',
+      'html.dcapp-pin body:has(.gallog-wrapping){padding-bottom:0!important}'
+    );
     (cfg.selectors || []).forEach(function (s) {
       if (s && validSel(s)) rules.push(s + '{display:none!important}');
     });
+    // 본문 사진 위에 뜨는 디시 기본 이미지 댓글 버튼(button.btn-imgcomment, #img_comment_open_btn<n>) 숨김 (설정 → 세부 설정)
+    if (cfg.hideImgComment) rules.push('.btn-imgcomment,.img-comment{display:none!important}');   // 사진 댓글 버튼 + 미리보기·댓글 패널
+    else rules.push('.btn-imgcomment{display:inline-block!important}');   // 댓글창을 열어도 사진 위 버튼은 남김 (누르면 열림/닫힘)
+    var dcAccent = (cfg.tint && tintColor('rgb(59,72,144)', cfg.tint)) || '#3b4890';
+    var dcAccentDark = (cfg.tint && tintColor('rgb(157,176,255)', cfg.tint)) || '#9db0ff';
+    var dcDeferBorder = (cfg.tint && tintColor('rgb(198,204,226)', cfg.tint)) || '#d6d8e2';
+    var dcDeferBg = (cfg.tint && tintColor('rgb(235,238,248)', cfg.tint)) || '#f2f3f8';
+    if (cfg.tint) {
+      rules.push(
+        '#dcapp-pager a.on,.btn-comment-write,.btn-vote-go,.gallog-wrapping #guest_write .btn-comment-write{background:' + dcAccent + '!important}',
+        'html.darkmode #dcapp-pager a.on,html.darkmode .btn-comment-write,html.darkmode .btn-vote-go,html.darkmode .gallog-wrapping #guest_write .btn-comment-write{background:' + dcAccentDark + '!important}',
+        '.gallog-wrapping .menu-box li.on a,.vote-view-result .vote-join .ct,.vote-view-result .vote-go-txt{color:' + dcAccent + '!important}',
+        'html.darkmode .gallog-wrapping .menu-box li.on a,html.darkmode .vote-view-result .vote-join .ct,html.darkmode .vote-view-result .vote-go-txt{color:' + dcAccentDark + '!important}'
+      );
+    }
+    if (cfg.deferImages) rules.push('.thum-txtin .dcapp-defer-img{display:none!important}', '.imgwrap:has(.dcapp-defer-img) + .btn-imgcomment,.imgwrap:has(.dcapp-defer-img) .btn-imgcomment,.dcapp-defer-img + .btn-imgcomment{display:none!important}', '.dcapp-defer-btn,.dcapp-defer-all{display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;height:44px;margin:8px 0;padding:0 12px;border:1px solid ' + dcDeferBorder + ';border-radius:10px;background:' + dcDeferBg + ';color:' + dcAccent + ';font-size:14px;font-weight:600;font-family:inherit;-webkit-appearance:none}', '.dcapp-defer-btn:disabled,.dcapp-defer-all:disabled{opacity:.6}', 'html.darkmode .dcapp-defer-btn,html.darkmode .dcapp-defer-all{background:#2c2c2e;border-color:#3d3d40;color:' + dcAccentDark + '}');
+    // 사용자가 고른 글꼴 (설정 → 글꼴). FontFace ArrayBuffer로 로드해 커스텀 스킴 차단 우회
+    var wf = cfg.webFont;
+    if (wf && /^[a-z0-9-]+$/.test(String(wf.id || ''))) {
+      // 글 목록·글·댓글·입력칸·버튼의 글자 (아이콘 글꼴은 자기 font-family를 따로 쓰므로 그대로 남음)
+      rules.push('body,input,textarea,select,button,.gall-detail-lst .subjectin,.gallview-tit-box .tit,.thum-txtin,.cmt-txt{font-family:"DCAppFont","Apple SD Gothic Neo",-apple-system,sans-serif!important}');
+    }
     var fs = cfg.fontSizes || {};
     if (fs.title) rules.push('.gallview-tit-box .tit{font-size:' + fs.title + 'px!important}');
     if (fs.body) rules.push('.thum-txtin{font-size:' + fs.body + 'px!important}');
     if (fs.list) rules.push('.gall-detail-lst .subjectin{font-size:' + fs.list + 'px!important}');
     return rules.join('\n');
   }
+  var loadedFontKey = '';
+  function b64ToBytes(b64) {
+    var bin = atob(b64);
+    var len = bin.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  function removeDCAppFonts() {
+    if (!document.fonts) return;
+    document.fonts.forEach(function (f) {
+      if (f.family === 'DCAppFont' || f.family === '"DCAppFont"') {
+        document.fonts.delete(f);
+      }
+    });
+  }
+  function loadFontWeight(id, weight, cssWeight, expectKey) {
+    var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.dcappFont;
+    if (!handler || typeof FontFace === 'undefined') return Promise.resolve();
+    return handler.postMessage({ id: id, weight: weight }).then(function (b64) {
+      if (!b64 || loadedFontKey !== expectKey) return;
+      var face = new FontFace('DCAppFont', b64ToBytes(b64), { weight: cssWeight, style: 'normal', display: 'swap' });
+      return face.load().then(function (loaded) {
+        if (loadedFontKey === expectKey) document.fonts.add(loaded);
+      });
+    }).catch(function () {});
+  }
+  function syncWebFont(wf) {
+    if (!wf || !/^[a-z0-9-]+$/.test(String(wf.id || ''))) {
+      if (loadedFontKey) {
+        loadedFontKey = '';
+        removeDCAppFonts();
+      }
+      return;
+    }
+    var key = wf.id + ':' + (wf.bold ? '1' : '0');
+    if (loadedFontKey === key) return;
+    loadedFontKey = key;
+    removeDCAppFonts();
+    loadFontWeight(wf.id, 'regular', '400', key);
+    if (wf.bold) loadFontWeight(wf.id, 'bold', '700', key);
+  }
   function ensureStyle() {
+    syncWebFont(cfg.webFont);
     var st = document.getElementById(STYLE_ID);
     if (!st) {
       st = document.createElement('style');
@@ -998,14 +1538,15 @@ enum ContentScript {
     return s;
   }
   function imgURL(x) {
-    var s = x.getAttribute('data-original') || x.getAttribute('data-src') || x.currentSrc || x.src || '';
+    // 눌러서 불러온 사진은 src가 data 주소라서, 원래 디시 주소(data-dcapp-deferred-src)를 씀
+    var s = x.getAttribute('data-dcapp-deferred-src') || x.getAttribute('data-original') || x.getAttribute('data-src') || x.currentSrc || x.src || '';
     if (!s || /^data:/.test(s)) return '';
     try { return new URL(s, location.href).href; } catch (e) { return ''; }
   }
   /// 글 속 사진·움짤의 원본 주소 (움짤은 자리표시 이미지 대신 data-gif / video의 ori-data)
   function galleryMediaURL(x) {
     var s = '';
-    if (x.tagName === 'VIDEO') s = x.getAttribute('ori-data') || x.getAttribute('data-gif') || x.currentSrc || x.src || '';
+    if (x.tagName === 'VIDEO') s = x.getAttribute('data-dcapp-deferred-src') || x.getAttribute('ori-data') || x.getAttribute('data-gif') || x.currentSrc || x.src || '';
     else if (x.classList && x.classList.contains('gif-mp4')) s = x.getAttribute('data-gif') || '';
     if (s) { try { return new URL(s, location.href).href; } catch (e) { return ''; } }
     return imgURL(x);
@@ -1165,7 +1706,7 @@ enum ContentScript {
     return !!nb && nb === normText(actual, sym, spaces);
   }
 
-  function blockedReason(u, idn, dset) {
+  function blockedReason(u, idn, dset, dpset) {
     // 디시 자체 차단창으로 막은 사람: 디시는 block-disable 표시만 붙여 흐리게 보여줌 → 앱 차단처럼 가림
     if (u.el.classList.contains('block-disable')) return '디시 차단';
     var symbols = !!cfg.ignoreSymbols, spaces = !!cfg.ignoreSpaces;
@@ -1205,11 +1746,12 @@ enum ContentScript {
       if (!kj || !(kj.t && kj.t.length) || (kj.g && (',' + kj.g + ',').indexOf(',' + gid + ',') < 0)) continue;
       if (termsMatch(kj.t, bodyText(), symbols, spaces, norm)) return '차단 키워드';
     }
-    if (u.kind === 'comment' && dset.size) {
+    if (u.kind === 'comment' && (dset.size || dpset.size)) {
       var media = u.el.querySelectorAll('img, video');
       for (var k = 0; k < media.length; k++) {
         var key = dcconKey(media[k]);
-        if (key && dset.has(key)) return '차단한 디시콘';
+        var mp = media[k].getAttribute('data-dccon-package') || media[k].getAttribute('package_idx') || '';
+        if ((key && dset.has(key)) || (mp && dpset.has(String(mp)))) return '차단한 디시콘';
       }
     }
     return null;
@@ -1358,7 +1900,246 @@ enum ContentScript {
   var homeTries = 0, homeOpened = false;
   function clearHomeRank() {
     document.querySelectorAll('.dcapp-home-off').forEach(function (el) { el.classList.remove('dcapp-home-off'); });
+    document.querySelectorAll('.dcapp-hc-raw').forEach(function (el) { el.classList.remove('dcapp-hc-raw'); });
+    document.querySelectorAll('.dcapp-hc-host').forEach(function (el) { el.classList.remove('dcapp-hc-host'); });
+    document.querySelectorAll('section.rank-group > .dcapp-hc').forEach(function (el) { el.parentNode.removeChild(el); });
+    homeCardsSig = '';
     document.documentElement.classList.remove('dcapp-home-wait');
+  }
+  // ---------- 홈 순위 카드: 실북갤·흥한갤 한 블록 + 갤러리·마이너갤·미니갤·인물갤 4칸 (좌우로 밀어 1~50위) ----------
+  // 순위는 디시 스크립트가 화면 밖의 원래 칸(rank_title_N·rank_updown_N 등)에 채운 것을 읽어 글자로 다시 그림 (원래 칸은 지우지 않음)
+  // 디시는 순위 목록을 슬라이드를 넘길 때만 받아 오므로, 카드가 필요한 목록을 받게 함 (gallery_rank_call / gallery_hot_call)
+  // 디시 목록 요청은 같은 콜백 이름을 쓰므로 한 번에 하나씩 차례로 받음 (동시에 부르면 응답이 서로 덮어써서 일부가 안 뜸)
+  var HC_CATS = ['갤러리', '마이너갤', '미니갤', '인물갤'];
+  var HC_PREFIX = {
+    rank: [['rank_link_', 'rank_title_', 'rank_updown_'], ['mrank_link_', 'mrank_title_', 'mrank_updown_'], ['mirank_link_', 'mirank_title_', 'mirank_updown_'], ['prrank_link_', 'prrank_title_', 'prrank_updown_']],
+    hot: [['hot_link_', 'hot_title_', 'hot_updown_'], ['mhot_link_', 'mhot_title_', 'mhot_updown_'], ['mihot_link_', 'mihot_title_', 'mihot_updown_'], ['prhot_link_', 'prhot_title_', 'prhot_updown_']]
+  };
+  var HC_LOAD = { rank: [1, 2, 3, 4], hot: [5, 6, 7, 8] };   // 디시 목록 종류 번호 (갤러리·마이너·미니·인물)
+  var HC_TAGS = { rank: ['gall_rank_tag', 'mgall_rank_tag', 'migall_rank_tag', 'prgall_rank_tag'], hot: ['gall_hot_tag', 'mgall_hot_tag', 'migall_hot_tag', 'prgall_hot_tag'] };
+  var HC_PAGE = 10, HC_PAGES = 5;   // 10위씩 5쪽 (1~50위)
+  var homeCardsSig = '';
+  var homeMode = null;
+  var homeChainBusy = { rank: false, hot: false };
+  var homeChainDone = { rank: false, hot: false };
+  function homeHotOn() { return !!document.querySelector('#hot_gall.on'); }
+  function homeCurMode() {
+    if (homeMode === null) homeMode = homeHotOn() ? 'hot' : 'rank';
+    return homeMode;
+  }
+  // 카드 한 종류(갤러리 등)의 순위 — 제목이 없는 칸(아직 안 받은 칸)은 건너뜀
+  function homeCatItems(mode, i) {
+    var p = HC_PREFIX[mode][i];
+    var items = [];
+    for (var n = 1; n <= HC_PAGE * HC_PAGES; n++) {
+      var t = document.getElementById(p[1] + n);
+      var title = t ? (t.textContent || '').trim() : '';
+      if (!title) continue;
+      var a = document.getElementById(p[0] + n);
+      var ud = document.getElementById(p[2] + n);
+      var arrow = ud ? ud.querySelector('.sp-arrow') : null;
+      var kind = 'same';
+      if (arrow) {
+        if (arrow.classList.contains('up')) kind = 'up';
+        else if (arrow.classList.contains('down')) kind = 'down';
+        else if (arrow.classList.contains('new')) kind = 'new';
+      }
+      var ch = ud ? ud.querySelector('.ch-txt') : null;
+      items.push({ n: n, href: a ? (a.getAttribute('href') || '') : '', title: title, kind: kind, amount: ch ? (ch.textContent || '').trim() : '' });
+    }
+    return items;
+  }
+  // 아직 안 받은 종류를 하나씩 차례로 요청 (앞 것이 채워지거나 12초가 지나면 다음)
+  var homeFnRetry = { rank: 0, hot: 0 };
+  function homeRequestLists(mode) {
+    if (homeChainBusy[mode] || homeChainDone[mode]) return;
+    var fn = mode === 'hot' ? window.gallery_hot_call : window.gallery_rank_call;
+    if (typeof fn !== 'function') {
+      if (homeFnRetry[mode] < 15) {
+        homeFnRetry[mode]++;
+        setTimeout(function () { homeRequestLists(mode); }, 300);
+      }
+      return;
+    }
+    var types = HC_LOAD[mode];
+    var step = 0;
+    homeChainBusy[mode] = true;
+    function next() {
+      while (step < types.length && homeCatItems(mode, step).length) step++;
+      if (step >= types.length) { homeChainBusy[mode] = false; homeChainDone[mode] = true; try { schedule(); } catch (e) {} return; }
+      var idx = step, t0 = Date.now();
+      // 디시 gallery_rank_call / gallery_hot_call은 해당 tag가 true이면 요청을 건너뛰므로 호출 직전에 false로 풀고 요청
+      try { window[HC_TAGS[mode][idx]] = false; } catch (e) {}
+      try { fn(types[idx]); } catch (e) {}
+      (function wait() {
+        if (homeCatItems(mode, idx).length || Date.now() - t0 > 12000) {
+          try { schedule(); } catch (e) {}
+          step = idx + 1;
+          setTimeout(next, 250);
+          return;
+        }
+        setTimeout(wait, 250);
+      })();
+    }
+    next();
+  }
+  // 실북갤/흥한갤 전환: 보여 줄 종류를 바꾸고 목록을 받아 다음 화면 갱신 때 다시 그림
+  function homeCardsMode(m) {
+    if (m !== 'hot' && m !== 'rank') return;
+    homeMode = m;
+    homeCardsSig = '';
+    homeChainDone[m] = false;
+    homeRequestLists(m);
+    setTimeout(schedule, 50);
+    setTimeout(schedule, 800);
+    setTimeout(schedule, 2000);
+  }
+  function homeCardsBuild(sec) {
+    if (!sec || !isHomePage()) return;
+    var mode = homeCurMode();
+    sec.classList.add('dcapp-hc-host');
+    Array.prototype.forEach.call(sec.children, function (ch) {
+      if (!/dcapp-hc/.test(clsOf(ch))) ch.classList.add('dcapp-hc-raw');
+    });
+    homeRequestLists(mode);
+    var cats = HC_CATS.map(function (name, i) { return { name: name, items: homeCatItems(mode, i) }; });
+    var sig = mode + '|' + cats.map(function (c) {
+      return c.items.map(function (it) { return it.n + '~' + it.kind + '~' + it.amount + '~' + it.title + '~' + it.href; }).join(';');
+    }).join('/');
+    var root = sec.querySelector(':scope > .dcapp-hc');
+    if (root && sig === homeCardsSig) return;
+    homeCardsSig = sig;
+    // 다시 그릴 때 각 카드의 좌우 위치를 유지 (같은 모드일 때만)
+    var keep = [];
+    if (!root) {
+      root = document.createElement('div');
+      root.className = 'dcapp-hc';
+      sec.appendChild(root);
+    } else if (root.getAttribute('data-mode') === mode) {
+      root.querySelectorAll('.dcapp-hc-track').forEach(function (t) { keep.push(t.scrollLeft); });
+    }
+    root.setAttribute('data-mode', mode);
+    if (!root.__dcappBound) {
+      root.__dcappBound = true;
+      root.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
+        if (!b) return;
+        e.preventDefault();
+        homeCardsMode(b.getAttribute('data-m'));
+      });
+    }
+    root.innerHTML = '';
+    var top = document.createElement('div');
+    top.className = 'dcapp-hc-card dcapp-hc-top';
+    var seg = document.createElement('div');
+    seg.className = 'dcapp-hc-seg';
+    [['rank', '실북갤'], ['hot', '흥한갤']].forEach(function (pair) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('data-m', pair[0]);
+      if (mode === pair[0]) b.className = 'on';
+      b.textContent = pair[1];
+      seg.appendChild(b);
+    });
+    top.appendChild(seg);
+    root.appendChild(top);
+    var grid = document.createElement('div');
+    grid.className = 'dcapp-hc-grid';
+    cats.forEach(function (c) {
+      var card = document.createElement('section');
+      card.className = 'dcapp-hc-card';
+      var h = document.createElement('h3');
+      h.className = 'dcapp-hc-title';
+      h.textContent = c.name;
+      card.appendChild(h);
+      var track = document.createElement('div');
+      track.className = 'dcapp-hc-track';
+      var dots = document.createElement('div');
+      dots.className = 'dcapp-hc-dots';
+      var made = 0;
+      for (var pg = 0; pg < HC_PAGES; pg++) {
+        var pageItems = c.items.filter(function (it) { return Math.floor((it.n - 1) / HC_PAGE) === pg; });
+        if (!pageItems.length) continue;
+        var ol = document.createElement('ol');
+        ol.className = 'dcapp-hc-list dcapp-hc-page';
+        pageItems.forEach(function (it) {
+          var li = document.createElement('li');
+          var a = document.createElement('a');
+          a.className = 'dcapp-hc-link';
+          if (it.href) a.setAttribute('href', it.href);
+          var no = document.createElement('span');
+          no.className = 'dcapp-hc-no';
+          no.textContent = String(it.n);
+          var tt = document.createElement('span');
+          tt.className = 'dcapp-hc-tt';
+          tt.textContent = it.title;
+          var ch = document.createElement('span');
+          var amt = it.amount ? ' ' + it.amount : '';
+          ch.className = 'dcapp-hc-ch dcapp-hc-' + it.kind;
+          ch.textContent = it.kind === 'up' ? '▲' + amt : it.kind === 'down' ? '▼' + amt : it.kind === 'new' ? 'NEW' : '–';
+          a.appendChild(no);
+          a.appendChild(tt);
+          a.appendChild(ch);
+          li.appendChild(a);
+          ol.appendChild(li);
+        });
+        track.appendChild(ol);
+        made++;
+      }
+      if (!made) {
+        var wait = document.createElement('ol');
+        wait.className = 'dcapp-hc-list dcapp-hc-page';
+        var waiting = document.createElement('li');
+        waiting.className = 'dcapp-hc-empty';
+        waiting.textContent = '불러오는 중…';
+        wait.appendChild(waiting);
+        track.appendChild(wait);
+        made = 1;
+      }
+      for (var k = 0; k < made && made > 1; k++) {
+        var dot = document.createElement('span');
+        dot.className = 'dcapp-hc-dot' + (k === 0 ? ' on' : '');
+        dots.appendChild(dot);
+      }
+      track.addEventListener('scroll', function () {
+        var w = track.clientWidth || 1;
+        var cur = Math.round(track.scrollLeft / w);
+        Array.prototype.forEach.call(dots.children, function (dt, j) { dt.classList.toggle('on', j === cur); });
+      }, { passive: true });
+      card.appendChild(track);
+      if (made > 1) card.appendChild(dots);
+      grid.appendChild(card);
+    });
+    root.appendChild(grid);
+    root.querySelectorAll('.dcapp-hc-track').forEach(function (t, i) { if (keep[i]) t.scrollLeft = keep[i]; });
+    // 홈 4블록 중 아직 '불러오는 중…' 상태인 블록이 있으면 자동으로 재요청(필요 시 1회 새로고침)
+    if (root.querySelector('.dcapp-hc-empty')) {
+      if (!window.__dcappHomeWatch) {
+        window.__dcappHomeWatchTries = (window.__dcappHomeWatchTries || 0);
+        window.__dcappHomeWatch = setTimeout(function () {
+          window.__dcappHomeWatch = null;
+          if (!isHomePage()) return;
+          if (!document.querySelector('.dcapp-hc-empty')) {
+            try { sessionStorage.removeItem('dcapp_home_reloaded'); } catch (e) {}
+            return;
+          }
+          window.__dcappHomeWatchTries = (window.__dcappHomeWatchTries || 0) + 1;
+          if (window.__dcappHomeWatchTries <= 2) {
+            try { homeRequestLists(homeMode); } catch (e) {}
+          } else {
+            try {
+              if (!sessionStorage.getItem('dcapp_home_reloaded')) {
+                sessionStorage.setItem('dcapp_home_reloaded', '1');
+                location.reload();
+              }
+            } catch (e) {}
+          }
+        }, 2000);
+      }
+    } else {
+      window.__dcappHomeWatchTries = 0;
+      try { sessionStorage.removeItem('dcapp_home_reloaded'); } catch (e) {}
+    }
   }
   function homeRankOnly() {
     if (!isHomePage() || cfg.homeRank === false) { clearHomeRank(); return; }
@@ -1393,6 +2174,7 @@ enum ContentScript {
       if (panel.contains(a) || /더보기|닫기/.test(txt(a))) a.classList.add('dcapp-home-off');
     });
     document.documentElement.classList.remove('dcapp-home-wait');
+    try { homeCardsBuild(document.querySelector('section.rank-group') || panel); } catch (e) {}
   }
   if (isHomePage() && cfg.homeRank !== false) {
     document.documentElement.classList.add('dcapp-home-wait');
@@ -1490,7 +2272,7 @@ enum ContentScript {
   // ---------- 테마: 웹페이지 속 디시 파란색 계열을 앱 테마 색으로 ----------
   // 파란색 계열(색상각 200~262°, 채도 있는 색)만 골라 색상각을 테마 색으로 돌림. 밝기는 그대로라 연한 배경은 연하게 유지
   // 글 본문(사용자가 쓴 내용)은 건드리지 않음
-  var tintKey = '', tintN = 0, tintTimer = null;
+  var tintKey = '', tintN = 0, tintTimer = null, tintFirstDone = false;
   function parseRGB(c) {
     var m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c || '');
     if (!m) return null;
@@ -1556,7 +2338,7 @@ enum ContentScript {
     var all = document.body.getElementsByTagName('*');
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
-      if (body && body.contains(el)) continue;                     // 글 본문은 그대로
+      if (body && body.contains(el) && !el.classList.contains('dcapp-defer-btn') && !el.classList.contains('dcapp-defer-all')) continue;                     // 글 본문은 그대로 (이미지 숨김 버튼은 테마 색 연동)
       if (el.closest('.dcapp-mine-name')) continue;                // 내 닉네임 표시 색은 테마와 상관없이 유지
       if (/^(IMG|VIDEO|SVG|PATH|SCRIPT|STYLE|IFRAME)$/i.test(el.tagName)) continue;
       var cs = getComputedStyle(el), done = el.getAttribute('data-dcapp-tint') || '';
@@ -1586,7 +2368,199 @@ enum ContentScript {
   }
   function scheduleTint() {
     if (tintTimer) return;
-    tintTimer = setTimeout(function () { tintTimer = null; try { tintPage(); } catch (e) {} }, 250);
+    tintTimer = setTimeout(function () { tintTimer = null; try { tintPage(); } catch (e) {} }, 40);
+  }
+  window.addEventListener('load', function () { if (cfg.tint) { try { tintPage(); } catch (e) {} } }, { passive: true });
+  // 영상·소리가 시작되면 앱에 알림 → 배경 음악 유지 설정이 켜져 있으면 앱이 오디오 세션을 다시 맞춤 (WebKit이 세션을 바꾸는 것 대응)
+  (function () {
+    if (window.__dcappMediaPlay) return;
+    window.__dcappMediaPlay = true;
+    document.addEventListener('play', function (e) {
+      var t = e.target;
+      if (t && (t.tagName === 'VIDEO' || t.tagName === 'AUDIO')) post('mediaPlay', {});
+    }, true);
+  })();
+  // 투표 iframe의 '공유하기'가 보낸 소스 문자열을 앱으로 전달 → 앱이 클립보드에 복사 (공유 팝업은 띄우지 않음)
+  function ensureVoteCopyListener() {
+    if (window.__dcappVoteMsg) return;
+    window.__dcappVoteMsg = true;
+    window.addEventListener('message', function (ev) {
+      if (ev.origin !== location.origin || !ev.data) return;
+      if (typeof ev.data.__dcappVoteCopy === 'string') { post('voteCopy', { text: ev.data.__dcappVoteCopy }); return; }
+      if (typeof ev.data.__dcappVoteImage === 'string') { post('voteImage', { url: ev.data.__dcappVoteImage, ref: ev.data.__dcappVoteRef || '' }); }
+    });
+    // 투표 iframe의 onclick=parent.showVoteImg("id=...&no=...") 호출을 메인 창에서 직접 가로채 원본 팝업 주소 전달
+    if (!window.showVoteImg || !window.showVoteImg.__dcapp) {
+      var origShowVoteImg = window.showVoteImg;
+      var wrappedShowVoteImg = function (arg) {
+        var q = String(arg || '').replace(/&amp;/g, '&').trim();
+        if (q) {
+          var query = /(^|&)no=/.test(q) ? q : ('no=' + q);
+          var photo = 'https://image.dcinside.com/viewimagePop.php?' + query;
+          try { post('voteImage', { url: photo, ref: location.href }); return; } catch (e) {}
+        }
+        if (typeof origShowVoteImg === 'function') return origShowVoteImg.apply(this, arguments);
+      };
+      wrappedShowVoteImg.__dcapp = true;
+      window.showVoteImg = wrappedShowVoteImg;
+    }
+  }
+  function styleVoteIframes() {
+    ensureVoteCopyListener();
+    var dark = document.documentElement.classList.contains('darkmode');
+    document.querySelectorAll('iframe[id^="vote_iframe"], iframe[src*="vote"], iframe[src*="poll"]').forEach(function (fr) {
+      function inject() {
+        try {
+          var doc = fr.contentDocument;
+          if (!doc || !doc.head) return;
+          doc.documentElement.classList.toggle('darkmode', dark);
+          // 공유하기 버튼: 디시 공유 팝업보다 먼저 가로채서 <iframe src="…"></iframe> 소스만 앱으로 보냄 (한 번만 붙임)
+          if (!doc.__dcappShare) {
+            doc.__dcappShare = true;
+            doc.addEventListener('click', function (e) {
+              var t = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+              var b = t && t.closest ? t.closest('.sp-sharesns, .btn-vote-sns, button[class*="share"], a[class*="share"], button[class*="sns"], a[class*="sns"]') : null;
+              if (!b) return;
+              e.preventDefault(); e.stopPropagation();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              var src = fr.src || fr.getAttribute('src') || '';
+              if (!src) return;
+              var code = '<iframe src="' + src.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"></iframe>';
+              try { window.parent.postMessage({ __dcappVoteCopy: code }, location.origin); } catch (err) {}
+            }, true);
+          }
+          // 투표 보기 썸네일: 디시의 showVoteImg(전체 화면 검은 층)보다 먼저 가로채서 앱의 미리보기 창으로 (사진 번호 → 디시 사진 주소)
+          if (!doc.__dcappVoteImg) {
+            doc.__dcappVoteImg = true;
+            doc.addEventListener('click', function (e) {
+              var t = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+              if (!t || !t.closest || !t.closest('.vote-ask-lst, .vote-gp-lst, .vote-thum, .vote-thum-img, .vote-view-inner, [class*="vote"]')) return;
+              var num = '';
+              var oc = t.closest('[onclick*="showVoteImg"]');
+              if (!oc) {
+                var li = t.closest('li');
+                if (li) oc = li.querySelector('[onclick*="showVoteImg"]');
+              }
+              if (oc) {
+                var m1 = /showVoteImg\(\s*['"]?([^'"\s),]+)/.exec(oc.getAttribute('onclick') || '');
+                if (m1) num = m1[1];
+              }
+              if (!num) {
+                var im = t.tagName === 'IMG' ? t : (t.querySelector ? t.querySelector('img') : null);
+                var src0 = im ? (im.getAttribute('src') || im.getAttribute('data-original') || '') : '';
+                var m2 = /viewimage\.php\?([^"'\s]+)/.exec(src0);
+                if (m2) num = m2[1];
+              }
+              if (!num) return;
+              e.preventDefault(); e.stopPropagation();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              // 사진 주소: 썸네일 onclick 인자는 "id=…&no=…" 전체. 디시 팝업 주소(viewimagePop.php)를 그대로 넘김 (큰 원본 사진을 여는 주소)
+              num = String(num).replace(/&amp;/g, '&');
+              var query = /(^|&)no=/.test(num) ? num : ('no=' + num);
+              var photo = 'https://image.dcinside.com/viewimagePop.php?' + query;
+              // Referer는 글 주소가 아니라 이 투표 iframe의 src (사진 서버가 투표 주소의 Referer만 받음)
+              try { window.parent.postMessage({ __dcappVoteImage: photo, __dcappVoteRef: fr.src || '' }, location.origin); } catch (err) {}
+            }, true);
+          }
+          var st = doc.getElementById('dcapp-vote-style');
+          if (!st) {
+            st = doc.createElement('style');
+            st.id = 'dcapp-vote-style';
+            doc.head.appendChild(st);
+          }
+          var mainSt = document.getElementById('dcapp-style');
+          // 투표 iframe 안: 배경은 투명(바깥 글 배경이 보이게), .vote-view-inner를 iframe 경계에서 2px 안쪽으로 넣어 둥근 모서리 4곳이 잘리지 않게 함
+          var extra = '\nhtml,body{background:transparent!important;margin:0!important}.vote-view-scope{margin:0!important;background:transparent!important}.vote-view-inner{margin:2px!important;width:calc(100% - 4px)!important;box-sizing:border-box!important}';
+          if (mainSt && st.textContent !== mainSt.textContent + extra) st.textContent = mainSt.textContent + extra;
+          var inner = doc.querySelector('.vote-view-inner');
+          var h = inner ? inner.offsetHeight : (doc.documentElement ? doc.documentElement.scrollHeight : 0);
+          if (h > 40) fr.style.setProperty('height', (h + 6) + 'px', 'important');
+        } catch (e) {}
+      }
+      inject();
+      if (!fr.__dcappVoteHook) { fr.__dcappVoteHook = true; fr.addEventListener('load', inject); }
+    });
+  }
+  function suppressGallInfoPop(ms) {
+    try { sessionStorage.setItem('dcapp_suppress_gall_info', String(Date.now() + (ms || 4000))); } catch (e) {}
+  }
+  function isGallInfoSuppressed() {
+    try {
+      var until = Number(sessionStorage.getItem('dcapp_suppress_gall_info') || '0');
+      if (until > Date.now()) return true;
+      if (until) sessionStorage.removeItem('dcapp_suppress_gall_info');
+    } catch (e) {}
+    return false;
+  }
+  function closeMinorInfoPopNow() {
+    try { if (typeof window.mgall_popClose === 'function') window.mgall_popClose(); } catch (e) {}
+    document.querySelectorAll('#minor_info_pop, #major_info_pop, .layer-center-popup[id*="info_pop"]').forEach(function (el) {
+      el.style.setProperty('display', 'none', 'important');
+    });
+  }
+  function hideGallogListBtn() {
+    if (/^\/managehistory\//.test(location.pathname)) {
+      document.documentElement.classList.add('dcapp-managehistory');
+      suppressGallInfoPop(5000);
+    }
+    if (isGallInfoSuppressed()) closeMinorInfoPopNow();
+    if (!window.__dcappMinorPopHook) {
+      window.__dcappMinorPopHook = true;
+      var closeMinorInfoPop = closeMinorInfoPopNow;
+      window.addEventListener('pagehide', closeMinorInfoPop);
+      window.addEventListener('popstate', function () {
+        closeMinorInfoPop();
+        setTimeout(closeMinorInfoPop, 0);
+        setTimeout(closeMinorInfoPop, 180);
+      });
+      window.addEventListener('pageshow', function () {
+        closeMinorInfoPop();
+        setTimeout(closeMinorInfoPop, 0);
+        setTimeout(closeMinorInfoPop, 180);
+      });
+      document.addEventListener('click', function (ev) {
+        var t = ev.target && ev.target.closest ? ev.target.closest('.gall_history_btn, [onclick*="managehistory"], a[href*="managehistory"]') : null;
+        if (t) {
+          suppressGallInfoPop(5000);
+          closeMinorInfoPop();
+          setTimeout(closeMinorInfoPop, 100);
+          setTimeout(closeMinorInfoPop, 500);
+        }
+      }, true);
+    }
+    if (!/\/gallog\//.test(location.pathname)) return;
+    var root = document.querySelector('.gallog-wrapping') || document.body;
+    if (!root) return;
+    root.querySelectorAll('button, a, select, div, span, p, li').forEach(function (el) {
+      if (el.classList.contains('dcapp-gallog-hide')) return;
+      var matched = false;
+      if (el.tagName === 'SELECT') {
+        var opt = el.options && el.options[el.selectedIndex];
+        var ot = (opt ? opt.textContent : el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (ot.indexOf('글 목록') >= 0 || ot.indexOf('글목록') >= 0) matched = true;
+      } else {
+        var direct = '';
+        for (var i = 0; i < el.childNodes.length; i++) {
+          if (el.childNodes[i].nodeType === 3) direct += el.childNodes[i].nodeValue || '';
+        }
+        direct = direct.replace(/\s+/g, ' ').trim();
+        var full = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (direct === '글 목록' || direct === '▼ 글 목록' || direct === '▲ 글 목록' || direct === '▾ 글 목록' || direct === '글목록' ||
+            (full.length <= 16 && (full.indexOf('글 목록') >= 0 || full.indexOf('글목록') >= 0))) {
+          matched = true;
+        }
+      }
+      if (!matched) return;
+      var box = el;
+      while (box.parentElement && box.parentElement !== root && box.parentElement !== document.body) {
+        var p = box.parentElement;
+        if (p.querySelector('ul.all-comment-lst, ul.gall-detail-lst, #guest_write, .menu-box')) break;
+        var h = p.getBoundingClientRect ? p.getBoundingClientRect().height : 0;
+        if (h > 90) break;
+        box = p;
+      }
+      box.classList.add('dcapp-gallog-hide');
+    });
   }
 
   /// 유저 메모를 닉네임 바로 뒤에 표시 (아이디 > IP > 닉네임 순으로 찾음).
@@ -1771,9 +2745,27 @@ enum ContentScript {
       return /관리\s*내역/.test(txt(x));
     })[0] || null;
   }
+  function openGalleryInfo() {
+    try { sessionStorage.removeItem('dcapp_suppress_gall_info'); } catch (e) {}
+    var btn = document.querySelector('a.sp-mgallinfo, [onclick*="Mgallinfo"], [onclick*="gallinfo"], .btn-gall-info, .sp-info');
+    if (btn) { try { btn.click(); return 'ok'; } catch (e) {} }
+    if (typeof window.Mgallinfo === 'function') { try { window.Mgallinfo(); return 'ok'; } catch (e) {} }
+    if (typeof window.mgall_popOpen === 'function') { try { window.mgall_popOpen(); return 'ok'; } catch (e) {} }
+    return 'none';
+  }
   function openManageLog() {
+    suppressGallInfoPop(5000);
     var a = manageLogLink();
     if (!a) return 'none';
+    var closePop = function () {
+      try { if (typeof window.mgall_popClose === 'function') window.mgall_popClose(); } catch (e) {}
+      document.querySelectorAll('#minor_info_pop, #major_info_pop, .layer-center-popup[id*="info_pop"]').forEach(function (el) {
+        el.style.setProperty('display', 'none', 'important');
+      });
+    };
+    closePop();
+    setTimeout(closePop, 100);
+    setTimeout(closePop, 500);
     var h = a.getAttribute('href') || '';
     if (h && !/^\s*(#|javascript:)/i.test(h)) { location.href = a.href; return 'nav'; }
     var inner = a.querySelector('[onclick]');
@@ -2408,11 +3400,261 @@ enum ContentScript {
     if (rj && cell) cell.classList.toggle('on', rj.classList.contains('on'));
   }
 
+  // ---------- 본문 이미지 숨기기 (눌러서 불러오기) — 셀룰러 데이터 절약 ----------
+  // 설정이 켜져 있으면 앱이 글 페이지의 디시 사진 요청(dcimg)을 막아 둠 (DeferredImages.swift).
+  // 여기서는 막힌 사진의 주소를 옮겨 두고 자리에 '이미지 불러오기' 버튼을 둔다. 누르면 앱이 받아 data 주소로 돌려준다.
+  // 디시 사진 서버 주소(dcimg)인 것만 대상이다. 디시 아이콘·경고 그림 등 다른 주소의 그림은 건드리지 않는다.
+  // 스포일러 경고 칸(#spoiler) 안의 사진은 버튼 없이 바로 받아 보여 준다 (요청이 막혀 있어서 앱이 받아야 보인다).
+  var deferSeq = 0;
+  var deferMap = {};      // id -> img 요소
+  var deferTimers = {};   // id -> 응답 기다림 시간 제한 (응답이 끝내 안 오면 버튼을 다시 누를 수 있게 푼다)
+  var DEFER_WAIT_MS = 60000;
+  // 움짤(<video class="dc_mv">)은 mp4를 source에 두므로 그 주소를 본다. 사진은 src·data-original 등을 본다
+  function deferCandidate(el) {
+    var vals;
+    if (el.tagName === 'VIDEO') {
+      vals = [el.getAttribute('src') || ''].concat(Array.prototype.map.call(el.querySelectorAll('source'), function (so) {
+        return so.getAttribute('src') || '';
+      }));
+    } else {
+      vals = ['src', 'data-original', 'data-src'].map(function (a) { return el.getAttribute(a) || ''; });
+    }
+    vals = vals.map(function (v) {
+      v = v.trim();
+      return v.indexOf('//') === 0 ? 'https:' + v : v;
+    });
+    return vals.filter(function (v) { return /^https?:\/\/dcimg/i.test(v); })[0] || '';
+  }
+  function deferButton(id, label) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dcapp-defer-btn';
+    btn.setAttribute('data-dcapp-defer-id', id);
+    btn.textContent = label || '이미지 불러오기';
+    return btn;
+  }
+  function deferReset(b, label) {
+    b.disabled = false;
+    b.textContent = label || '이미지 불러오기';
+  }
+  function deferClearTimer(id) {
+    if (deferTimers[id]) { clearTimeout(deferTimers[id]); delete deferTimers[id]; }
+  }
+  // 앱에 사진을 요청하고, 응답이 오지 않으면 시간이 지난 뒤 버튼을 다시 누를 수 있게 푼다
+  function deferRequest(id, im) {
+    deferClearTimer(id);
+    deferTimers[id] = setTimeout(function () {
+      delete deferTimers[id];
+      deferredImage(id, null);
+    }, DEFER_WAIT_MS);
+    // 사진을 받을 때 쓰는 값: 글 주소(Referer)와 이 웹뷰의 브라우저 정보(User-Agent)
+    post('deferimg', { id: id, src: im.getAttribute('data-dcapp-deferred-src') || '', page: location.href, ua: navigator.userAgent });
+  }
+  function deferPostImages() {
+    if (!cfg.deferImages) return;
+    document.querySelectorAll('.thum-txtin img, .thum-txtin video').forEach(function (im) {
+      if (im.getAttribute('data-dcapp-defer-id') || !im.parentNode) return;
+      if (im.closest && im.closest('#spoiler')) return;   // 스포일러 경고 칸 그림은 앱 카드로 바뀌어 숨김 — 대상 아님
+      var s = deferCandidate(im);
+      if (!s) return;   // 디시 사진·움짤 서버 주소가 아니면 그대로 둠
+      var id = 'd' + (++deferSeq);
+      var isVideo = im.tagName === 'VIDEO';
+      im.setAttribute('data-dcapp-defer-id', id);
+      im.setAttribute('data-dcapp-deferred-src', s);
+      im.removeAttribute('src');
+      if (isVideo) {
+        Array.prototype.forEach.call(im.querySelectorAll('source'), function (so) { so.removeAttribute('src'); });
+      } else {
+        im.removeAttribute('data-original');
+        im.removeAttribute('data-src');
+      }
+      deferMap[id] = im;
+      im.classList.add('dcapp-defer-img');
+      im.parentNode.insertBefore(deferButton(id, isVideo ? '움짤 불러오기' : '이미지 불러오기'), im.nextSibling);
+    });
+    syncDeferAll();
+  }
+  // 글 본문 맨 위 '한번에 불러오기' 버튼: 아직 숨겨진 사진이 있을 때만, 남은 장수 표시 (다 불러오면 사라짐)
+  function syncDeferAll() {
+    document.querySelectorAll('.thum-txtin').forEach(function (box) {
+      var n = box.querySelectorAll('.dcapp-defer-img').length;
+      var all = box.querySelector(':scope > .dcapp-defer-all');
+      if (n === 0) {
+        if (all) all.parentNode.removeChild(all);
+        return;
+      }
+      if (!all) {
+        all = document.createElement('button');
+        all.type = 'button';
+        all.className = 'dcapp-defer-all';
+        box.insertBefore(all, box.firstChild);
+      }
+      var busy = !!box.querySelector('.dcapp-defer-btn:disabled');
+      all.disabled = busy;
+      all.textContent = busy ? '불러오는 중…' : '이미지 한번에 불러오기 (' + n + '장)';
+    });
+  }
+  // 버튼 누름: 기본 동작(사진 보기 등)은 막고, 앱에 사진을 요청
+  document.addEventListener('click', function (e) {
+    var all = e.target && e.target.closest ? e.target.closest('.dcapp-defer-all') : null;
+    if (all) {
+      e.preventDefault();
+      e.stopPropagation();
+      all.parentNode.querySelectorAll('.dcapp-defer-btn').forEach(function (x) {
+        if (!x.disabled) x.click();
+      });
+      syncDeferAll();
+      return;
+    }
+    var b = e.target && e.target.closest ? e.target.closest('.dcapp-defer-btn') : null;
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var id = b.getAttribute('data-dcapp-defer-id');
+    var im = deferMap[id];
+    if (!im || b.disabled) return;
+    b.disabled = true;
+    b.textContent = '불러오는 중…';
+    deferRequest(id, im);
+    syncDeferAll();
+  }, true);
+  // 앱이 받은 결과: url이 있으면 사진을 넣고, 없으면(실패·시간 초과) 버튼을 다시 누를 수 있게 함
+  // 불러온 사진에 디시 '댓글' 버튼(button.btn-imgcomment)이 없으면 디시 함수로 다시 만든다
+  // (디시는 사진을 처음 볼 때 한 번만 버튼을 만들어서, 그때 숨겨져 있던 사진은 버튼이 빠짐)
+  function ensureImgCommentButton(im) {
+    var fno = im.getAttribute('data-fileno');
+    var flag = im.getAttribute('data-comment');
+    var wrap = im.closest ? im.closest('.imgwrap') : null;
+    if (!fno || !/^\d+$/.test(fno) || flag !== '1' || !wrap || !wrap.parentNode) return;   // 댓글 기능이 없는 사진
+    if (localStorage.getItem('show_img_comment') === 'hide') return;                         // 디시 설정: 사진 댓글 숨김
+    if (document.getElementById('img_comment_open_btn' + fno)) return;
+    if (document.getElementById('img_comment_div' + fno)) {
+      // 패널은 이미 있고 버튼만 빠진 경우: 버튼만 붙이고 디시 함수로 열게 함
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-imgcomment';
+      b.id = 'img_comment_open_btn' + fno;
+      b.textContent = '댓글';
+      b.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (typeof window.imgCommentOpen === 'function') window.imgCommentOpen(fno);
+      });
+      wrap.parentNode.insertBefore(b, wrap.nextSibling);
+      return;
+    }
+    // 패널도 없으면 디시가 쓰는 방식 그대로 (패널과 버튼을 함께 만듦)
+    if (typeof window.imgCommentLoad === 'function' && window.jQuery) {
+      try { window.imgCommentLoad(window.jQuery(im), fno, flag); } catch (e) {}
+    }
+  }
+  // 불러온 사진을 디시가 사진을 처음 볼 때와 같게 처리한다.
+  // 디시는 사진이 로드된 뒤의 lazy 로딩 load 콜백(dccon_replace)에서 사진을 .imgwrap으로 감싸고 댓글 버튼·패널을 만든다.
+  // 숨긴 사진은 원본 주소를 떼어 뒀으므로 그 콜백이 돌지 않는다 → 로드가 끝나면 같은 함수를 여기서 직접 부른다.
+  function afterDeferredPhoto(im, url) {
+    im.addEventListener('load', function onLoaded() {
+      im.removeEventListener('load', onLoaded);
+      if (im.closest && im.closest('.imgwrap')) {
+        try { ensureImgCommentButton(im); } catch (e) {}
+        return;
+      }
+      if (typeof window.dccon_replace === 'function' && window.jQuery) {
+        try { window.dccon_replace(im); } catch (e) {}
+      }
+    });
+    im.setAttribute('src', url);
+  }
+  // 불러온 움짤(동영상): 주소를 채워 넣고 다시 읽어 재생 (음소거·자동재생 속성은 디시 마크업 그대로)
+  function restoreVideo(v, url) {
+    var so = v.querySelector('source');
+    (so || v).setAttribute('src', url);
+    try { v.load(); } catch (e) {}
+    try {
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
+  function deferredImage(id, url) {
+    var im = deferMap[id];
+    var b = document.querySelector('.dcapp-defer-btn[data-dcapp-defer-id="' + id + '"]');
+    deferClearTimer(id);
+    if (!im) {
+      if (b) deferReset(b, '불러오지 못했어요 · 다시 누르기');
+      syncDeferAll();
+      return false;
+    }
+    if (url) {
+      im.classList.remove('dcapp-defer-img');
+      if (b) b.parentNode.removeChild(b);
+      if (im.tagName === 'VIDEO') restoreVideo(im, url);
+      else afterDeferredPhoto(im, url);
+    } else if (b) {
+      deferReset(b, '불러오지 못했어요 · 다시 누르기');
+    }
+    syncDeferAll();
+    return true;
+  }
+
+  // 이미지 댓글 머리글의 댓글 수: 디시는 '[N]'으로 적으므로 대괄호를 떼고 배지 모양으로 (디시가 다시 쓰면 다음 적용 때 또 뗌)
+  function tidyImgCommentCount() {
+    document.querySelectorAll('.img-comment .all-comment-tit .tit .ct').forEach(function (c) {
+      var m = (c.textContent || '').match(/^\s*\[\s*(\d+)\s*\]\s*$/);
+      if (m) c.textContent = m[1];
+      c.classList.add('dcapp-ct');
+    });
+  }
+  // 이미지 댓글 미리보기가 떠 있는 사진: 디시는 이때 '댓글' 버튼을 만들지 않으므로 사진 위 우하단에 버튼을 붙인다.
+  // 누르면 디시 함수 imgCommentOpen이 미리보기를 접고 전체 댓글을 연다 (닫으면 디시가 버튼을 다시 보여 줌)
+  function ensureImgOpenButtons() {
+    if (cfg.hideImgComment) return;   // 사진 댓글 버튼 숨김 설정이면 만들지 않음
+    document.querySelectorAll('div.img-comment[id^="img_comment_div"]').forEach(function (panel) {
+      var fno = panel.id.slice('img_comment_div'.length);
+      if (!/^\d+$/.test(fno) || document.getElementById('img_comment_open_btn' + fno)) return;
+      if (!panel.querySelector('.all-comment.preview') || getComputedStyle(panel).display === 'none') return;   // 미리보기가 보일 때만
+      var list = panel.querySelector('.all-comment.list');
+      if (list && getComputedStyle(list).display !== 'none') return;   // 전체 목록이 열려 있으면 디시가 관리
+      // 사진 칸(.imgwrap): 패널 바로 앞 (사이에 .num이 끼어 있을 수 있음)
+      var wrap = null;
+      for (var p = panel.previousElementSibling, i = 0; p && !wrap && i < 3; p = p.previousElementSibling, i++) {
+        if (p.classList && p.classList.contains('imgwrap')) wrap = p;
+      }
+      if (!wrap) return;
+      var media = wrap.querySelector('img, video');
+      if (!media) return;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-imgcomment';
+      b.id = 'img_comment_open_btn' + fno;
+      b.setAttribute('onclick', 'imgCommentOpen(' + fno + ')');
+      b.textContent = '댓글';
+      media.insertAdjacentElement('afterend', b);   // 사진 안(우하단 겹침)에 — 디시 기본 위치
+    });
+  }
+  // 사진 댓글 버튼 누르기: 댓글창이 열려 있으면 닫고, 닫혀 있으면 연다 (디시 함수 imgCommentClose / imgCommentOpen 사용)
+  document.addEventListener('click', function (e) {
+    var ob = e.target && e.target.closest ? e.target.closest('button.btn-imgcomment') : null;
+    if (!ob || !/^img_comment_open_btn\d+$/.test(ob.id) || cfg.hideImgComment) return;
+    e.preventDefault();
+    e.stopPropagation();   // 디시 인라인 onclick(imgCommentOpen)은 따로 실행하지 않음
+    var fno = ob.id.slice('img_comment_open_btn'.length);
+    var panel = document.getElementById('img_comment_div' + fno);
+    var list = panel ? panel.querySelector('.all-comment.list') : null;
+    var opened = !!list && getComputedStyle(list).display !== 'none';
+    if (opened) {
+      if (typeof window.imgCommentClose === 'function') window.imgCommentClose(fno);
+    } else if (typeof window.imgCommentOpen === 'function') {
+      window.imgCommentOpen(fno);
+    }
+  }, true);
   function apply() {
     try { if (typeof watchIpPopup === 'function') watchIpPopup(); } catch (e) {}
     ensureStyle();
+    try { tidyImgCommentCount(); } catch (e) {}
+    try { ensureImgOpenButtons(); } catch (e) {}
+    try { autoConfirmAnonModify(); } catch (e) {}
+    // 테마 색을 쓰는 페이지는 첫 적용 때 색을 바로 입히고 나서 보여 줌 (그 전에 디시 파란색이 잠깐 비치던 것 방지). 이후 바뀜은 뒤에서 처리
+    if (cfg.tint && !tintFirstDone) { tintFirstDone = true; try { tintPage(); } catch (e) {} }
     try { spoilerGuard(); } catch (e) {}
-    try { buildArticleHead(); buildVote(); } catch (e) {}
+    try { buildArticleHead(); buildVote(); styleVoteIframes(); hideGallogListBtn(); } catch (e) {}
     try { homeRankTwoUp(); } catch (e) {}
     try { homeRankRemeasure(); } catch (e) {}
     try { fitCommentBox(document.getElementById('comment_memo')); } catch (e) {}
@@ -2435,6 +3677,8 @@ enum ContentScript {
     try { hideGallNickTip(); } catch (e) {}
     try { avoidFloatBar(); } catch (e) {}
     try { fillAnon(); } catch (e) {}
+    if (cfg.tint) { try { tintPage(); } catch (e) {} requestAnimationFrame(function () { if (cfg.tint) { try { tintPage(); } catch (e) {} } }); }
+    try { document.documentElement.classList.remove('dcapp-pending'); } catch (e) {}   // 앱 스타일·테마 색이 붙었으니 문서 시작 때 가린 본문을 보여 줌
     if (cfg.tint || tintKey) scheduleTint();
     try { sizeReplyBoxes(); } catch (e) {}
     try { markCommentFieldsReadonly(); } catch (e) {}
@@ -2443,9 +3687,10 @@ enum ContentScript {
     var enabled = cfg.enabled !== false;
     var mode = cfg.mode || 'collapse';
     var dset = new Set(cfg.dccons || []);
+    var dpset = new Set((cfg.dcconPkgs || []).map(String));
     findUnits().forEach(function (u) {
       var reason = null;
-      if (enabled && u.el.getAttribute('data-dcapp-revealed') !== '1') reason = blockedReason(u, identity(u), dset);
+      if (enabled && u.el.getAttribute('data-dcapp-revealed') !== '1') reason = blockedReason(u, identity(u), dset, dpset);
       mark(u.el, reason, mode);
       // 로그인한 내 아이디와 작성자 아이디가 같으면 내 글·댓글
       var mine = !!cfg.myId && u.kind !== 'article' && identity(u).id === cfg.myId;
@@ -2471,11 +3716,13 @@ enum ContentScript {
         if (body) body.classList.toggle('dcapp-hide', !!reason);
       }
     });
-    // 차단한 디시콘: '차단됨 표시'면 그 자리에 회색 안내 칸, '완전히 숨김'이면 흔적 없이
+    // 차단한 디시콘: '차단됨 표시'면 그 자리에 회색 안내 칸(누르면 원본 디시콘 표시), '완전히 숨김'이면 흔적 없이
     document.querySelectorAll('img, video').forEach(function (m) {
       var k = dcconKey(m);
       if (!k) return;
-      var off = enabled && dset.has(k);
+      var mp = m.getAttribute('data-dccon-package') || m.getAttribute('package_idx') || '';
+      var revealed = m.getAttribute('data-dcapp-dccon-reveal') === '1';
+      var off = enabled && !revealed && (dset.has(k) || (mp && dpset.has(String(mp))));
       m.classList.toggle('dcapp-dccon-off', off);
       var prev = m.previousElementSibling;
       var lab = prev && prev.classList.contains('dcapp-dccon-label') ? prev : null;
@@ -2484,12 +3731,21 @@ enum ContentScript {
         lab = document.createElement('span');
         lab.className = 'dcapp-dccon-label';
         lab.textContent = '차단한 디시콘';
+        lab.style.cursor = 'pointer';
+        lab.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          m.setAttribute('data-dcapp-dccon-reveal', '1');
+          m.classList.remove('dcapp-dccon-off');
+          if (lab && lab.parentNode) lab.parentNode.removeChild(lab);
+        });
         m.parentNode.insertBefore(lab, m);
       } else if (!wantLabel && lab) {
         lab.parentNode.removeChild(lab);
       }
     });
     try { applyImageBlocks(enabled); } catch (e) {}
+    try { deferPostImages(); } catch (e) {}
     if (enabled && cfg.hideBest) hideBestNotice();
     try { homeRankOnly(); } catch (e) {}
     if (cfg.hideHeader !== false) hideSiteHeader();
@@ -2969,6 +4225,8 @@ enum ContentScript {
     if (!el || el.nodeType !== 1) return false;
     if (/\/write/.test(location.pathname)) return false;          // 글쓰기 화면 본문은 제외
     if (!(el.tagName === 'TEXTAREA' || el.isContentEditable)) return false;
+    // 댓글 수정 칸(디시 ⋯ 메뉴 → 수정)은 디시 수정 창 그대로 씀: 앱 댓글 입력창으로 가로채거나 읽기 전용으로 두지 않음
+    if (el.classList.contains('comment-edit-caption') || (el.closest && el.closest('.comment-edit'))) return false;
     if (el.classList.contains('comment-caption')) return true;     // 디시 모바일 댓글칸
     var lab = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('placeholder') || '') + ' ' + clsOf(el)).toLowerCase();
     return /comment|cmt|reply|memo|댓글/.test(lab) || !!el.closest('[class*="comment"],[id*="comment"],[class*="cmt"]');
@@ -3279,6 +4537,34 @@ enum ContentScript {
     }
     return null;
   }
+  // ---------- 유동 글 수정: 디시 비밀번호 확인 페이지를 보여 주지 않고 앱에 저장한 유동 비밀번호로 바로 확인 ----------
+  // 저장된 비밀번호가 있으면 칸에 넣고 디시 확인 함수(boardconfirm_pw)를 바로 부름 → 맞으면 디시가 수정 화면으로 보냄.
+  // 디시가 틀렸다고 알리면(alert) 확인 페이지를 그대로 보여 줌. 저장된 비밀번호가 없으면 기존처럼 확인 페이지
+  function autoConfirmAnonModify() {
+    if (!/(^|\/)confirmpw\//.test(location.pathname)) return;
+    var root = document.documentElement;
+    if (root.getAttribute('data-dcapp-autopw') === '1') return;          // 한 번만 시도
+    var mode = document.getElementById('mode'), pw = document.getElementById('board_pw'), route = document.getElementById('route_id');
+    if (!mode || !pw || mode.value !== 'modify' || typeof window.boardconfirm_pw !== 'function') return;
+    if (loginState() === 'in') return;                                   // 로그인한 글은 디시 원래 흐름
+    var gid = route ? String(route.value || '') : '';
+    var ag = (cfg.anonG || {})[gid];
+    var saved = (ag && ag.pw) || (cfg.anon || {}).pw;
+    if (!saved) return;
+    root.setAttribute('data-dcapp-autopw', '1');
+    root.classList.add('dcapp-pwauto');                                  // 확인 페이지는 잠깐 가림
+    setVal(pw, saved);
+    var origAlert = window.alert, shown = false;
+    function showPage() {
+      if (shown) return;
+      shown = true;
+      root.classList.remove('dcapp-pwauto');
+      window.alert = origAlert;
+    }
+    window.alert = function (msg) { showPage(); return origAlert.call(window, msg); };   // 틀렸다는 안내면 확인 페이지를 보여 줌
+    setTimeout(showPage, 12000);
+    try { window.boardconfirm_pw(); } catch (e) { showPage(); }
+  }
   // ---------- 글 수정·삭제 비밀번호 확인이 429(Too Many Attempts)로 막히면 → 잠시 뒤 확인 버튼을 자동으로 다시 누름 ----------
   // 디시 페이지는 이 오류를 처리하지 않아 화면이 그대로 멈춘 것처럼 보임
   var pwRetry = { n: 0, t: null, url: '' };
@@ -3333,6 +4619,7 @@ enum ContentScript {
   window.addEventListener('dcapp-cmtwrite', function (ev) {
     var d = ev.detail || {};
     if (d.status !== 200) return;
+    if (new URLSearchParams(d.body || '').get('mode') === 'com_modify') return;     // 댓글 수정 저장은 디시 수정 창이 처리 (앱 입력창은 안 띄움)
     var j = null;
     try { j = JSON.parse(d.text || '{}'); } catch (e) { return; }
     if (!j || j.result !== false) return;
@@ -3584,10 +4871,14 @@ enum ContentScript {
     if (root.classList.contains('dcapp-nc') !== on) root.classList.toggle('dcapp-nc', on);
     var pin = on && cfg.pinComment === true;
     if (root.classList.contains('dcapp-pin') !== pin) root.classList.toggle('dcapp-pin', pin);
-    var dc = cfg.duoOff === true ? false : (sideColumnNow() || cfg.duoCol === true);
+    // 여백 설정은 앱이 이 화면의 자리(분할이면 왼쪽·오른쪽 중 어느 쪽 끝에 닿는지)에 맞춰 보내 줌 (setDuo). 보내온 값이 없을 때만 화면 probe
+    var dc = cfg.duoOff === true ? false : (typeof cfg.duoCol === 'boolean' ? cfg.duoCol : sideColumnNow());
     if (root.classList.contains('dcapp-duocol') !== dc) root.classList.toggle('dcapp-duocol', dc);
     var fl = dc && cfg.duoFlip === true;
     if (root.classList.contains('dcapp-duoflip') !== fl) root.classList.toggle('dcapp-duoflip', fl);
+    // 돌린 방향의 옆 줄이 화면 오른쪽 끝에도 닿을 때만 오른쪽 쪽 여백(뒤집힌 쪽)을 붙임 (분할 왼쪽 목록은 제외)
+    var flr = fl && (typeof cfg.duoFlipR === 'boolean' ? cfg.duoFlipR : true);
+    if (root.classList.contains('dcapp-duoflip-r') !== flr) root.classList.toggle('dcapp-duoflip-r', flr);
     Array.prototype.forEach.call(document.querySelectorAll('textarea'), function (t) {
       if (on && isCommentField(t)) {
         if (!t.hasAttribute('readonly')) { t.setAttribute('readonly', ''); t.setAttribute('data-dcapp-ro', '1'); }
@@ -4145,7 +5436,7 @@ enum ContentScript {
     if (!e.isTrusted) return;
     var t = e.target.nodeType === 1 ? e.target : e.target.parentElement;
     var li = t && t.closest ? t.closest('li.comment, li.comment-add') : null;
-    if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area')) return;   // 답글 칸 자체는 제외
+    if (!li || /^comment_addDiv/.test(li.id || '') || t.closest('form, a, button, input, textarea, .ginfo-area, .comment-edit, .comment-more')) return;   // 답글 칸 자체는 제외 · 댓글 수정 칸·⋯ 메뉴는 답글 열기 아님
     openReplyFor(li);
   }, false);
 
@@ -4628,6 +5919,7 @@ enum ContentScript {
       var m = (src + ' ' + html).match(/(?:embed\/|watch\?v=|youtu\.be\/|\/vi\/|[?&]v=)([A-Za-z0-9_-]{11})/);
       return { label: '유튜브', src: m ? 'https://i.ytimg.com/vi/' + m[1] + '/hqdefault.jpg' : '' };
     }
+    if (/series/i.test(n.className || '') || /order-series/.test(html.slice(0, 200))) return { label: '시리즈', src: '' };
     if (/vote|poll/i.test(src + ' ' + (n.className || '') + html.slice(0, 300))) return { label: '투표', src: '' };
     if (/movie|video/i.test(src + html.slice(0, 300)) || (media && media.tagName === 'VIDEO')) {
       // 디시가 만든 동영상 칸에 썸네일 그림이 있으면 그걸로 미리보기
@@ -4645,7 +5937,7 @@ enum ContentScript {
       if (n.nodeType !== 1) return;
       var media = n.matches('img, iframe, video, embed, object') ? n : n.querySelector('img, iframe, video, embed, object');
       var special = media || /vote|poll|movie|block/i.test(n.className || '');
-      if (special && (media || !(n.innerText || '').trim() || /vote|poll|movie/i.test(n.className || ''))) {
+      if (special && (media || !(n.innerText || '').trim() || /vote|poll|movie|series/i.test(n.className || ''))) {
         flush();
         var m = mediaLabel(n);
         blocks.push({ t: 'raw', html: n.outerHTML, src: m.src, label: m.label });
@@ -4680,6 +5972,110 @@ enum ContentScript {
       else return 'nofeature';
     } catch (e) { return 'error:' + e.message; }
     return 'opened';
+  }
+  // ---------- 투표 만들기 (앱 화면에서 쓴 것을 디시 투표 양식에 채워 등록) ----------
+  // 디시 투표 창(#votePopup)은 띄우지 않는다. 디시 양식(#voteUpload)의 칸을 채우고 디시 vote_submit을 그대로 불러서
+  // 디시가 투표를 만들고 편집기에 투표 칸을 넣게 한다. 결과는 기존처럼 collectWebInserts로 앱이 가져간다.
+  // 보기 사진 한 장을 디시 투표 사진 올리기(uploadVote)로 올림. 끝나면 보기 칸에 주소가 들어가고 'ok', 실패면 'fail'
+  function voteUploadImage(sort, o) {
+    return new Promise(function (resolve) {
+      var $ = window.jQuery;
+      var input = document.querySelector('#vote_img_form input[name=vote_img]');
+      if (!input || typeof window.uploadVote !== 'function') return resolve('nofeature');
+      var bin = atob(o.b64), bytes = new Uint8Array(bin.length);
+      for (var k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+      var dt = new DataTransfer();
+      dt.items.add(new File([bytes], 'vote_' + sort + '.' + o.ext, { type: o.mime }));
+      $('input[name=vote_img_sort]').val(String(sort));
+      $('input[name=vote_img_' + sort + ']').val('');
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));    // 디시 인라인 onchange → uploadVote
+      var waited = 0, timer = setInterval(function () {
+        waited += 200;
+        if ($('input[name=vote_img_' + sort + ']').val()) { clearInterval(timer); resolve('ok'); }
+        else if (input.value === '' && waited > 400) { clearInterval(timer); resolve('fail'); }   // 디시가 응답 뒤 파일 칸을 비움
+        else if (waited >= 60000) { clearInterval(timer); resolve('timeout'); }
+      }, 200);
+    });
+  }
+  // 디시 투표 폼에 값을 채워 등록 (디시 투표 창은 띄우지 않음). 보기 사진·기간·공개·권한까지 디시 폼 칸과 같은 값
+  async function submitVote(p) {
+    if (!isWritePage()) return 'notwrite';
+    var $ = window.jQuery;
+    if (!$ || typeof window.vote_submit !== 'function' || !$('#voteUpload').length) return 'nofeature';
+    if ($('#poll_no').val()) return 'hasPoll';     // 글 하나에 투표는 하나
+    var title = String(p.title || '').trim();
+    var opts = (p.options || []).map(function (o) {
+      return { text: String(o.text || '').trim(), b64: o.b64 || '', mime: o.mime || 'image/jpeg', ext: o.ext || 'jpg' };
+    });
+    if (!title || title.length > 40 || opts.length < 2 || opts.length > 20 ||
+        opts.some(function (o) { return !o.text || o.text.length > 30; })) return 'invalid';
+    // 이전 시도의 보기·사진·설정을 디시 초기화 함수로 지운 뒤 채움
+    if (typeof window.resetVote === 'function') { try { window.resetVote(); } catch (e) {} }
+    var guard = 0;
+    while ($('#voteList > li > .item > input').length < opts.length && guard++ < 25) {
+      if (typeof window.addVote !== 'function') return 'nofeature';
+      window.addVote();                            // 디시 '보기 추가' (보기 칸과 복수 선택 개수 칸을 함께 늘림)
+    }
+    var inputs = $('#voteList > li > .item > input');
+    if (inputs.length !== opts.length) return 'nofeature';
+    inputs.each(function (i) { $(this).val(opts[i].text); });
+    // 보기 사진: 한 장씩 올림 (올라가면 보기 칸에 디시 주소가 들어감)
+    for (var i = 0; i < opts.length; i++) {
+      if (!opts[i].b64) continue;
+      var r = await voteUploadImage(inputs.eq(i).data('sort'), opts[i]);
+      if (r !== 'ok') return 'imgfail:' + (i + 1);
+    }
+    var form = $('#voteUpload');
+    function setCheck(el, on) { if (el.is(':checked') !== !!on) el.prop('checked', !!on).trigger('change'); }
+    function selectVal(sel, v) { if (v != null && sel.find('option[value="' + v + '"]').length) sel.val(String(v)); }
+    form.find('input[name=vote_title]').val(title);
+    setCheck(form.find('input[name=vote_multi]'), p.multi);
+    if (p.multi) selectVal(form.find('select[name=vote_multi_cnt]'), Math.max(2, Math.min(opts.length, parseInt(p.multiCount, 10) || 2)));
+    setCheck(form.find('input[name=end_date]'), p.endDate);                 // 종료 시간 설정 (끄면 작성자가 종료할 때까지)
+    if (p.endDate) {
+      if (p.date) form.find('input[name=vote_date]').val(String(p.date));
+      selectVal(form.find('select[name=vote_hour]'), p.hour);
+      selectVal(form.find('select[name=vote_minute]'), p.minute);
+    }
+    setCheck(form.find('input[name=vote_preview]'), p.preview);             // 종료 전 결과 미리보기 (결과 공개)
+    selectVal(form.find('#vote_permission'), p.permission);                 // A: 모두 · M: 고정닉만
+    // 디시 팝업은 숨기고, 편집기에 투표 칸을 넣을 자리를 잡음 (openWebFeature와 같은 준비)
+    try { $('#votePopup').hide(); } catch (e) {}
+    clearEditor();
+    try {
+      $('#textbox').summernote('focus');
+      $('#textbox').summernote('editor.saveRange');
+    } catch (e) {}
+    try { window.vote_submit(); } catch (e) { return 'error:' + e.message; }   // 동기 요청이라 끝나면 바로 결과가 보임
+    return $('#poll_no').val() ? 'ok' : 'failed';
+  }
+  // ---------- 시리즈 만들기 (앱 화면에서 쓴 제목·게시물 주소를 디시 시리즈 창에 채워 디시 함수로 만듦) ----------
+  // 디시 시리즈 창(#seriesPopup)은 띄우지 않는다. 주소 확인(addSeries)과 저장(saveSeries('insert'))은 디시 함수 그대로,
+  // 저장되면 편집기에 시리즈 칸이 들어가고 기존처럼 collectWebInserts로 앱이 가져간다. 등록은 write_submit이 디시 양식에 넣음.
+  function submitSeries(p) {
+    if (!isWritePage()) return 'notwrite';
+    var $ = window.jQuery;
+    if (!$ || typeof window.addSeries !== 'function' || typeof window.saveSeries !== 'function' || !$('#seriesPopup').length) return 'nofeature';
+    var title = String(p.title || '').trim();
+    var urls = (p.urls || []).map(function (u) { return String(u).trim(); }).filter(function (u) { return u !== ''; });
+    if (!title || title.length > 20 || urls.length < 1 || urls.length > 50) return 'invalid';
+    if ((p.existing || 0) >= 5) return 'limit';                  // 디시: 시리즈는 글 하나에 5개까지
+    if (window.series_order_no < 1) { try { localStorage.removeItem('upload_series'); } catch (e) {} }   // 처음 만드는 시리즈: 옛 목록 지움 (seriesPop과 같음)
+    $('#seriesBoxBottom').html('').show();
+    $('#seriesTitle').val(title);
+    $('#urlText').val(urls.join('\n'));
+    try { window.addSeries(); } catch (e) { return 'error:' + e.message; }   // 디시 서버에서 게시물 주소 확인 (동기)
+    if (!$('#seriesBoxBottom > li').length) { $('#seriesBoxBottom').html(''); return 'nourl'; }
+    var bad = $('#seriesBoxBottom input[name=is_allowed_series]').filter(function () { return $(this).val() == '0'; }).length;
+    if (bad > 0) { $('#seriesBoxBottom').html(''); return 'notallowed'; }
+    clearEditor();                                              // openWebFeature와 같은 준비: 편집기에는 새로 넣은 시리즈만
+    try {
+      $('#textbox').summernote('focus');
+      $('#textbox').summernote('editor.saveRange');
+    } catch (e) {}
+    try { window.saveSeries('insert'); } catch (e) { return 'error:' + e.message; }   // 제목·주소 저장 + 편집기에 시리즈 칸
+    return $('.note-editable .block.series').length ? 'ok' : 'failed';
   }
   // ---------- 디시콘 바로 넣기 (앱 화면에서 고름) ----------
   // 디시 웹이 쓰는 그대로 목록을 받아(getDccon / getDccon_tab) 앱에 넘기고, 고르면 디시 방식(dccon_chk + insertDccon)으로 칸을 만듦
@@ -4731,6 +6127,112 @@ enum ContentScript {
     dcconBoxes[idx] = parseDcconItems(d);
     return dcconBoxes[idx];
   }
+  // 디시콘 패키지 찾기: 디시 목록의 탭(= 패키지)을 모두 받아 "디시콘 번호 → 패키지" 대응표를 한 번만 만듦 (길게 눌러 패키지 차단할 때)
+  // 같은 디시콘은 글마다 같은 번호(dccon.php?no=)라서, 목록에서 받은 번호로 글 속 디시콘의 패키지를 찾을 수 있음
+  var dcconPkgIdx = null, dcconPkgBusy = null;
+  function dcconNoOf(src) {
+    var q = /[?&]no=([^&#"'\s]+)/.exec(src || '');
+    return q ? q[1] : '';
+  }
+  function dcconPackageIndex() {
+    if (dcconPkgIdx) return Promise.resolve(dcconPkgIdx);
+    if (dcconPkgBusy) return dcconPkgBusy;
+    dcconPkgBusy = (async function () {
+      var idx = { byKey: {}, pkgs: {} };
+      try {
+        var info = await dcconTabs();
+        var tabs = info && info.tabs ? info.tabs : [];
+        for (var i = 0; i < tabs.length; i++) {
+          var t = tabs[i];
+          if (!/^\d+$/.test(t.idx)) continue;
+          var items = await dcconItems(t.idx, t.folder);
+          for (var j = 0; j < items.length; j++) {
+            var it = items[j], k = dcconNoOf(it.src);
+            if (!k || idx.byKey[k]) continue;
+            var p = it.pkg;
+            if (!idx.pkgs[p]) idx.pkgs[p] = { name: t.name || '', keys: [] };
+            idx.byKey[k] = p;
+            idx.pkgs[p].keys.push(k);
+          }
+        }
+        dcconPkgIdx = idx;
+      } catch (e) {}
+      dcconPkgBusy = null;
+      return idx;
+    })();
+    return dcconPkgBusy;
+  }
+  // 디시콘 번호 하나의 패키지: { pkg, name, keys } — 먼저 DOM의 package_idx/detail_idx로 단건 API 조회(빠름), 없을 때만 보유 목록 캐시 조회
+  async function dcconPackageFor(key) {
+    var k = String(key || '');
+    if (!k) return null;
+    if (dcconPkgIdx && dcconPkgIdx.byKey[k]) {
+      var cp = dcconPkgIdx.byKey[k];
+      if (dcconPkgIdx.pkgs[cp]) return { pkg: cp, name: dcconPkgIdx.pkgs[cp].name, keys: dcconPkgIdx.pkgs[cp].keys.slice() };
+    }
+    var pkgId = '', detailId = '';
+    var imgs = document.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      var im = imgs[i];
+      var s = im.getAttribute('src') || im.getAttribute('data-original') || im.getAttribute('data-src') || '';
+      if (dcconNoOf(s) !== k) continue;
+      var holder = im.closest('[data-dccon-package],[package_idx],[data-dccon-detail],[detail_idx],[onclick]') || im;
+      pkgId = im.getAttribute('data-dccon-package') || im.getAttribute('package_idx') ||
+              (holder && (holder.getAttribute('data-dccon-package') || holder.getAttribute('package_idx'))) || '';
+      detailId = im.getAttribute('data-dccon-detail') || im.getAttribute('detail_idx') ||
+                 (holder && (holder.getAttribute('data-dccon-detail') || holder.getAttribute('detail_idx'))) || '';
+      if (!pkgId && !detailId && holder) {
+        var oc = holder.getAttribute('onclick') || '';
+        var m = /dccon[_a-zA-Z]*\(\s*['"]?(\d+)/i.exec(oc);
+        if (m) detailId = m[1];
+      }
+      if (pkgId || detailId) break;
+    }
+    if (pkgId || detailId || k) {
+      try {
+        var body = pkgId ? ('package_idx=' + encodeURIComponent(pkgId))
+                 : (detailId ? ('detail_idx=' + encodeURIComponent(detailId)) : ('code=' + encodeURIComponent(k)));
+        var res = await fetch('/dccon/package_detail', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+          body: body
+        });
+        if (res.ok) {
+          var text = await res.text();
+          var keys = [k], name = '', foundPkg = pkgId;
+          try {
+            var j = JSON.parse(text);
+            if (j && j.info) {
+              if (j.info.package_idx) foundPkg = String(j.info.package_idx);
+              if (j.info.title) name = String(j.info.title);
+            }
+            if (j && Array.isArray(j.detail)) {
+              j.detail.forEach(function (d) {
+                var dk = d && (d.path ? (dcconNoOf(d.path) || String(d.path)) : (d.no || ''));
+                if (dk && keys.indexOf(String(dk)) < 0) keys.push(String(dk));
+              });
+            }
+          } catch (eJson) {
+            var re = /dccon\.php\?[^"'\s]*?no=([^&#"'\s]+)/g, mm;
+            while ((mm = re.exec(text))) {
+              if (mm[1] && keys.indexOf(mm[1]) < 0) keys.push(mm[1]);
+            }
+            var nm = /class=["']name["'][^>]*>([^<]+)</i.exec(text);
+            if (nm) name = nm[1].trim();
+            var pm = /package_idx["'\s:=]+(\d+)/i.exec(text);
+            if (!foundPkg && pm) foundPkg = pm[1];
+          }
+          if (!foundPkg) foundPkg = detailId || k;
+          return { pkg: String(foundPkg), name: name, keys: keys };
+        }
+      } catch (e) {}
+    }
+    var idx = await dcconPackageIndex();
+    var p = idx.byKey[k];
+    if (p && idx.pkgs[p]) return { pkg: p, name: idx.pkgs[p].name, keys: idx.pkgs[p].keys.slice() };
+    return null;
+  }
   // 고른 디시콘을 디시 방식 그대로 편집기에 넣어 칸(HTML)을 만들고 가져옴
   function dcconMake(pkg, detail) {
     if (typeof window.chk_dccon_insert !== 'function') return { error: 'nofeature' };
@@ -4759,6 +6261,20 @@ enum ContentScript {
   function escHTML(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   var nativeWait = null;
   // 앱에서 쓴 내용을 디시 양식에 채우고 등록 (사진은 업로드 칸에 넣어 디시가 올리게 한 뒤 글 앞쪽에)
+  // 디시가 유튜브 검색 결과를 고를 때 쓰는 것과 같은 방식(summernote insertYt)으로 영상 칸을 만들고 그 HTML을 돌려줌.
+  // 편집기는 호출하기 전 상태로 되돌리지 않음 (호출하는 쪽이 본문 HTML을 새로 넣음). 실패하면 ''
+  function captureYtBlock(id) {
+    var $ = window.jQuery, ed = $ && $('#textbox');
+    if (!ed || !ed.length || !ed.summernote || !/^[A-Za-z0-9_-]{11}$/.test(id)) return '';
+    try {
+      ed.summernote('code', '');
+      ed.summernote('focus');
+      ed.summernote('editor.saveRange');
+      ed.summernote('insertYt', id);
+      var out = String(ed.summernote('code') || '');
+      return out.indexOf(id) >= 0 ? out : '';
+    } catch (e) { return ''; }
+  }
   async function nativeSubmit(p) {
     if (!isWritePage()) return 'notwrite';
     var $ = window.jQuery;
@@ -4829,11 +6345,20 @@ enum ContentScript {
       var blk = im.closest('div.block') || im;
       if (box.contains(blk) && imgHTML.indexOf(blk.outerHTML) < 0) imgHTML.push(blk.outerHTML);
     });
+    // 본문의 유튜브 영상 칸: 디시 방식으로 만들어 둠 (실패한 것은 아래에서 디시 영상 목록으로 붙임)
+    var ytHTML = {}, ytFallback = [];
+    blocks.forEach(function (b) {
+      if (b.t !== 'youtube' || Object.prototype.hasOwnProperty.call(ytHTML, b.id)) return;
+      ytHTML[b.id] = captureYtBlock(String(b.id));
+      if (!ytHTML[b.id]) ytFallback.push(String(b.id));
+    });
     // 앱에서 정한 순서대로 다시 짜기: 글자 칸은 줄마다 문단, 사진 칸은 디시가 만든 칸 그대로
     var html = '', k = 0;
     blocks.forEach(function (b) {
       if (b.t === 'raw') {
         html += b.html;                                   // 수정: 원래 있던 사진·디시콘 등은 그대로
+      } else if (b.t === 'youtube') {
+        html += ytHTML[b.id] || '';                       // 유튜브 영상 칸 (순서 그대로)
       } else if (b.t === 'image') {
         if (k < imgHTML.length) html += imgHTML[k++] + '<p><br></p>';
       } else {
@@ -4841,7 +6366,7 @@ enum ContentScript {
       }
     });
     while (k < imgHTML.length) html += imgHTML[k++] + '<p><br></p>';   // 혹시 남은 사진
-    if (useSN) ed.summernote('code', html);
+    if (useSN) { ed.summernote('code', html); try { ed.val(html); } catch (e) {} }
     else if (box) box.innerHTML = html;
     if (box) box.dispatchEvent(new Event('input', { bubbles: true }));
     // 사진이 빠진 채 등록되지 않게: 올린 사진 수만큼 본문에 들어갔는지 확인
@@ -4849,6 +6374,22 @@ enum ContentScript {
       var inBody = box ? Array.prototype.filter.call(box.querySelectorAll('img'), function (im) { return /viewimage/.test(im.getAttribute('src') || ''); }).length : 0;
       var rawImgs = blocks.filter(function (b) { return b.t === 'raw' && /viewimage/.test(b.html || ''); }).length;
       if (inBody < imgs.length + rawImgs) return 'imgmissing:' + inBody + '/' + (imgs.length + rawImgs);
+    }
+    // 본문의 유튜브 링크 → 영상으로 첨부 (디시 '유튜브 추가'와 같은 함수. 같은 영상이 이미 붙어 있으면 건너뜀)
+    ytFallback.forEach(function (id) {
+      if (!/^[A-Za-z0-9_-]{11}$/.test(String(id))) return;
+      if (($('#yData').val() || '').indexOf('|' + id) >= 0) return;
+      if (typeof window.insertChagneThum === 'function') { try { window.insertChagneThum('yt', id); } catch (e) {} }
+    });
+    // 유튜브 영상만 첨부하는 글: 링크 글자를 뗐으니 본문이 비어 디시가 '내용을 입력해 주세요'라며 막음 → 안 보이는 글자 한 칸을 넣어 채움
+    if ((Array.isArray(p.youtube) ? p.youtube.length : 0) > 0) {
+      var bodyText = String(box ? (box.textContent || '') : '').replace(/[\u200B\u00A0\s]/g, '');
+      var hasMedia = !!(box && box.querySelector('img, video, iframe, embed, object'));
+      if (!bodyText && !hasMedia) {
+        var filler = '<p>&nbsp;</p>';
+        if (useSN) { ed.summernote('code', filler); try { ed.val(filler); } catch (e) {} } else if (box) box.innerHTML = filler;
+        if (box) box.dispatchEvent(new Event('input', { bubbles: true }));
+      }
     }
     // Cloudflare 체크박스가 떠 있으면 → 앱이 디시 화면을 보여주고, 체크되면 여기서 이어서 등록
     if (tsNeedsCheck()) {
@@ -4868,7 +6409,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v298-adfilter','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v371-suppress-gall-info','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
@@ -5168,12 +6709,21 @@ enum ContentScript {
       // 탭해서 펼쳐 본 글도 차단 설정이 바뀌면 다시 접히게 (펼친 뒤 다시 차단했을 때 바로 가려지도록)
       document.querySelectorAll('[data-dcapp-revealed]').forEach(function (el) { el.removeAttribute('data-dcapp-revealed'); });
       clearSelection();
+      tintFirstDone = false;
       apply();
+      return true;
+    },
+    // 앱이 이 화면의 여백 설정(옆 세로 줄 쪽·뒤집힘·오른쪽 끝 닿음)을 다시 보냄 — 분할·회전으로 자리가 바뀔 때 페이지를 새로 불러오지 않고 맞춤
+    setDuo: function (col, flip, flipR) {
+      cfg.duoCol = !!col; cfg.duoFlip = !!flip; cfg.duoFlipR = !!flipR;
+      markCommentFieldsReadonly();
       return true;
     },
     clearSelection: function () { clearSelection(); return true; },
     markBlockedImageKey: function (key) { if (key) runtimeImg[key] = true; apply(); return true; },
     loginState: loginState,
+    deferredImage: deferredImage,
+    openGalleryInfo: openGalleryInfo,
     openManageLog: openManageLog,
     setPickMode: function (on) { pick.on = !!on; clearPick(); return true; },
     setBlockPickMode: function (on) {
@@ -5231,9 +6781,12 @@ enum ContentScript {
     setListFilter: setListFilter,
     articleIdentity: articleIdentity,
     openWebFeature: openWebFeature,
+    submitVote: submitVote,
+    submitSeries: submitSeries,
     collectWebInserts: collectWebInserts,
     dcconTabs: dcconTabs,
     dcconItems: dcconItems,
+    dcconPackageFor: dcconPackageFor,
     dcconMake: dcconMake,
     scrollToComments: scrollToComments,
     prepareCapture: prepareCapture,
@@ -5245,6 +6798,24 @@ enum ContentScript {
 """#
 
     /// 페이지 맨 처음(문서 시작)에 넣는 네트워크 기록 스크립트 — 알림 주소를 찾기 위한 진단용
+    /// 문서 맨 처음(document-start)에 실행: 앱 스타일이 붙기 전 원본 디시 화면이 잠깐 보이는 것(깜빡임)을 막으려고 본문을 가려 둠.
+    /// 본문 스타일 적용(apply)이 끝나면 풀고, 그래도 안 풀리면 시간이 지나 풀어서 원본 화면이 보이게 함 (화면이 멈추지 않게)
+    static let preload = #"""
+(function () {
+  var de = document.documentElement;
+  if (!de) return;
+  var st = document.createElement('style');
+  st.id = 'dcapp-pending-style';
+  st.textContent = 'html.dcapp-pending body{visibility:hidden!important}';
+  de.appendChild(st);
+  de.classList.add('dcapp-pending');
+  setTimeout(function () {
+    var h = document.documentElement;
+    if (h) h.classList.remove('dcapp-pending');
+  }, 5000);
+})();
+"""#
+
     static let netLog = #"""
 // DCApp 네트워크 기록 — 페이지가 몰래 불러오는 주소 중 알림 관련(alarm/noti/push/alim/bell/memo) 것만 기록
 (function () {

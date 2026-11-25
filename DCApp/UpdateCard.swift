@@ -51,6 +51,7 @@ final class AvatarLoader: ObservableObject {
 
 /// 새 버전 알림창 (그림 128×128: 저장소 주인의 프로필 사진, 그 아래 글과 버튼)
 struct UpdateCard: View {
+    @ObservedObject var fonts = FontStore.shared
     let release: AppRelease
     let onClose: () -> Void
     @StateObject private var avatar = AvatarLoader()
@@ -81,9 +82,9 @@ struct UpdateCard: View {
 
                 VStack(spacing: 10) {
                     Text("새 버전 \(release.version)")
-                        .font(.headline)
+                        .font(fonts.styleFont(.headline))
                     Text(notesText)
-                        .font(.footnote)
+                        .font(fonts.styleFont(.footnote))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(8)
@@ -119,7 +120,7 @@ struct UpdateCard: View {
     private func cardButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(fonts.styleFont(.subheadline, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 9)
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))

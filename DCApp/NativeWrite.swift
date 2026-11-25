@@ -175,6 +175,13 @@ final class NativeWriteSession: ObservableObject {
     /// 디시 화면에서 쓰는 중인 기능 이름 (nil이면 Cloudflare 체크)
     @Published var webFeature: String?
 
+    /// 퀵 글쓰기: 글쓰기 화면을 띄우지 않고 바로 등록 중. 막히는 게 생기면 false로 바꿔 글쓰기 화면을 보여 줌
+    @Published var quick = false
+    /// 퀵 글쓰기가 끝나면 돌아갈 목록 주소
+    var quickListURL: URL?
+    /// 나가는 중: 뒤의 디시 웹뷰가 목록으로 넘어갈 때까지 가림막을 덮어 둠 (글쓰기 페이지가 잠깐 비치는 것 방지)
+    @Published var closing = false
+
     // 글자 꾸미기
     /// 지금 커서 자리의 꾸미기 상태 (도구줄 버튼 표시용)
     @Published var format = RichFormat()
@@ -472,30 +479,34 @@ struct NativeWriteHost: View {
         if let s = model.nativeWrite {
             NativeWriteContainer(session: s, model: model)
                 .id(ObjectIdentifier(s))
-                .transition(.opacity)
+                // 열 때는 페이드인, 닫을 때는 즉시 사라짐 (페이드아웃 동안 뒤의 디시 화면이 비치는 틈을 없앰)
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
         }
     }
 }
 
 private struct NativeWriteContainer: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject var session: NativeWriteSession
     let model: WebViewModel
 
     var body: some View {
-        if session.showingWeb {
+        if session.closing {
+            QuickWriteBusyView(message: "목록으로 돌아가는 중…")   // ← 로 나갈 때: 목록이 열릴 때까지 가림막
+        } else if session.showingWeb {
             // 디시 화면 위에 안내만 (Cloudflare 체크 / 디시 기능 쓰는 중)
             VStack {
                 Spacer()
                 HStack(spacing: 10) {
                     Image(systemName: session.webFeature == nil ? "checkmark.shield" : "square.and.arrow.down")
                     Text(session.webFeature.map { "\($0)을(를) 넣은 뒤 눌러 주세요" } ?? "체크박스를 누르면 이어서 등록돼요")
-                        .font(.subheadline)
+                        .font(fonts.styleFont(.subheadline))
                         .lineLimit(2)
                     Spacer(minLength: 4)
                     Button(session.webFeature == nil ? "앱 화면으로" : "다 넣었어요") {
                         if session.webFeature != nil { model.finishWebFeature() } else { session.showingWeb = false }
                     }
-                    .font(.subheadline.bold())
+                    .font(fonts.styleFont(.subheadline, weight: .bold))
                     .buttonStyle(.borderedProminent)
                     .tint(DCTheme.navy)
                 }
@@ -503,6 +514,8 @@ private struct NativeWriteContainer: View {
                 .background(.regularMaterial, in: Capsule())
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
+        } else if session.quick {
+            QuickWriteBusyView()     // 퀵 글쓰기: 글쓰기 화면 없이 등록 중 (막히면 quick이 꺼지고 아래 화면이 나옴)
         } else {
             NativeWriteView(session: session, model: model)
         }
@@ -510,6 +523,7 @@ private struct NativeWriteContainer: View {
 }
 
 struct NativeWriteView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject var session: NativeWriteSession
     let model: WebViewModel
 
@@ -530,6 +544,10 @@ struct NativeWriteView: View {
     @State private var didFocus = false
     @State private var dropTarget: UUID?
     @State private var showDcconPicker = false
+    /// 투표 만들기 화면 (앱 화면)
+    @State private var showVoteCompose = false
+    /// 시리즈 만들기 화면 (앱 화면)
+    @State private var showSeriesCompose = false
     @State private var endDropID = UUID()
     /// 등록이 10초 넘게 걸리면 나오는 '글쓰기 취소' 버튼
     @State private var showSubmitCancel = false
@@ -551,7 +569,13 @@ struct NativeWriteView: View {
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
+            } else if Self.duoStatusBand == nil {
+                // 일반 폰·아이패드: 상단바를 웹 화면 상단바와 같은 방식으로 안전 영역(상태바) 아래에 얹음
+                // → 상단바 두께 = 상태바 높이 + 줄 높이 (웹 화면 상단바와 같음), 위쪽 안전 영역을 상단바 안에서 또 띄우지 않음
+                content
+                    .safeAreaInset(edge: .top, spacing: 0) { header }
             } else {
+                // 듀오 상태 줄: 버튼을 상태 줄(시계 옆)에 올려야 해서 기존 배치를 그대로 둠
                 VStack(spacing: 0) {
                     header
                     content
@@ -559,7 +583,7 @@ struct NativeWriteView: View {
             }
         }
         // 일반 아이폰은 가로여도 안전 영역 없이 화면 끝까지 (듀오 옆 세로 줄은 피함)
-        .ignoresSafeArea(.container, edges: (UIDevice.current.userInterfaceIdiom == .phone && !BrowserView.hasSideColumnOnly) ? [.leading, .trailing] : [])
+        .ignoresSafeArea(.container, edges: outerIgnoredEdges)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
             sizeTick &+= 1
             // 안전 영역 값은 조금 늦게 바뀌므로 한 번 더
@@ -604,6 +628,12 @@ struct NativeWriteView: View {
         }
         .sheet(isPresented: $showDcconPicker) {
             DcconPickerSheet(model: model)
+        }
+        .sheet(isPresented: $showVoteCompose) {
+            VoteComposeSheet(model: model)
+        }
+        .sheet(isPresented: $showSeriesCompose) {
+            SeriesComposeSheet(model: model, existing: session.blocks.filter { $0.image?.label == "시리즈" }.count)
         }
         .sheet(isPresented: $showDraftPicker) {
             DraftPickerSheet(galleryID: session.galleryID) { d in
@@ -656,7 +686,7 @@ struct NativeWriteView: View {
         HStack(spacing: compact ? 7 : 12) {
             Button { model.closeNativeWrite() } label: {
                 Image(systemName: "chevron.backward").font(.system(size: compact ? 20 : 25, weight: .medium))
-                    .frame(width: compact ? 24 : 40, height: 36, alignment: .leading)
+                    .frame(width: compact ? 24 : 40, height: compact ? 36 : Self.headerRowHeight, alignment: .leading)
             }
             accountMenu
             Spacer(minLength: compact ? 0 : 4)   // 버튼은 오른쪽(시계·카메라 바로 왼쪽)에 붙임
@@ -674,19 +704,19 @@ struct NativeWriteView: View {
             } else {
                 // [임시] = 지금 쓰던 글 임시저장, '저장 N' = 저장된 글 불러오기 (N은 저장된 개수)
                 Button { model.saveNativeDraft() } label: {
-                    Text("임시").font(.callout).lineLimit(1).fixedSize()
+                    Text("임시").font(fonts.styleFont(.callout)).lineLimit(1).fixedSize()
                         .padding(.horizontal, 12).padding(.vertical, 5)
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.55), lineWidth: 1.2))
                         .contentShape(RoundedRectangle(cornerRadius: 6))
                 }
                 Button { showDraftPicker = true } label: {
-                    Text("저장 \(draftStore.drafts.count)").font(.callout).lineLimit(1).fixedSize()
+                    Text("저장 \(draftStore.drafts.count)").font(fonts.styleFont(.callout)).lineLimit(1).fixedSize()
                         .contentShape(Rectangle())
                 }
             }
             // 로딩 중 상단바(BrowserView)의 등록 버튼과 같은 모양: 둥근 네모 테두리만
             Button { dismissKeyboard(); model.submitNative() } label: {
-                Text("등록").font(.callout.weight(.bold)).lineLimit(1).fixedSize()
+                Text("등록").font(fonts.styleFont(.callout, weight: .bold)).lineLimit(1).fixedSize()
                     .padding(.horizontal, 12).padding(.vertical, 5)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.85), lineWidth: 1.2))
                     .contentShape(RoundedRectangle(cornerRadius: 6))
@@ -698,8 +728,21 @@ struct NativeWriteView: View {
         .padding(.trailing, compact ? 2 : -3)
         .overlay {
             // 상단바 가운데 제목 (아이패드만 — 폰은 버튼이 가운데까지 와서 겹침)
-            if !compact, UIDevice.current.userInterfaceIdiom == .pad { Text("글쓰기").font(.headline).foregroundStyle(.white).allowsHitTesting(false) }
+            if !compact, UIDevice.current.userInterfaceIdiom == .pad { Text("글쓰기").font(fonts.styleFont(.headline)).foregroundStyle(.white).allowsHitTesting(false) }
         }
+    }
+
+    /// 바깥 안전 영역 중 무시할 면: 일반 아이폰은 좌우만 무시 (위쪽 안전 영역은 시스템이 자동 확보하고, .background가 상태바 뒤까지 남색을 채움)
+    private var outerIgnoredEdges: Edge.Set {
+        (UIDevice.current.userInterfaceIdiom == .phone && !BrowserView.hasSideColumnOnly) ? [.leading, .trailing] : []
+    }
+
+    /// 상단바 안에서 위를 띄우는 높이: NativeWriteView는 이미 안전영역(상태바 아래)에 배치되므로 추가 여백 0 (BrowserView.compactTopBarView와 1:1 동일)
+    private var headerTopInset: CGFloat { 0 }
+
+    /// 상단바 줄 높이: 휴대폰은 앱의 얇은 상단바 높이(34pt), 듀오·아이패드는 44pt (BrowserView의 띠 높이와 같음)
+    private static var headerRowHeight: CGFloat {
+        BrowserView.isPhone && !BrowserView.isDuoLayout ? BrowserView.compactTopBarHeight : BrowserView.duoTopBarHeight
     }
 
     private static var listBarContentHeight: CGFloat {
@@ -724,6 +767,7 @@ struct NativeWriteView: View {
                     .zIndex(1)
             } else {
                 headerButtons(compact: false)
+                    .frame(height: Self.headerRowHeight)
             }
 
             if session.isAnon {
@@ -743,10 +787,12 @@ struct NativeWriteView: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.top, duo == nil ? (BrowserView.hasSideColumnOnly ? 9 : 6) : 0)
-        .padding(.bottom, duo == nil ? (BrowserView.hasSideColumnOnly ? 9 : 12) : (session.isAnon ? 10 : 2))   // 듀오 세로 줄: 위아래 같게 해서 버튼이 바 가운데에
-        // 글 목록 상단바(시스템 내비게이션 바)와 같은 높이로 (듀오 세로 줄 상태에서만)
-        .frame(minHeight: Self.listBarContentHeight, alignment: .center)
+        // 상태바 높이만큼 위를 띄움 (웹 화면 상단바 = 상태바 + 줄 높이와 같은 두께)
+        .padding(.top, headerTopInset)
+        // 일반 상단바: 위아래 여백 없이 줄 높이만큼 (닉네임·비밀번호 칸이 있을 때만 아래에 조금 띄움)
+        .padding(.bottom, duo == nil ? (session.isAnon ? 8 : 0) : (session.isAnon ? 10 : 2))
+        // 상단바가 예기치 않게 세로로 늘어나지 않도록 내용 높이에 엄격히 고정
+        .fixedSize(horizontal: false, vertical: true)
         .background(DCTheme.navy.ignoresSafeArea(edges: [.top, .trailing]))
     }
 
@@ -792,7 +838,7 @@ struct NativeWriteView: View {
                             ForEach(session.heads) { h in
                                 let on = session.head == h.no
                                 Button { session.head = h.no } label: {
-                                    Text(h.name).font(.subheadline.weight(on ? .semibold : .regular))
+                                    Text(h.name).font(fonts.styleFont(.subheadline, weight: on ? .semibold : .regular))
                                         .padding(.horizontal, 12).padding(.vertical, 6)
                                         .foregroundStyle(on ? .white : .primary)
                                         .background(on ? DCTheme.navy : Color(uiColor: .secondarySystemBackground), in: Capsule())
@@ -806,7 +852,7 @@ struct NativeWriteView: View {
                 }
 
                 TextField("제목", text: $session.title)
-                    .font(.system(size: 18))
+                    .font(fonts.uiFont(size: 18))
                     .tint(DCTheme.accent)
                     .focused($focus, equals: .title)
                     .submitLabel(.next)
@@ -941,7 +987,7 @@ struct NativeWriteView: View {
                 RoundedRectangle(cornerRadius: 8).fill(Color(uiColor: .secondarySystemBackground))
                 if img.remoteURL != nil { ProgressView() }
                 else {
-                    Label(img.label ?? "첨부", systemImage: "paperclip").font(.subheadline).foregroundStyle(.secondary)
+                    Label(img.label ?? "첨부", systemImage: "paperclip").font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary)
                 }
             }
             .frame(width: img.label == "디시콘" ? 110 : 220, height: img.remoteURL == nil ? 70 : (img.label == "디시콘" ? 110 : 160))
@@ -951,8 +997,8 @@ struct NativeWriteView: View {
     /// 사진 하나의 업로드 크기 고르기 (원본에서 다시 만들어서 줄였다 키워도 화질은 그대로)
     private func sizePicker(_ img: WriteImage) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("사진 크기").font(.headline)
-            Text(sizeInfo(img)).font(.caption).foregroundStyle(.secondary)
+            Text("사진 크기").font(fonts.styleFont(.headline))
+            Text(sizeInfo(img)).font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
             Divider().padding(.vertical, 4)
             ForEach(WriteImageSize.allCases) { opt in
                 Button {
@@ -970,7 +1016,7 @@ struct NativeWriteView: View {
                 .buttonStyle(.plain)
             }
             if img.originalData == nil {
-                Text("원본이 없는 사진이라 지금보다 크게는 못 키워요").font(.caption2).foregroundStyle(.secondary).padding(.top, 4)
+                Text("원본이 없는 사진이라 지금보다 크게는 못 키워요").font(fonts.styleFont(.caption2)).foregroundStyle(.secondary).padding(.top, 4)
             }
         }
         .padding(16)
@@ -1018,7 +1064,7 @@ struct NativeWriteView: View {
             }
             .overlay(alignment: .topLeading) {
                 if img.isAuto {
-                    Text("자짤").font(.caption.bold()).foregroundStyle(.white)
+                    Text("자짤").font(fonts.styleFont(.caption, weight: .bold)).foregroundStyle(.white)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.black.opacity(0.45), in: Capsule())
                         .padding(8)
@@ -1027,7 +1073,7 @@ struct NativeWriteView: View {
             .overlay(alignment: .bottomLeading) {
                 // 지금 적용된 크기 (기본 크기와 다르게 따로 정한 사진은 강조색)
                 if img.isResizable, let size = img.size {
-                    Text(size.short).font(.caption2.bold()).foregroundStyle(.white)
+                    Text(size.short).font(fonts.styleFont(.caption2, weight: .bold)).foregroundStyle(.white)
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .background(size.rawValue == defaultImageSizeRaw ? Color.black.opacity(0.45) : DCTheme.accent.opacity(0.9), in: Capsule())
                         .padding(8)
@@ -1084,7 +1130,7 @@ struct NativeWriteView: View {
                         VStack(spacing: 0) {
                             Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 14, weight: .regular))
                             Text((WriteImageSize(rawValue: defaultImageSizeRaw) ?? .original).short)
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(fonts.uiFont(size: 10, weight: .semibold))
                         }
                         .foregroundStyle(.secondary)
                         .frame(width: 44, height: 46)
@@ -1093,8 +1139,8 @@ struct NativeWriteView: View {
                     .accessibilityLabel("사진 크기")
                     tool("face.smiling", "디시콘") { dismissKeyboard(); showDcconPicker = true }
                     tool("video", "동영상") { dismissKeyboard(); model.openWebFeature("video", name: "동영상") }
-                    tool("play.rectangle", "유튜브") { dismissKeyboard(); model.openWebFeature("youtube", name: "유튜브") }
-                    tool("chart.bar", "투표") { dismissKeyboard(); model.openWebFeature("vote", name: "투표") }
+                    tool("chart.bar", "투표") { dismissKeyboard(); showVoteCompose = true }   // 앱 투표 화면 (디시 투표 창 대신)
+                    tool("rectangle.stack", "시리즈") { dismissKeyboard(); showSeriesCompose = true }   // 앱 시리즈 화면
 
                     Divider().frame(height: 24).padding(.horizontal, 4)
 
@@ -1108,13 +1154,13 @@ struct NativeWriteView: View {
                     .popover(isPresented: $showSizeSlider) {
                         VStack(spacing: 12) {
                             Text("글자 크기 \(Int(session.format.size))pt")
-                                .font(.headline)
+                                .font(fonts.styleFont(.headline))
                             Slider(value: Binding(
                                 get: { Double(session.format.size) },
                                 set: { v in session.applyFormat { $0.size = CGFloat(v.rounded()) } }
                             ), in: 10...32, step: 1)
                             Button("기본 크기로") { session.applyFormat { $0.size = RichText.baseSize } }
-                                .font(.subheadline)
+                                .font(fonts.styleFont(.subheadline))
                         }
                         .padding(20)
                         .frame(width: 300)
@@ -1205,7 +1251,7 @@ struct NativeWriteView: View {
                 Image(systemName: icon)
             }
         }
-            .font(.system(size: 20, weight: .regular))
+            .font(fonts.uiFont(size: 20, weight: .regular))
             .frame(width: 44, height: 46)
             .foregroundStyle(on ? AnyShapeStyle(DCTheme.accent) : AnyShapeStyle(.secondary))
             .background(on ? DCTheme.accent.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 8))
@@ -1247,14 +1293,14 @@ struct NativeWriteView: View {
             Color.black.opacity(0.25).ignoresSafeArea()
             VStack(spacing: 12) {
                 ProgressView()
-                Text(session.hasNewImages ? "사진을 올리고 등록하는 중…" : "등록하는 중…").font(.subheadline)
+                Text(session.hasNewImages ? "사진을 올리고 등록하는 중…" : "등록하는 중…").font(fonts.styleFont(.subheadline))
                 if showSubmitCancel {
                     // 등록이 오래 걸릴 때 강제로 나가기
-                    Text("오래 걸리고 있어요").font(.footnote).foregroundStyle(.secondary)
+                    Text("오래 걸리고 있어요").font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
                     HStack(spacing: 10) {
                         Button { submitChoice = .retry } label: {
                             Text("재시도")
-                                .font(.subheadline.weight(.semibold))
+                                .font(fonts.styleFont(.subheadline, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 18).padding(.vertical, 8)
                                 .background(DCTheme.navy, in: Capsule())
@@ -1262,7 +1308,7 @@ struct NativeWriteView: View {
                         .buttonStyle(.plain)
                         Button { submitChoice = .cancel } label: {
                             Text("글쓰기 취소")
-                                .font(.subheadline.weight(.semibold))
+                                .font(fonts.styleFont(.subheadline, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 18).padding(.vertical, 8)
                                 .background(Color.red, in: Capsule())
@@ -1352,7 +1398,7 @@ private struct HeaderBoxStyle: ViewModifier {
     func body(content: Content) -> some View {
         let dark = scheme == .dark
         content
-            .font(.system(size: 16))
+            .font(FontStore.shared.uiFont(size: 16))
             .foregroundStyle(dark ? Color.white : Color.black)
             .tint(dark ? Color.white : DCTheme.navy)
             .padding(.horizontal, 10)

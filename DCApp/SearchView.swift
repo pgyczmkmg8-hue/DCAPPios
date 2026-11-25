@@ -65,12 +65,14 @@ struct SearchView: View {
                 }
                 .onAppear { focusSearch() }
                 .navigationTitle("검색")
+                .toolbarBackground(.hidden, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("닫기") { router.sheet = nil }
                     }
                 }
         }
+        .presentationBackgroundCompat(Color(uiColor: .systemGroupedBackground))
     }
 
     /// 탭 전환 애니메이션이 끝난 뒤 검색창에 포커스 → 키보드 표시
@@ -86,6 +88,7 @@ struct SearchView: View {
 /// 검색어 입력칸은 이 안에 없음 — 바깥(검색 탭의 검색창, 갤러리 안 창의 공통 입력창)이 `query`로 넘겨 줌.
 /// open: 주소를 여는 방법 (검색 탭은 홈 브라우저, 갤러리 안 창은 지금 화면)
 struct SearchPanel: View {
+    @ObservedObject var fonts = FontStore.shared
     @Binding var query: String
     let open: (URL) -> Void
     @EnvironmentObject private var favorites: FavoritesStore
@@ -156,7 +159,7 @@ struct SearchPanel: View {
                     Spacer()
                     if !recents.items.isEmpty {
                         Button("전체 삭제") { recents.clear() }
-                            .font(.caption)
+                            .font(fonts.styleFont(.caption))
                     }
                 }
             }

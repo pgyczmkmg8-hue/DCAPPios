@@ -14,6 +14,7 @@ private struct TutorialPage: Identifiable {
 }
 
 struct TutorialView: View {
+    @ObservedObject var fonts = FontStore.shared
     /// 끝나거나 건너뛰면 (본 것으로 저장한 뒤) 부름. 인자 openAbout: '시작하기'로 끝냈으면 true (버전 정보/업데이트 화면을 열어 줌), 건너뛰기면 false
     let onFinish: (_ openAbout: Bool) -> Void
 
@@ -94,7 +95,7 @@ struct TutorialView: View {
             HStack {
                 Spacer()
                 Button("건너뛰기") { finish(openAbout: false) }
-                    .font(.body.weight(.medium))
+                    .font(fonts.styleFont(.body, weight: .medium))
                     .foregroundStyle(.secondary)
                     .opacity(isLast ? 0 : 1)
                     .disabled(isLast)
@@ -115,7 +116,7 @@ struct TutorialView: View {
                 if isLast { finish(openAbout: true) } else { withAnimation { index += 1 } }
             } label: {
                 Text(isLast ? "시작하기" : "다음")
-                    .font(.headline)
+                    .font(fonts.styleFont(.headline))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
@@ -138,14 +139,14 @@ struct TutorialView: View {
                     .frame(width: 104, height: 104)
                     .background(DCTheme.accent.opacity(0.12), in: Circle())
                 Text(page.title)
-                    .font(.title2.bold())
+                    .font(fonts.styleFont(.title2, weight: .bold))
                     .multilineTextAlignment(.center)
                 VStack(alignment: .leading, spacing: 11) {
                     ForEach(page.lines, id: \.self) { line in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Circle().fill(DCTheme.accent).frame(width: 6, height: 6).alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
                             Text(line)
-                                .font(.body)
+                                .font(fonts.styleFont(.body))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

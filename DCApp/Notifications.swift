@@ -28,7 +28,7 @@ enum DCNotify {
         let subject: String
         var key: String { "\(galleryID)-\(postNo)-\(commentNo ?? 0)-\(type)" }
         var url: URL {
-            DCGalleryID.postURL(galleryID, no: postNo, comments: commentNo != nil)
+            DCGalleryID.alarmURL(galleryID, no: postNo, comments: commentNo != nil, type: type)   // 갤로그 알림(G)은 갤로그 주소
         }
     }
 
@@ -177,6 +177,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        BackgroundAudio.applyStored()     // 배경 음악 유지 설정이 켜져 있으면 시작할 때 오디오 세션 맞춤
         return true
     }
 

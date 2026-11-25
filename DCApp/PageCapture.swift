@@ -56,6 +56,7 @@ enum PageCapture {
 
 /// 캡처 미리보기 + 공유/사진 저장
 struct CapturePreview: View {
+    @ObservedObject var fonts = FontStore.shared
     let capture: CapturedImage
     @Environment(\.dismiss) private var dismiss
     @State private var askAlbum = false
@@ -72,7 +73,7 @@ struct CapturePreview: View {
             .overlay(alignment: .bottom) {
                 if let message {
                     Text(message)
-                        .font(.subheadline.weight(.medium))
+                        .font(fonts.styleFont(.subheadline, weight: .medium))
                         .padding(.horizontal, 16).padding(.vertical, 10)
                         .background(.regularMaterial, in: Capsule())
                         .padding(.bottom, 30)

@@ -28,6 +28,14 @@ struct BlockedDccon: Codable, Hashable, Identifiable {
     var id: String { key }
 }
 
+/// 차단한 디시콘 패키지(묶음): 길게 눌러 '패키지 차단'할 때 그 패키지의 디시콘 번호를 모두 담아 글·댓글 전체에서 가림
+struct BlockedDcconPackage: Codable, Hashable, Identifiable {
+    var pkg: String           // 디시 패키지 번호 (package_idx)
+    var name: String          // 패키지 이름 (표시용)
+    var keys: [String]        // 패키지 안 디시콘들의 no= 값
+    var id: String { pkg }
+}
+
 /// 차단한 본문 사진 한 장. key: 사진 주소에서 뽑은 키(no= 값, 없으면 주소 경로), hash: 생김새 해시(같은 사진을 다시 올린 것도 찾음, 아직 못 받았으면 nil)
 struct BlockedImage: Codable, Hashable, Identifiable {
     var key: String
@@ -210,6 +218,7 @@ struct FilterSettings: Codable {
     var display: BlockDisplay = .collapse
     var users: [BlockedUser] = []
     var dccons: [BlockedDccon] = []
+    var dcconPackages: [BlockedDcconPackage] = []
     var keywords: [BlockedKeyword] = []
     var hiddenElements: [HiddenElement] = []
     var hideBestNotice = true
@@ -240,6 +249,7 @@ struct FilterSettings: Codable {
         display = try c.decodeIfPresent(BlockDisplay.self, forKey: .display) ?? .collapse
         users = try c.decodeIfPresent([BlockedUser].self, forKey: .users) ?? []
         dccons = try c.decodeIfPresent([BlockedDccon].self, forKey: .dccons) ?? []
+        dcconPackages = try c.decodeIfPresent([BlockedDcconPackage].self, forKey: .dcconPackages) ?? []
         keywords = try c.decodeIfPresent([BlockedKeyword].self, forKey: .keywords) ?? []
         hiddenElements = try c.decodeIfPresent([HiddenElement].self, forKey: .hiddenElements) ?? []
         hideBestNotice = try c.decodeIfPresent(Bool.self, forKey: .hideBestNotice) ?? true
@@ -300,6 +310,29 @@ final class FilterStore: ObservableObject {
         settings.dccons.append(BlockedDccon(key: key, imageURL: imageURL))
     }
 
+    /// 디시콘 패키지 차단 (같은 패키지가 이미 있으면 디시콘 목록만 합침)
+    func addDcconPackage(pkg: String, name: String, keys: [String]) {
+        guard !pkg.isEmpty, !keys.isEmpty else { return }
+        if let i = settings.dcconPackages.firstIndex(where: { $0.pkg == pkg }) {
+            var p = settings.dcconPackages[i]
+            p.keys = Array(Set(p.keys + keys)).sorted()
+            if p.name.isEmpty { p.name = name }
+            settings.dcconPackages[i] = p
+        } else {
+            settings.dcconPackages.append(BlockedDcconPackage(pkg: pkg, name: name, keys: Array(Set(keys)).sorted()))
+        }
+    }
+
+    /// 이 디시콘이 속한 차단된 패키지 (없으면 nil)
+    func dcconPackage(containing key: String) -> BlockedDcconPackage? {
+        guard !key.isEmpty else { return nil }
+        return settings.dcconPackages.first { $0.keys.contains(key) }
+    }
+
+    func removeDcconPackage(pkg: String) {
+        settings.dcconPackages.removeAll { $0.pkg == pkg }
+    }
+
     // MARK: 길게 눌렀을 때 이미 차단된 대상인지 / 해제
 
     /// 이 글·댓글 작성자에게 걸려 있는 유저 차단들
@@ -324,8 +357,14 @@ final class FilterStore: ObservableObject {
         }
     }
 
+    /// 디시콘이 차단됐는지 (개별 차단 또는 속한 패키지 차단)
     func isDcconBlocked(_ key: String) -> Bool {
-        !key.isEmpty && settings.dccons.contains { $0.key == key }
+        !key.isEmpty && (settings.dccons.contains { $0.key == key } || dcconPackage(containing: key) != nil)
+    }
+
+    /// 페이지에 넘기는 차단 디시콘 번호 전체 (개별 + 패키지 안의 것)
+    var dcconKeysForPage: [String] {
+        Array(Set(settings.dccons.map(\.key) + settings.dcconPackages.flatMap(\.keys))).sorted()
     }
 
     // MARK: 본문 사진 차단
@@ -422,14 +461,16 @@ final class FilterStore: ObservableObject {
     var scriptConfigJSON: String { scriptConfig(detailPane: false) }
 
     /// detailPane: 분할 화면의 오른쪽(글) 화면 — 왼쪽에 목록이 이미 있어서 글목록 버튼을 숨김
-    func scriptConfig(detailPane: Bool) -> String {
+    /// duo: 이 화면의 여백 설정 (분할이면 화면 끝에 닿은 쪽만). 없으면 창 전체 기준 값
+    func scriptConfig(detailPane: Bool, duo: WebViewModel.DuoFlags? = nil) -> String {
         let s = settings
         let dict: [String: Any] = [
             "splitDetail": detailPane,
             "enabled": s.enabled,
             "mode": s.display.rawValue,
             "users": s.users.map { ["k": $0.kind.rawValue, "v": $0.value, "g": $0.gallery ?? ""] },
-            "dccons": s.dccons.map(\.key),
+            "dccons": dcconKeysForPage,
+            "dcconPkgs": settings.dcconPackages.map(\.pkg),
             "keywords": s.keywords.map { ["t": BlockMatch.terms($0.word).map { $0.lowercased() }, "g": $0.gallery ?? ""] as [String: Any] },
             "ignoreSymbols": s.ignoreSymbols,
             "ignoreSpaces": s.ignoreSpaces,
@@ -441,10 +482,13 @@ final class FilterStore: ObservableObject {
             "hideHeader": Profile.defaults.object(forKey: "hideSiteHeader") as? Bool ?? true,
             "homeRank": Profile.defaults.object(forKey: "homeRankOnly") as? Bool ?? true,
             "hideDory": Profile.defaults.object(forKey: "hideDory") as? Bool ?? true,
+            "deferImages": DeferredImages.enabled,   // 본문 이미지 숨기기 (눌러서 불러오기)
+            "hideImgComment": Profile.defaults.object(forKey: "hideImgCommentButton") as? Bool ?? false,   // 본문 사진 위 디시 기본 '댓글' 버튼 숨김
             "nativeComment": Profile.defaults.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
             "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기
+            "webFont": (FontStore.shared.webFontConfig as Any?) ?? NSNull(),   // 고른 글꼴의 페이지 주소 (없으면 null = 기본 글꼴)
             "adFilterCSS": AdBlock.enabled ? AdFilterStore.shared.cssText : "",   // 원격 필터(애드가드 디시 필터)의 숨김 규칙 — 광고차단이 켜졌을 때만
             "floatBar": Profile.defaults.object(forKey: "showFloatingBar") as? Bool ?? true,   // 세로 막대가 댓글 등록 버튼을 가리지 않게
             "memos": MemoStore.shared.memos.map { ["k": $0.kind.rawValue, "v": $0.value, "t": $0.text, "g": $0.gallery ?? ""] },   // 유저 메모
@@ -453,8 +497,9 @@ final class FilterStore: ObservableObject {
             "autoMemoGalleries": AutoMemo.selectedIDs,   // "선택한 갤러리만"에서 고른 갤러리
             "anon": ["nick": AnonStore.nick, "pw": AnonStore.password],   // 유동 닉/비번 자동 채우기 (모든 갤러리 공통)
             "anonG": AnonStore.galleryScriptValue,   // 갤러리별 유동 닉/비번 (있으면 공통보다 우선)
-            "duoFlip": BrowserView.windowLeftColumn,   // 돌려서 왼쪽에 생긴 줄 → 글자 여백을 오른쪽으로 뒤집음
-            "duoCol": BrowserView.hasSideColumnOnly,   // 듀오 옆 세로 줄이 있으면 글자는 줄 안쪽으로
+            "duoFlip": duo?.flip ?? BrowserView.windowLeftColumn,   // 돌려서 왼쪽에 생긴 줄 → 글자 여백을 오른쪽으로 뒤집음
+            "duoFlipR": duo?.flipR ?? BrowserView.windowLeftColumn,   // 뒤집힌 줄의 오른쪽 여백은 화면 오른쪽 끝에 닿을 때만
+            "duoCol": duo?.col ?? BrowserView.hasSideColumnOnly,   // 듀오 옆 세로 줄이 있으면 글자는 줄 안쪽으로 (이 화면이 그 줄 쪽 끝에 닿을 때)
             "duoOff": BrowserView.duoHorizontalBarNow,   // 듀오에서 컨트롤바를 가로로 쓰는 중 → 옆 줄 여백을 붙이지 않음 (화면 끝까지)
             "images": s.images.map(\.key),                  // 차단한 본문 사진 키
             "imgHashes": s.images.compactMap { $0.hash },   // 해시 (있으면 페이지가 사진 생김새를 확인해 같은 사진을 찾음)

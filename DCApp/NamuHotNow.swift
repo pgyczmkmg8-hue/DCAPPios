@@ -227,6 +227,65 @@ actor NamuHotNowClient {
         }
     }
 
+    /// 실시간 검색어 목록 전체에 대해 실검챈 1~2페이지 매칭 글의 카테고리(예: 🎙️인방, ⚖️정치)를 한 번에 조회
+    func categories(for keywords: [String]) async -> [String: String] {
+        let queries = keywords
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !queries.isEmpty else { return [:] }
+
+        if !isCacheValid() {
+            cachedPage1 = []
+            cachedPage2 = []
+            cachedPage1Cursor = nil
+            page2Loaded = false
+            cacheDate = nil
+        }
+
+        do {
+            if cachedPage1.isEmpty {
+                let page1 = try await fetchListPage(before: nil)
+                cachedPage1 = page1.articles
+                cachedPage1Cursor = page1.nextCursor
+                cacheDate = Date()
+            }
+
+            var result: [String: String] = [:]
+            var unmatched: [String] = []
+            for word in keywords {
+                let q = word.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !q.isEmpty else { continue }
+                if let match = firstMatch(for: q, in: cachedPage1) {
+                    if let badge = match.displayCategory {
+                        result[word] = badge
+                    }
+                } else {
+                    unmatched.append(word)
+                }
+            }
+
+            if !unmatched.isEmpty {
+                if !page2Loaded, let cursor = cachedPage1Cursor, !cursor.isEmpty {
+                    let page2 = try await fetchListPage(before: cursor)
+                    let seenIDs = Set(cachedPage1.map(\.id))
+                    cachedPage2 = page2.articles.filter { !seenIDs.contains($0.id) }
+                    page2Loaded = true
+                }
+                for word in unmatched {
+                    let q = word.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let match = firstMatch(for: q, in: cachedPage2),
+                       let badge = match.displayCategory {
+                        result[word] = badge
+                    }
+                }
+            }
+
+            return result
+        } catch {
+            return [:]
+        }
+    }
+
     // MARK: - 내부 조회
 
     private func isCacheValid() -> Bool {
@@ -354,6 +413,16 @@ actor NamuHotNowClient {
             if let category, category.contains("공지") { return true }
             if let display = categoryDisplayName, display.contains("공지") { return true }
             return false
+        }
+
+        var displayCategory: String? {
+            if let display = categoryDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
+                return display
+            }
+            if let cat = category?.trimmingCharacters(in: .whitespacesAndNewlines), !cat.isEmpty {
+                return cat
+            }
+            return nil
         }
     }
 

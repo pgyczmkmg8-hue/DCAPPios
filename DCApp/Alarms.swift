@@ -15,10 +15,14 @@ struct AlarmItem: Codable, Identifiable, Hashable {
     var id: String { "\(galleryID)-\(postNo)-\(commentNo ?? 0)-\(type)" }
 
     var url: URL {
-        DCGalleryID.postURL(galleryID, no: postNo, comments: commentNo != nil)   // 미니(mi$)·인물(pr$) 갤러리 주소도
+        // 미니(mi$)·인물(pr$) 갤러리 주소도, 갤로그 알림(G)은 갤로그 주소로
+        DCGalleryID.alarmURL(galleryID, no: postNo, comments: commentNo != nil, type: type)
     }
 
-    var title: String { commentNo != nil ? "새 댓글" : "알림" }
+    var title: String {
+        if type == "G" { return "갤로그" }
+        return commentNo != nil ? "새 댓글" : "알림"
+    }
 }
 
 @MainActor
@@ -132,6 +136,7 @@ final class AlarmStore: ObservableObject {
 
 /// 갤러리 창 → 알림 탭
 struct AlarmsList: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = AlarmStore.shared
     @EnvironmentObject private var router: AppRouter
 
@@ -152,7 +157,7 @@ struct AlarmsList: View {
                                 .foregroundStyle(a.read ? .secondary : .primary)
                                 .lineLimit(2)
                             Text("\(a.title) · \(a.galleryID) · \(a.receivedAt.shortKorean)")
-                                .font(.caption)
+                                .font(fonts.styleFont(.caption))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -172,6 +177,7 @@ struct AlarmsList: View {
 
 /// 앱 사용 중 새 알림이 오면 화면 위에 잠깐 뜨는 배너 (누르면 그 글로, 위로 밀면 닫힘)
 struct AlarmBanner: View {
+    @ObservedObject var fonts = FontStore.shared
     let item: AlarmItem
     let more: Int
     let onTap: () -> Void
@@ -185,10 +191,10 @@ struct AlarmBanner: View {
                 .foregroundStyle(DCTheme.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title + (more > 0 ? " 외 \(more)개" : ""))
-                    .font(.caption.weight(.semibold))
+                    .font(fonts.styleFont(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Text(item.subject.isEmpty ? item.galleryID : item.subject)
-                    .font(.subheadline.weight(.medium))
+                    .font(fonts.styleFont(.subheadline, weight: .medium))
                     .lineLimit(2)
             }
             Spacer(minLength: 0)

@@ -122,6 +122,7 @@ struct CommentComposerHost: View {
 }
 
 private struct CommentComposer: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject var session: CommentComposeSession
     let model: WebViewModel
     var barInset: CGFloat = 0
@@ -153,7 +154,7 @@ private struct CommentComposer: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.turn.down.right").font(.footnote)
                     Text(session.replyNick.isEmpty ? "대댓글" : "\(session.replyNick)에게 대댓글")
-                        .font(.footnote.weight(.semibold))
+                        .font(fonts.styleFont(.footnote, weight: .semibold))
                         .lineLimit(1)
                     Spacer()
                 }
@@ -180,7 +181,7 @@ private struct CommentComposer: View {
                             .resizable().scaledToFit()
                             .frame(height: 30)
                     } else {
-                        Text("코드").font(.footnote).foregroundStyle(.secondary)
+                        Text("코드").font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
                     }
                     Button { model.refreshCommentCode() } label: {
                         Image(systemName: "arrow.clockwise")
@@ -203,22 +204,22 @@ private struct CommentComposer: View {
                 .fieldBox(minHeight: 70)
             HStack(spacing: 14) {
                 Button { togglePanel(.dccon) } label: {
-                    Label("디시콘", systemImage: panel == .dccon ? "keyboard" : "face.smiling").font(.subheadline)
+                    Label("디시콘", systemImage: panel == .dccon ? "keyboard" : "face.smiling").font(fonts.styleFont(.subheadline))
                 }
                 .disabled(session.sending)
                 Button { togglePanel(.txtcon) } label: {
-                    Label("글자콘", systemImage: panel == .txtcon ? "keyboard" : "textformat").font(.subheadline)
+                    Label("글자콘", systemImage: panel == .txtcon ? "keyboard" : "textformat").font(fonts.styleFont(.subheadline))
                 }
                 .disabled(session.sending)
                 Spacer()
                 Text("\(session.text.count)자")
                     .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
                 Button { model.closeCommentCompose(sync: true) } label: {
-                    Text("닫기").font(.subheadline)
+                    Text("닫기").font(fonts.styleFont(.subheadline))
                 }
                 Button { model.submitComment() } label: {
                     Text(session.sending ? "등록 중…" : "등록")
-                        .font(.subheadline.weight(.semibold))
+                        .font(fonts.styleFont(.subheadline, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16).padding(.vertical, 7)
                         .background(DCTheme.navy.opacity(session.sending ? 0.5 : 1), in: Capsule())
@@ -282,6 +283,7 @@ private extension View {
 
 /// 앱 댓글 입력창 아래에 펼치는 디시콘 목록 (고르면 바로 댓글로 등록)
 private struct CommentDcconPanel: View {
+    @ObservedObject var fonts = FontStore.shared
     let model: WebViewModel
     @State private var tabs: [DcconTab] = []
     @State private var current = ""
@@ -297,7 +299,7 @@ private struct CommentDcconPanel: View {
                     ProgressView().padding(40)
                 } else if items.isEmpty {
                     Text(failed ? "디시콘 목록을 불러오지 못했어요" : "디시콘이 없어요")
-                        .font(.subheadline).foregroundStyle(.secondary).padding(40)
+                        .font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary).padding(40)
                 } else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], spacing: 8) {
                         ForEach(items) { it in
@@ -394,6 +396,7 @@ private extension Color {
 
 /// 앱 댓글 입력창 아래에 펼치는 글자콘 만들기 (글자·배경색·글자색 → 등록)
 private struct CommentTxtconPanel: View {
+    @ObservedObject var fonts = FontStore.shared
     let model: WebViewModel
     @State private var info: TxtconInfo?
     @State private var failed = false
@@ -411,7 +414,7 @@ private struct CommentTxtconPanel: View {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8).fill(Color(txtconHex: bg))
                             Text(text.isEmpty ? "미리보기" : text)
-                                .font(.system(size: 22, weight: .heavy))
+                                .font(fonts.uiFont(size: 22, weight: .heavy))
                                 .foregroundStyle(Color(txtconHex: text.isEmpty ? font : font).opacity(text.isEmpty ? 0.5 : 1))
                                 .multilineTextAlignment(.center)
                                 .minimumScaleFactor(0.4)
@@ -446,10 +449,10 @@ private struct CommentTxtconPanel: View {
                     if !info.recent.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 6) {
-                                Text("최근").font(.footnote).foregroundStyle(.secondary)
+                                Text("최근").font(fonts.styleFont(.footnote)).foregroundStyle(.secondary)
                                 ForEach(info.recent, id: \.self) { r in
                                     Button { text = r } label: {
-                                        Text(r).font(.footnote).lineLimit(1)
+                                        Text(r).font(fonts.styleFont(.footnote)).lineLimit(1)
                                             .padding(.horizontal, 10).padding(.vertical, 5)
                                             .background(Color(uiColor: .secondarySystemBackground), in: Capsule())
                                     }
@@ -466,7 +469,7 @@ private struct CommentTxtconPanel: View {
                         }
                     } label: {
                         Text(sending ? "등록 중…" : "글자콘 등록")
-                            .font(.subheadline.weight(.semibold))
+                            .font(fonts.styleFont(.subheadline, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 9)
@@ -476,7 +479,7 @@ private struct CommentTxtconPanel: View {
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
                 }
             } else if failed {
-                Text("글자콘을 불러오지 못했어요").font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(30)
+                Text("글자콘을 불러오지 못했어요").font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary).frame(maxWidth: .infinity).padding(30)
             } else {
                 ProgressView().frame(maxWidth: .infinity).padding(30)
             }
@@ -496,7 +499,7 @@ private struct CommentTxtconPanel: View {
 
     private func colorRow(_ title: String, _ colors: [TxtconColor], selected: String, pick: @escaping (String) -> Void) -> some View {
         HStack(spacing: 8) {
-            Text(title).font(.footnote).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
+            Text(title).font(fonts.styleFont(.footnote)).foregroundStyle(.secondary).frame(width: 40, alignment: .leading)
             ForEach(colors, id: \.hex) { c in
                 Button { pick(c.hex) } label: {
                     Circle().fill(Color(txtconHex: c.hex))

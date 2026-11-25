@@ -155,6 +155,7 @@ enum BackupManager {
 // MARK: - 설정 → 백업 화면
 
 struct BackupView: View {
+    @ObservedObject var fonts = FontStore.shared
     @EnvironmentObject private var favorites: FavoritesStore
     @AppStorage("backupIncludeArchives", store: Profile.defaults) private var includeArchives = true
     @AppStorage("backupIncludeImages", store: Profile.defaults) private var includeImages = true
@@ -181,7 +182,7 @@ struct BackupView: View {
                         Label("백업 파일 저장 / 공유", systemImage: "square.and.arrow.up")
                     }
                     Text(backupURL.lastPathComponent + " · " + fileSize(backupURL))
-                        .font(.caption)
+                        .font(fonts.styleFont(.caption))
                         .foregroundStyle(.secondary)
                 }
             } header: {

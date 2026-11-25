@@ -148,6 +148,7 @@ final class MemoStore: ObservableObject {
 
 /// 설정 → 유저 메모 목록 (눌러서 고치기, 밀어서 지우기)
 struct MemoListView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = MemoStore.shared
     @State private var editing: UserMemo?
     @State private var editText = ""
@@ -162,7 +163,7 @@ struct MemoListView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(m.text).foregroundStyle(.primary)
                         Text("\(m.kind.label) · \(m.value) · \(m.gallery.map { "\($0) 갤러리만" } ?? "모든 갤러리")")
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
                     }
                 }
             }

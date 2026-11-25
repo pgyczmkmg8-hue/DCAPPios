@@ -98,6 +98,7 @@ enum FooterFormat {
 // MARK: - 설정 화면
 
 struct FooterSettingsView: View {
+    @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = FooterStore.shared
     @AppStorage(FooterStore.enabledKey, store: Profile.defaults) private var enabled = false
     @State private var editing: FooterRule?
@@ -116,9 +117,9 @@ struct FooterSettingsView: View {
                     ForEach(store.rules) { r in
                         Button { editing = r } label: {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("\(r.accountLabel) · \(r.galleryLabel)").font(.subheadline).foregroundStyle(.secondary)
+                                Text("\(r.accountLabel) · \(r.galleryLabel)").font(fonts.styleFont(.subheadline)).foregroundStyle(.secondary)
                                 Text(FooterFormat.plain(FooterStore.clean(r.text)))
-                                    .font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                                    .font(fonts.uiFont(size: 12)).foregroundStyle(Color(white: 0.55))
                             }
                         }
                         .foregroundStyle(.primary)
@@ -146,6 +147,7 @@ struct FooterSettingsView: View {
 }
 
 struct FooterRuleEditor: View {
+    @ObservedObject var fonts = FontStore.shared
     @State var rule: FooterRule
     let isNew: Bool
     @Environment(\.dismiss) private var dismiss
@@ -202,7 +204,7 @@ struct FooterRuleEditor: View {
                 Section {
                     TextField("꼬릿말 내용", text: $rule.text)
                     Text(FooterFormat.plain(FooterStore.clean(rule.text)))
-                        .font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                        .font(fonts.uiFont(size: 12)).foregroundStyle(Color(white: 0.55))
                 } header: {
                     Text("꼬릿말")
                 } footer: {

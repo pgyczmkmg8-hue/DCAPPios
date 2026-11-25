@@ -45,13 +45,21 @@ struct NamuSearchInputSheet: View {
     let onOpen: (URL) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var text = ""
+
+    /// initialText: 검색 창에서 미리 적어 둔 검색어 (있으면 칸에 넣어 두고 연관 검색어부터 보여 줌)
+    init(initialText: String = "", onOpen: @escaping (URL) -> Void) {
+        self.onOpen = onOpen
+        _text = State(initialValue: initialText)
+    }
     @State private var ranking: [String] = []
     @State private var rankingLoaded = false
+    @State private var rankingCategories: [String: String] = [:]
     @State private var suggestions: [String] = []
     @State private var suggesting = false
     @State private var suggestTask: Task<Void, Never>?
     @State private var reasonTarget: NamuHotNowTarget?
     @FocusState private var focused: Bool
+    @ObservedObject private var fonts = FontStore.shared
 
     private var trimmed: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -77,11 +85,22 @@ struct NamuSearchInputSheet: View {
                             Button { open(word) } label: {
                                 HStack(spacing: 10) {
                                     Text("\(index + 1)")
-                                        .font(.footnote.weight(.semibold))
+                                        .font(fonts.styleFont(.footnote, weight: .semibold))
                                         .foregroundStyle(.secondary)
                                         .frame(width: 18, alignment: .leading)
-                                    Text(word).foregroundStyle(.primary)
-                                    Spacer(minLength: 0)
+                                    Text(word)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 8)
+                                    if let category = rankingCategories[word], !category.isEmpty {
+                                        Text(category)
+                                            .font(fonts.styleFont(.caption2, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(.secondary.opacity(0.14), in: Capsule())
+                                            .lineLimit(1)
+                                    }
                                 }
                                 .contentShape(Rectangle())
                             }
@@ -99,7 +118,7 @@ struct NamuSearchInputSheet: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("실시간 검색어")
                             Text("실시간 검색어를 왼쪽으로 밀면 실시간 검색어인 사유를 보여줍니다")
-                                .font(.caption)
+                                .font(fonts.styleFont(.caption))
                                 .foregroundStyle(.secondary)
                                 .textCase(nil)
                         }
@@ -129,6 +148,7 @@ struct NamuSearchInputSheet: View {
             }
             .navigationTitle("나무위키 검색")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("닫기") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -137,11 +157,19 @@ struct NamuSearchInputSheet: View {
                 }
             }
             .onAppear {
-                Task { try? await Task.sleep(for: .milliseconds(80)); focused = true }
+                // 미리 적어 온 검색어가 있으면 연관 검색어를 받고, 키보드는 올리지 않음 (결과를 바로 보게)
+                if !trimmed.isEmpty { scheduleSuggest() }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(80))
+                    if trimmed.isEmpty { focused = true }
+                }
             }
             .task {
                 ranking = await NamuSuggestBridge.shared.ranking()
                 rankingLoaded = true
+                if !ranking.isEmpty {
+                    rankingCategories = await NamuHotNowClient.shared.categories(for: ranking)
+                }
             }
             .onChangeCompat(of: text) { _, _ in scheduleSuggest() }
             .onDisappear { suggestTask?.cancel() }
@@ -154,7 +182,7 @@ struct NamuSearchInputSheet: View {
                 NamuHotNowSheet(keyword: target.keyword)
             }
         }
-        .sheetUnderBlueBar(medium: true)
+        .sheetUnderBlueBar()   // 전체 높이: 키보드가 올라와도 시트가 키보드 뒤로 내려가지 않게
     }
 
     /// 입력이 멈춘 뒤 300ms 후에 연관 검색어를 받음 (이전 요청은 취소, 늦게 온 결과는 버림)
