@@ -18,6 +18,15 @@
       "versions": [
         {
           "version": "0.11.0",
+          "buildVersion": "1",
+          "date": "2026-11-25",
+          "localizedDescription": "디시콘 패키지 전체 차단 수정 (움직이는 디시콘도 함께 가림, 패키지를 못 찾으면 안내)",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.0.1/DCApp.0.11.0.1.ipa",
+          "size": 31648453,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.11.0",
           "buildVersion": "0",
           "date": "2026-11-25",
           "localizedDescription": "퀵 글쓰기, 홈 순위 4칸(분할 2×2), 글꼴·테마 색, 본문 이미지 눌러 불러오기, 투표·디시콘 창·갤러리 정보 화면 개편",
