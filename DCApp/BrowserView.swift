@@ -1528,6 +1528,17 @@ struct BrowserView: View {
                 .background(.thinMaterial, in: Capsule())
                 .padding(.top, 8)
             }
+            if let status = model.backgroundCommentStatus {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(status)
+                }
+                .font(fonts.styleFont(.subheadline))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.thinMaterial, in: Capsule())
+                .padding(.top, 8)
+            }
         }
     }
 
@@ -3434,6 +3445,10 @@ struct BrowserCovers: View {
             // 투표 보기 사진: 디시 전체 화면 대신 적당한 크기의 앱 창
             .sheet(item: $model.votePreview) { item in
                 VoteImagePreviewSheet(item: item)
+            }
+            // 백그라운드 댓글 등록 중 보안 확인(Turnstile)이 필요할 때 사용자가 직접 체크할 수 있는 시트
+            .sheet(item: $model.turnstileChallenge) { challenge in
+                CommentTurnstileSheet(challenge: challenge)
             }
     }
 }

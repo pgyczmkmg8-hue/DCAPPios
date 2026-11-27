@@ -115,13 +115,20 @@ final class AppRouter: ObservableObject {
             guard let self, self.splitActive else { return }
             self.movePostToDetail(url)
         }
-        // 분할 화면에서 왼쪽이 홈(m.dcinside.com/)으로 이동하면 오른쪽에 열려 있던 이전 글을 비워 홈을 전체 폭(2×2)으로 표시
+        // 분할 화면에서 왼쪽이 홈(m.dcinside.com/)으로 이동하거나 다른 갤러리로 이동하면 오른쪽에 열려 있던 이전 글을 비움
         mainBrowser.$url
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] main in
-                guard let self, self.splitActive, WebViewModel.isDCHomeURL(main) else { return }
-                if let du = self.detailBrowser.url, du.scheme != "about" {
+                guard let self, self.splitActive else { return }
+                guard let du = self.detailBrowser.url, du.scheme != "about" else { return }
+                if WebViewModel.isDCHomeURL(main) {
+                    self.detailBrowser.load(URL(string: "about:blank")!)
+                    return
+                }
+                if let mainG = main.flatMap(Gallery.parse)?.id,
+                   let detailG = Gallery.parse(du)?.id,
+                   mainG != detailG {
                     self.detailBrowser.load(URL(string: "about:blank")!)
                 }
             }

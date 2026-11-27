@@ -489,6 +489,7 @@ final class FilterStore: ObservableObject {
             "imgNum": Profile.defaults.object(forKey: "showImgNumber") as? Bool ?? true,   // 본문 사진 위 디시 기본 '이미지 순서' 번호 보기
             "imgNumOnAt": Profile.defaults.double(forKey: "showImgNumberOnAt"),   // 앱에서 다시 켠 시각 (디시 쪽 설정이 꺼져 있으면 한 번 켜 줌)
             "nativeComment": Profile.defaults.object(forKey: "nativeComment") as? Bool ?? true,   // 앱 댓글 입력창
+            "bgComment": BackgroundComment.enabled,   // 댓글 등록 요청은 앱이 보냄 (글을 옮겨도 끊기지 않게)
             "pinComment": CommentPin.enabled,   // 컨트롤바가 세로 막대일 때 댓글 입력칸을 아래에 고정
             "myId": CredentialStore.currentAccountID ?? "",
             "adBlock": AdBlock.enabled,   // 광고 자리 숨기기

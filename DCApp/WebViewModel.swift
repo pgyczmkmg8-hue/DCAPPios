@@ -69,6 +69,23 @@ final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+/// 앱이 화면에서 잠깐 벗어나도 하던 일(댓글 등록 등)을 마저 하도록 iOS에 시간을 받아 두는 작은 상자
+private final class BackgroundTaskBox {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
+    }
+}
+
 /// WKWebView 하나와 그 상태를 관리합니다.
 /// 모든 탭이 같은 쿠키 저장소(.default())를 쓰므로 한 번 로그인하면 전부 로그인 상태가 됩니다.
 @MainActor
@@ -114,6 +131,8 @@ final class WebViewModel: NSObject, ObservableObject {
     @Published var imageViewer: ImageViewerItem?
     /// 투표 보기 썸네일을 누른 사진 (디시 전체 화면 대신 적당한 크기의 앱 창으로)
     @Published var votePreview: VotePreviewItem?
+    @Published var turnstileChallenge: CommentTurnstileChallenge?
+    @Published var backgroundCommentStatus: String? = nil
     /// 댓글을 길게 눌러 띄우는 '댓글 내용만 보기' (선택·복사용)
     @Published var commentText: CommentTextItem?
     /// 댓글을 길게 눌렀을 때 뜨는 '텍스트 선택' 버튼 (누르면 commentText로 넘어가 내용 화면이 열림)
@@ -473,7 +492,9 @@ final class WebViewModel: NSObject, ObservableObject {
         s.sending = true
         Task {
             await reattachCompose(s)
+            if s.leftPage { return }      // 보내기 전에 다른 글로 감 → 새 글의 댓글칸에 올리지 않음 (안내·보관은 이동할 때 함)
             let r = await call("return window.__dcapp ? window.__dcapp.cmtSubmit(p) : 'none';", composeArgs(s)) as? String
+            if s.leftPage { return }
             switch r {
             case "sent":
                 // 성공하면 'cmtok'으로 닫힘. 응답이 없으면(디시가 입력 오류 안내만 띄운 경우 등) 입력창을 다시 쓸 수 있게
@@ -493,6 +514,165 @@ final class WebViewModel: NSObject, ObservableObject {
                 showToast("댓글 칸을 못 찾았어요. 댓글을 다시 눌러 주세요")
             }
         }
+    }
+
+    // MARK: 댓글 등록을 앱이 보내기 (글을 옮겨도 끊기지 않게)
+
+    /// 앱이 보내고 있는 댓글 등록
+    private var sendingComments: Set<String> = []
+    /// 보낸 페이지를 벗어난 뒤 끝난 등록의 결과 (뒤로 가기로 그 페이지가 되살아나면 알려 줌)
+    private var finishedComments: [String: CommentSendResult] = [:]
+
+    /// 등록 중인 입력창을 두고 다른 글로 감
+    private func leaveSendingComposer(_ c: CommentComposeSession) {
+        c.leftPage = true
+        commentCompose = nil
+        if c.jobID != nil {
+            showToast("댓글은 계속 등록하고 있어요")
+        } else {
+            // 아직 보내기 전(보안 확인 대기)이거나 429로 다시 누르던 중 → 이어 갈 페이지가 없어짐
+            CommentDraftStore.save(c)
+            showToast(isRetryingComment
+                      ? "글을 옮겨 댓글 다시 시도를 멈췄어요\n쓰던 내용은 보관했어요"
+                      : "댓글을 보내기 전에 글을 옮겨 등록하지 않았어요\n쓰던 내용은 보관했어요")
+        }
+    }
+
+    /// 페이지가 넘긴 댓글 등록을 앱이 보냄. 화면이 바뀌거나 닫혀도 끝까지 보내도록 작업이 이 객체를 붙잡고 있음
+    private func sendCommentInBackground(_ body: [String: Any]) {
+        guard let id = body["id"] as? String, !sendingComments.contains(id),
+              let page = (body["page"] as? String).flatMap({ URL(string: $0) }),
+              page.scheme == "https", page.host == "m.dcinside.com",
+              let payload = body["body"] as? String else { return }
+        let job = CommentSendJob(pageURL: page, userAgent: body["ua"] as? String ?? "",
+                                 headers: body["headers"] as? [String: String] ?? [:], body: payload,
+                                 setsCheckCookie: body["chk"] as? Bool ?? false)
+        let composer = commentCompose.flatMap { $0.pageKey == CommentDraftStore.pageKey(page) ? $0 : nil }
+        let account = CredentialStore.currentAccountID      // 보내는 동안 계정을 바꿔도 보낸 계정으로 기록
+        let dataStore = webView.configuration.websiteDataStore
+        let background = BackgroundTaskBox("dcapp.comment")      // 앱을 잠깐 벗어나도 마저 보냄
+        sendingComments.insert(id)
+        backgroundCommentStatus = "댓글 등록 중…"
+        composer?.jobID = id
+        Task {
+            let result = await CommentSender.send(job, dataStore: dataStore) { [weak self] status in
+                self?.backgroundCommentStatus = status
+            }
+            await finishComment(id, job: job, result: result, info: body, composer: composer, account: account)
+            background.end()
+        }
+    }
+
+    /// 보낸 페이지에 결과를 돌려줌. 그 페이지가 남아 있으면 true
+    private func deliverCommentResult(_ id: String, _ r: CommentSendResult, late: Bool) async -> Bool {
+        let p: [String: Any] = ["id": id, "status": r.status, "text": r.text, "contentType": r.contentType,
+                                "key": r.blockKey, "late": late]
+        return (await call("return window.__dcapp ? window.__dcapp.nativeCmtDone(p) : false;", ["p": p]) as? Bool) == true
+    }
+
+    private func finishComment(_ id: String, job: CommentSendJob, result: CommentSendResult, info: [String: Any],
+                               composer: CommentComposeSession?, account: String?) async {
+        sendingComments.remove(id)
+        if sendingComments.isEmpty { backgroundCommentStatus = nil }
+        if composer?.jobID == id { composer?.jobID = nil }
+        if !result.succeeded && result.needsTurnstile && !(info["turnstileRetried"] as? Bool ?? false) {
+            let store = webView.configuration.websiteDataStore
+            turnstileChallenge = CommentTurnstileChallenge(
+                pageURL: job.pageURL,
+                userAgent: job.userAgent,
+                dataStore: store,
+                onToken: { [weak self] token in
+                    guard let self else { return }
+                    self.turnstileChallenge = nil
+                    var updatedJob = job
+                    updatedJob.body = CommentSender.replacingTurnstileToken(job.body, token: token)
+                    var updatedInfo = info
+                    updatedInfo["turnstileRetried"] = true
+                    // 번호는 처음 것을 그대로 씀 — 페이지가 이 번호로 기다리고 있어야 '등록 중' 화면이 걷히고 쓴 글이 지워짐
+                    self.sendingComments.insert(id)
+                    composer?.jobID = id
+                    let bg = BackgroundTaskBox("dcapp.comment.ts")
+                    Task {
+                        let retryResult = await CommentSender.send(updatedJob, dataStore: store)
+                        await self.finishComment(id, job: updatedJob, result: retryResult, info: updatedInfo, composer: composer, account: account)
+                        bg.end()
+                    }
+                },
+                onCancel: { [weak self] in
+                    guard let self else { return }
+                    self.turnstileChallenge = nil
+                    if let composer, self.commentCompose === composer { composer.sending = false }
+                    // 페이지의 '등록 중' 화면을 걷음 (안내창·재시도 없이 화면만 정리)
+                    Task { _ = await self.deliverCommentResult(id, result, late: true) }
+                    self.showToast("보안 확인을 취소했어요")
+                }
+            )
+            return
+        }
+        if result.rejected {      // 앱이 보내는 방식이 막힘 → 다음부터는 예전처럼 페이지가 보냄
+            BackgroundComment.rejected = true
+            NotificationCenter.default.post(name: DC.filtersChanged, object: nil)
+        }
+        let key = PostKey.from(job.pageURL)
+        let samePost = key != nil
+            ? webView.url.flatMap { PostKey.from($0) } == key
+            : CommentDraftStore.pageKey(webView.url) == CommentDraftStore.pageKey(job.pageURL)
+        // 다른 글로 넘어가는 중이면 옛 페이지는 화면 정리만 하게 함(late) — 알림·작성 기록은 앱이 함 (두 번 기록되지 않게)
+        let delivered = await deliverCommentResult(id, result, late: !samePost)
+        if delivered && samePost {      // 화면 처리(입력창 닫기·목록 새로 받기·실패 안내·429 재시도)는 페이지가 함
+            if result.rejected { showToast("댓글이 등록되지 않았어요\n다시 등록을 눌러 주세요") }
+            return
+        }
+        // 보낸 페이지를 벗어남(다른 글로 감·새로고침) → 앱이 마무리
+        if !delivered {
+            finishedComments[id] = result
+            while finishedComments.count > 5, let old = finishedComments.keys.first(where: { $0 != id }) {
+                finishedComments[old] = nil
+            }
+        }
+        // 같은 글을 새로고침해 입력창이 남아 있으면: 성공하면 닫고, 실패하면 다시 누를 수 있게
+        if let composer, commentCompose === composer {
+            if result.succeeded { withAnimation(.easeOut(duration: 0.2)) { commentCompose = nil } }
+            else { composer.sending = false }
+        }
+        let memo = info["memo"] as? String ?? ""
+        let isDccon = info["dccon"] as? Bool ?? false
+        // 보관 위치: 앱 입력창에서 보냈으면 그 칸, 웹 댓글칸에서 보냈으면 본댓글만
+        let draftKey = composer?.draftKey
+            ?? ((info["mode"] as? String) == "com_write" ? CommentDraftStore.draftKey(url: job.pageURL, isReply: false, replyNick: "") : "")
+        if result.succeeded {
+            CommentDraftStore.remove(draftKey)
+            commentCarry = nil
+            if let key {
+                let who = WriterIdentity(account: account, nick: account == nil ? (info["nick"] as? String) : nil, ip: nil)
+                let title = info["title"] as? String ?? ""
+                WrittenStore.shared.add(WrittenItem(kind: .comment, key: key, title: title.isEmpty ? "(제목 없음)" : title,
+                                                    snippet: isDccon && memo.isEmpty ? "(디시콘)" : String(memo.prefix(80)),
+                                                    date: Date(), who: who))
+            }
+            showToast("댓글이 등록됐어요")
+            if samePost { _ = await call("return window.__dcapp ? window.__dcapp.refreshComments() : 'none';") }
+            return
+        }
+        // 실패: 쓴 글은 잃지 않게 보관
+        let typed = composer.map { $0.text.isEmpty ? memo : $0.text } ?? memo
+        var kept = false
+        if !isDccon && !draftKey.isEmpty && !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            CommentDraftStore.save(key: draftKey, text: typed)
+            kept = true
+        }
+        let reason: String
+        var title = "댓글이 등록되지 않았어요"
+        switch result.status {
+        case 0:
+            title = "댓글이 등록됐는지 확인하지 못했어요"
+            reason = "연결이 끊기거나 시간이 넘었어요. 그 글에서 확인해 주세요"
+        case 429: reason = "디시가 요청을 잠시 막았어요(429)"
+        case 200 where result.failureCause == "captcha": reason = "보안 코드를 입력해야 해요"
+        case 200 where !result.failureCause.isEmpty: reason = result.failureCause
+        default: reason = "서버가 받지 않았어요 (\(result.status))"
+        }
+        showToast(title + "\n" + reason + (kept ? "\n쓴 내용은 보관했어요" : ""), seconds: 6)
     }
 
     /// Cloudflare 체크를 눌러야 할 때: 앱 입력창을 내리고 키보드도 내려서 페이지의 체크박스가 가려지지 않게 함
@@ -562,8 +742,10 @@ final class WebViewModel: NSObject, ObservableObject {
         guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
         s.sending = true
         await reattachCompose(s)
+        if s.leftPage { return false }
         let r = await call("return window.__dcapp ? window.__dcapp.txtconSend(p) : 'none';",
                            ["p": ["nick": s.nick, "pw": s.pw, "code": s.code]]) as? String ?? "none"
+        if s.leftPage { return false }
         switch r {
         case "sent":
             Task {
@@ -592,8 +774,10 @@ final class WebViewModel: NSObject, ObservableObject {
         guard let s = commentCompose, !s.sending, commentIdentityOK(s) else { return false }
         s.sending = true
         await reattachCompose(s)
+        if s.leftPage { return false }
         let args: [String: Any] = ["p": ["nick": s.nick, "pw": s.pw, "code": s.code], "k": item.pkg, "d": item.detail]
         let r = await call("return window.__dcapp ? window.__dcapp.composeDcconSend(p, k, d) : 'none';", args) as? String ?? "none"
+        if s.leftPage { return false }
         switch r {
         case "sent":
             Task {
@@ -2596,6 +2780,14 @@ extension WebViewModel: WKScriptMessageHandler {
                 }
                 commentCompose?.sending = false      // 성공이면 이미 닫혔고, 실패면 입력창을 다시 쓸 수 있게
             }
+        case "cmtsubmit":   // 페이지가 만든 댓글 등록 요청 → 앱이 대신 보냄 (사용자 쿠키를 붙이므로 디시 본 화면에서 온 것만)
+            guard message.frameInfo.isMainFrame, message.frameInfo.securityOrigin.host == "m.dcinside.com" else { break }
+            sendCommentInBackground(body)
+        case "cmtjobsync":   // 뒤로 가기로 되살아난 페이지가, 떠나 있던 사이 끝난 등록의 결과를 물어봄
+            for id in body["ids"] as? [String] ?? [] {
+                guard let r = finishedComments.removeValue(forKey: id) else { continue }
+                Task { _ = await deliverCommentResult(id, r, late: true) }
+            }
         case "cmtretry":   // 429 뒤 자동 재등록 상태 — 댓글이 달리거나 멈출 때까지 '댓글을 다는 중' 말풍선을 띄움
             switch body["state"] as? String {
             case "start": isRetryingComment = true
@@ -2754,11 +2946,13 @@ extension WebViewModel: WKNavigationDelegate {
         }
         // 다른 글·목록으로 가면 앱 댓글 입력창은 닫음 (같은 페이지를 다시 불러오는 건 그대로 둠 — 쓰던 글이 남아 있고 새 댓글칸에 이어서 등록)
         // (대댓글 입력창도 등록할 때 그 댓글의 답글 칸을 다시 열어 연결함)
-        if let c = commentCompose, !c.sending, navigationAction.targetFrame?.isMainFrame ?? true {
-            let moved = CommentDraftStore.pageKey(url) != c.pageKey
-            if moved {
+        if let c = commentCompose, navigationAction.targetFrame?.isMainFrame ?? true,
+           CommentDraftStore.pageKey(url) != c.pageKey {
+            if !c.sending {
                 CommentDraftStore.save(c)
                 commentCompose = nil
+            } else if BackgroundComment.enabled, scheme == "https" || scheme == "http", Self.isDCURL(url) {
+                leaveSendingComposer(c)      // 등록 중에 다른 글로 감
             }
         }
         if !["http", "https", "about", "data", "blob", "javascript"].contains(scheme) {

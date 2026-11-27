@@ -141,25 +141,17 @@ nonisolated enum VotePhotoLoader {
         return URLSession(configuration: cfg)
     }()
 
-    /// 썸네일 주소(dcimg*.dcinside.com/viewimage.php)가 들어와도 image.dcinside.com/viewimagePop.php로 정규화하고 6자리 썸네일 접미사 제거
+    /// 썸네일 주소(dcimg*.dcinside.com/viewimage.php)가 들어와도 image.dcinside.com/viewimagePop.php로 정규화
+    /// (이미 viewimagePop.php인 경우 showVoteImg 원본 주소이므로 no= 접미사를 건드리지 않음)
     static func popupURL(_ url: URL) -> URL {
+        let isThumb = url.path.contains("viewimage.php")
         let popped = normalizePopupHostAndPath(url)
-        return stripThumbSuffix(from: popped) ?? popped
+        return isThumb ? (stripThumbSuffix(from: popped) ?? popped) : popped
     }
 
     static func loadFullImage(for rawURL: URL, referer: URL?) async -> UIImage? {
         let popURL = popupURL(rawURL)
-        if let img = await fetchFromPopup(popURL: popURL, referer: referer) {
-            // 썸네일 크기(<=250px)로 내려왔다면 no= 끝 6자리 썸네일 접미사를 강제로 떼고 원본 재요청
-            if img.size.width <= 250 && img.size.height <= 250,
-               let stripped = stripThumbSuffix(from: popURL, minLength: 20),
-               let full = await fetchFromPopup(popURL: stripped, referer: referer),
-               full.size.width > img.size.width || full.size.height > img.size.height {
-                return full
-            }
-            return img
-        }
-        return nil
+        return await fetchFromPopup(popURL: popURL, referer: referer)
     }
 
     private static func fetchFromPopup(popURL: URL, referer: URL?) async -> UIImage? {

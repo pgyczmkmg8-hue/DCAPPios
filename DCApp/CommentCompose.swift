@@ -22,6 +22,10 @@ final class CommentComposeSession: ObservableObject, Identifiable {
     @Published var pw: String
     @Published var code = ""
     @Published var sending = false
+    /// 등록 중에 다른 글로 감 → 남은 전송 단계를 이어 하지 않음
+    var leftPage = false
+    /// 앱이 보내고 있는 등록 번호 (nil이면 아직 보내기 전이거나 끝남)
+    var jobID: String?
     /// 쓰던 글을 보관·복구할 때 쓰는 키 (글 주소 + 댓글/대댓글 대상)
     var draftKey = ""
     /// 이 입력창이 붙은 페이지 (글 주소, # 뒤 제외) — 다른 페이지로 가면 닫음
@@ -541,11 +545,12 @@ enum CommentDraftStore {
         return "\(c?.string ?? "")|\(isReply ? "r" : "c")|\(replyNick)"
     }
 
-    static func save(_ s: CommentComposeSession) {
-        let t = s.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.draftKey.isEmpty, !t.isEmpty else { return }
-        var l = items.filter { $0.key != s.draftKey }
-        l.insert(Item(key: s.draftKey, text: s.text, at: Date()), at: 0)
+    static func save(_ s: CommentComposeSession) { save(key: s.draftKey, text: s.text) }
+
+    static func save(key draftKey: String, text: String) {
+        guard !draftKey.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        var l = items.filter { $0.key != draftKey }
+        l.insert(Item(key: draftKey, text: text, at: Date()), at: 0)
         items = Array(l.prefix(20))
     }
 

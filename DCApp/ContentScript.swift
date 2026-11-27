@@ -176,6 +176,11 @@ enum ContentScript {
       'html.dcapp-home-wait body{opacity:0!important}',
       'html.dcapp-cmtretry .loading-box{display:none!important}',
       'html.dcapp-tscheck .loading-box{display:none!important}',
+      '.dcapp-write-tsx{display:none!important}',
+      'html.dcapp-write-tscheck,html.dcapp-write-tscheck body{background:#f2f2f7!important;min-height:100vh!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important}',
+      'html.darkmode.dcapp-write-tscheck,html.darkmode.dcapp-write-tscheck body{background:#000!important}',
+      'html.dcapp-write-tscheck .dc-ts-slot,html.dcapp-write-tscheck #dc-turnstile,html.dcapp-write-tscheck .cf-turnstile{display:flex!important;align-items:center!important;justify-content:center!important;margin:0 auto!important;padding:20px!important;border-radius:18px!important;background:#fff!important;box-shadow:0 8px 28px rgba(0,0,0,.12)!important}',
+      'html.darkmode.dcapp-write-tscheck .dc-ts-slot,html.darkmode.dcapp-write-tscheck #dc-turnstile,html.darkmode.dcapp-write-tscheck .cf-turnstile{background:#1c1c1e!important;box-shadow:none!important}',
       '.dcapp-blockmode [data-dcapp-unit]{outline:1px dashed rgba(255,59,48,.6)!important;outline-offset:-1px!important}',
       '.dcapp-pick{outline:3px solid #ff3b30!important;outline-offset:-3px!important;background-color:rgba(255,59,48,.15)!important}',
       // 닉네임·디시콘만 길게 누르기 메뉴를 쓰므로 iOS 기본 메뉴(복사 등)를 막고, 나머지 글자는 평소처럼 선택·복사 가능
@@ -743,6 +748,34 @@ enum ContentScript {
       'html.darkmode.dcapp-managehistory .con-search-box > div,html.darkmode.dcapp-managehistory .con-search-box .search-box,html.darkmode.dcapp-managehistory .con-search-box .sch-box{background:#1c1c1e!important;border-color:rgba(255,255,255,.14)!important}',
       'html.dcapp-managehistory .con-search-box input[type="text"],html.dcapp-managehistory .con-search-box input[type="search"],html.dcapp-managehistory #search{border:0!important;outline:0!important;background:transparent!important;font-size:14px!important;height:38px!important;flex:1 1 auto!important}',
       'html.darkmode.dcapp-managehistory .con-search-box input[type="text"],html.darkmode.dcapp-managehistory .con-search-box input[type="search"],html.darkmode.dcapp-managehistory #search{color:#f5f5f7!important}',
+      // 실시간 베스트(dcbest): 상단 중복 헤더 정리 + 실베/실베라이트/실베나이트 세그먼트 탭 앱 스타일
+      'html.dcapp-dcbest section.gall-tit-group,html.dcapp-dcbest .gall-tit-box{display:none!important}',
+      'html.dcapp-dcbest .livebest-tab{display:flex!important;gap:4px!important;margin:8px 12px 6px!important;padding:4px!important;border-radius:12px!important;background:rgba(120,120,128,.12)!important;border:0!important;box-sizing:border-box!important}',
+      'html.darkmode.dcapp-dcbest .livebest-tab{background:rgba(120,120,128,.24)!important}',
+      'html.dcapp-dcbest .livebest-tab > a{flex:1 1 0!important;display:flex!important;align-items:center!important;justify-content:center!important;height:34px!important;margin:0!important;padding:0 6px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:#636366!important;font-size:13px!important;font-weight:600!important;text-decoration:none!important;white-space:nowrap!important}',
+      'html.darkmode.dcapp-dcbest .livebest-tab > a{color:#aeaeb2!important}',
+      'html.dcapp-dcbest .livebest-tab > a.on{background:#fff!important;color:#1c1c1e!important;box-shadow:0 1px 3px rgba(0,0,0,.12)!important}',
+      'html.darkmode.dcapp-dcbest .livebest-tab > a.on{background:#2c2c2e!important;color:#f5f5f7!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst > li .gall-detail-lnktb a.lt{display:grid!important;grid-template-columns:56px minmax(0,1fr)!important;grid-template-rows:auto auto!important;column-gap:12px!important;row-gap:4px!important;align-items:center!important;padding-left:12px!important;margin-left:0!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst .thum-img{display:block!important;grid-column:1!important;grid-row:1 / span 2!important;float:none!important;width:56px!important;height:56px!important;margin:0!important;border-radius:10px!important;overflow:hidden!important;background:rgba(120,120,128,.12)!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst .thum-img img{width:100%!important;height:100%!important;object-fit:cover!important;display:block!important;border-radius:10px!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst .sp-lst-bestlight,html.dcapp-dcbest ul.gall-detail-lst .sp-lst-bestnight,html.dcapp-dcbest ul.gall-detail-lst .sp-lst-best{display:none!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst > li .subject-add{grid-column:2!important;grid-row:1!important;min-width:0!important;padding-left:0!important;margin-left:0!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst > li ul.ginfo{grid-column:2!important;grid-row:2!important;min-width:0!important;padding-left:0!important;margin-left:0!important}',
+      'html.dcapp-dcbest ul.gall-detail-lst .subjectin > b:first-child{display:inline-flex!important;align-items:center!important;padding:1px 7px!important;margin-right:5px!important;border-radius:999px!important;background:rgba(59,72,144,.12)!important;color:#3b4890!important;font-size:11px!important;font-weight:700!important;line-height:1.5!important;vertical-align:1px!important}',
+      'html.darkmode.dcapp-dcbest ul.gall-detail-lst .subjectin > b:first-child{background:rgba(130,150,255,.2)!important;color:#a8b8ff!important}',
+      // 삭제/숨김 처리된 게시물: 디시 원본 헤더·강아지 페이지 숨기고 앱 카드 UI 표시
+      'html.dcapp-deleted-post,html.dcapp-deleted-post body{background:#f2f2f7!important;min-height:100vh!important;margin:0!important;padding:0!important}',
+      'html.darkmode.dcapp-deleted-post,html.darkmode.dcapp-deleted-post body{background:#000!important}',
+      'html.dcapp-deleted-post header,html.dcapp-deleted-post .header,html.dcapp-deleted-post footer,html.dcapp-deleted-post .footer,html.dcapp-deleted-post .container,html.dcapp-deleted-post .penalty-box{display:none!important}',
+      '#dcapp-deleted-card{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:24px!important;z-index:2147483000!important;background:#f2f2f7!important}',
+      'html.darkmode #dcapp-deleted-card{background:#000!important}',
+      '#dcapp-deleted-card .dcapp-del-box{width:min(320px,100%)!important;background:#fff!important;color:#1c1c1e!important;border-radius:18px!important;padding:26px 20px 20px!important;text-align:center!important;box-shadow:0 8px 28px rgba(0,0,0,.08)!important}',
+      'html.darkmode #dcapp-deleted-card .dcapp-del-box{background:#1c1c1e!important;color:#f5f5f7!important;box-shadow:none!important;border:1px solid rgba(255,255,255,.08)!important}',
+      '#dcapp-deleted-card .dcapp-del-ico{font-size:34px!important;margin-bottom:10px!important;line-height:1!important}',
+      '#dcapp-deleted-card .dcapp-del-tit{font-size:16px!important;font-weight:700!important;margin:0 0 6px!important}',
+      '#dcapp-deleted-card .dcapp-del-sub{font-size:13px!important;color:#8e8e93!important;margin:0 0 18px!important}',
+      '#dcapp-deleted-card .dcapp-del-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:100%!important;height:42px!important;border:0!important;border-radius:12px!important;background:#3b4890!important;color:#fff!important;font-size:14px!important;font-weight:600!important;cursor:pointer!important}',
       // 마이너/메이저 갤러리 정보 팝업: 앱 둥근 카드 스타일 + 다크모드
       '#minor_info_pop .layer-popup-inner,#major_info_pop .layer-popup-inner,#minor_info_pop .popup-inner,#major_info_pop .popup-inner,.layer-center-popup[id*="info_pop"] .layer-popup-inner{border-radius:18px!important;overflow:hidden!important;box-shadow:0 14px 40px rgba(0,0,0,.32)!important;border:1px solid rgba(0,0,0,.06)!important;background:#fff!important}',
       'html.darkmode #minor_info_pop .layer-popup-inner,html.darkmode #major_info_pop .layer-popup-inner,html.darkmode #minor_info_pop .popup-inner,html.darkmode #major_info_pop .popup-inner,html.darkmode .layer-center-popup[id*="info_pop"] .layer-popup-inner{background:#1c1c1e!important;border-color:rgba(255,255,255,.12)!important}',
@@ -2453,24 +2486,24 @@ enum ContentScript {
               try { window.parent.postMessage({ __dcappVoteCopy: code }, location.origin); } catch (err) {}
             }, true);
           }
-          // 투표 보기 썸네일: 디시의 showVoteImg(전체 화면 검은 층)보다 먼저 가로채서 앱의 미리보기 창으로 (사진 번호 → 디시 사진 주소)
+          // 투표 보기 썸네일: 썸네일 버튼/이미지 자체를 누를 때만 앱 미리보기 창으로 (항목 텍스트 .vote-txt 등을 누르면 정상 투표 선택)
           if (!doc.__dcappVoteImg) {
             doc.__dcappVoteImg = true;
             doc.addEventListener('click', function (e) {
               var t = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
-              if (!t || !t.closest || !t.closest('.vote-ask-lst, .vote-gp-lst, .vote-thum, .vote-thum-img, .vote-view-inner, [class*="vote"]')) return;
-              var num = '';
+              if (!t || !t.closest) return;
+              if (t.closest('.vote-txt, .vote-gp-bar, .vote-btn-box, input, label')) return;
               var oc = t.closest('[onclick*="showVoteImg"]');
-              if (!oc) {
-                var li = t.closest('li');
-                if (li) oc = li.querySelector('[onclick*="showVoteImg"]');
-              }
+              var thum = t.closest('.vote-thum, .vote-thum-img');
+              if (!oc && !thum) return;
+              var num = '';
+              if (!oc && thum) oc = thum.closest('[onclick*="showVoteImg"]');
               if (oc) {
                 var m1 = /showVoteImg\(\s*['"]?([^'"\s),]+)/.exec(oc.getAttribute('onclick') || '');
                 if (m1) num = m1[1];
               }
-              if (!num) {
-                var im = t.tagName === 'IMG' ? t : (t.querySelector ? t.querySelector('img') : null);
+              if (!num && thum) {
+                var im = t.tagName === 'IMG' ? t : (thum.querySelector ? thum.querySelector('img') : null);
                 var src0 = im ? (im.getAttribute('src') || im.getAttribute('data-original') || '') : '';
                 var m2 = /viewimage\.php\?([^"'\s]+)/.exec(src0);
                 if (m2) num = m2[1];
@@ -2526,6 +2559,49 @@ enum ContentScript {
     if (/^\/managehistory\//.test(location.pathname)) {
       document.documentElement.classList.add('dcapp-managehistory');
       suppressGallInfoPop(5000);
+    }
+    if (/^\/board\/dcbest(?:\/|$)/i.test(location.pathname)) {
+      document.documentElement.classList.add('dcapp-dcbest');
+      // dcbest의 ul.gall-detail-lst.thum에서 thum 클래스를 제거해 일반 갤러리 목록(댓글 배지·행 레이아웃)과 100% 동일하게 적용
+      document.querySelectorAll('ul.gall-detail-lst.thum').forEach(function (ul) { ul.classList.remove('thum'); });
+      // [X갤] 굵은 접두사의 대괄호를 벗겨 깔끔한 알약 배지로 표시 + 썸네일 지연 로딩 보강
+      document.querySelectorAll('ul.gall-detail-lst .subjectin > b:first-child').forEach(function (b) {
+        if (!b.getAttribute('data-dcapp-pill')) {
+          b.setAttribute('data-dcapp-pill', '1');
+          b.textContent = (b.textContent || '').replace(/^\s*\[|\]\s*$/g, '');
+        }
+      });
+      document.querySelectorAll('ul.gall-detail-lst .thum-img img[data-original]').forEach(function (im) {
+        var orig = im.getAttribute('data-original');
+        if (orig && !im.getAttribute('src')) im.setAttribute('src', orig);
+      });
+    }
+    // 삭제/숨김 처리된 게시물 안내 페이지 → 앱 카드 UI 표시 후 자동으로 글 목록 이동
+    if (!window.__dcappDeletedHandled && document.querySelector('.penalty-box')) {
+      var bodyTxt = (document.body && document.body.innerText) || '';
+      if (/숨김\s*또는\s*삭제|삭제된\s*게시물|존재하지\s*않는\s*게시물/.test(bodyTxt)) {
+        window.__dcappDeletedHandled = true;
+        document.documentElement.classList.add('dcapp-deleted-post');
+        var goList = function () {
+          var m = /^\/(board|mini|person)\/([^\/]+)\/\d+/i.exec(location.pathname);
+          if (m) { location.replace('/' + m[1] + '/' + m[2]); return; }
+          if (history.length > 1) { history.back(); return; }
+          location.replace('https://m.dcinside.com/');
+        };
+        if (!document.getElementById('dcapp-deleted-card')) {
+          var card = document.createElement('div');
+          card.id = 'dcapp-deleted-card';
+          card.innerHTML = '<div class="dcapp-del-box">' +
+            '<div class="dcapp-del-ico">🗑️</div>' +
+            '<p class="dcapp-del-tit">삭제되거나 숨김 처리된 게시물입니다.</p>' +
+            '<p class="dcapp-del-sub">잠시 후 글 목록으로 이동합니다.</p>' +
+            '<button type="button" class="dcapp-del-btn">글 목록으로 이동</button>' +
+            '</div>';
+          card.querySelector('.dcapp-del-btn').addEventListener('click', goList);
+          (document.body || document.documentElement).appendChild(card);
+        }
+        setTimeout(goList, 1500);
+      }
     }
     if (isGallInfoSuppressed()) closeMinorInfoPopNow();
     if (!window.__dcappMinorPopHook) {
@@ -3671,6 +3747,7 @@ enum ContentScript {
   }, true);
   function apply() {
     try { if (typeof watchIpPopup === 'function') watchIpPopup(); } catch (e) {}
+    try { installCmtCapture(); } catch (e) {}
     ensureStyle();
     try { tidyImgCommentCount(); } catch (e) {}
     try { ensureImgOpenButtons(); } catch (e) {}
@@ -4829,6 +4906,101 @@ enum ContentScript {
   }
   watchIpPopup();
 
+  // ---------- 댓글 등록 요청은 앱이 보냄 (등록 중에 다른 글로 가도 끊기지 않게) ----------
+  // 디시의 댓글(글자·디시콘·글자콘·이미지 댓글) 등록: ① /ajax/access(com_submit)로 확인 키를 받고 ② 그 성공 처리 안에서 바로 /ajax/comment-write
+  // 디시 등록 함수를 부르는 동안에만 ①에 '자리표시 키'로 곧바로 답해 ②의 본문을 만들게 하고, ②는 앱에 넘김
+  // → 앱이 진짜 키를 받아 ②를 보내고, 이 페이지가 남아 있으면 결과를 돌려줘 디시의 원래 처리(목록 새로 받기·안내)를 이어감
+  var CMT_KEY = '__DCAPP_BLOCK_KEY__';
+  var cmtCap = null;      // 지금 디시 등록 함수를 부르는 중
+  var cmtJobs = {};       // 앱이 보내는 중인 등록: id → { body, done }
+  function bgCommentOn() {
+    return cfg.bgComment === true && !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.dcapp);
+  }
+  function cmtTransport(options) {
+    if (!cmtCap || String(options.type || '').toUpperCase() !== 'POST') return;
+    var cap = cmtCap, path = '';
+    try { path = new URL(String(options.url || ''), location.href).pathname; } catch (e) { return; }
+    if (path === '/ajax/access' && options.data === 'token_verify=com_submit') {
+      return {
+        send: function (headers, done) {
+          cap.access = true;
+          done(200, 'success', { text: JSON.stringify({ result: true, Block_key: CMT_KEY }) }, 'content-type: application/json');
+        },
+        abort: function () {}
+      };
+    }
+    if (path !== '/ajax/comment-write' || !cap.access) return;
+    cap.access = false;
+    options.timeout = 0;      // 제한 시간은 앱이 정함 (페이지가 먼저 포기하면 올라간 댓글을 또 쓰게 됨)
+    return {
+      send: function (headers, done) {
+        var id = 'cmt' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var body = String(options.data || ''), q = new URLSearchParams(body);
+        var head = articleHead();
+        var title = head ? txt(head.querySelector('.tit') || head).replace(/^\s*\[[^\]]*\]\s*/, '').trim() : '';
+        cmtJobs[id] = { body: body, done: done };
+        try {
+          window.webkit.messageHandlers.dcapp.postMessage({
+            type: 'cmtsubmit', id: id, page: location.href, ua: navigator.userAgent, headers: headers, body: body,
+            chk: document.cookie.indexOf('cmtw_chk=' + CMT_KEY) >= 0,
+            memo: (q.get('comment_memo') || '').slice(0, 4000), nick: q.get('comment_nick') || '',
+            mode: q.get('mode') || '', dccon: !!q.get('detail_idx'), title: title
+          });
+        } catch (e) {
+          delete cmtJobs[id];
+          done(0, 'error', { text: '' }, '');
+        }
+      },
+      abort: function () {}
+    };
+  }
+  /// 디시 등록 함수를 감싸 그 안에서 나가는 요청만 앱으로 (수정 저장·추첨 댓글 등 다른 요청은 그대로)
+  function installCmtCapture() {
+    var jq = window.jQuery;
+    if (!jq || !jq.ajaxTransport) return;
+    if (!jq.__dcappCmtT) { jq.__dcappCmtT = true; jq.ajaxTransport('+*', cmtTransport); }
+    ['comment_write_ok', 'insertDcconComment'].forEach(function (name) {
+      var orig = window[name];
+      if (typeof orig !== 'function' || orig.__dcappCap) return;
+      var wrapped = function (first) {
+        var edit = name === 'comment_write_ok' && /modify/.test(String((first && first.id) || ''));
+        if (edit || !bgCommentOn()) return orig.apply(this, arguments);
+        var prev = cmtCap;
+        cmtCap = { access: false };
+        try { return orig.apply(this, arguments); } finally { cmtCap = prev; }
+      };
+      wrapped.__dcappCap = true;
+      window[name] = wrapped;
+    });
+  }
+  /// 앱이 보낸 결과를 받음. 이 페이지에서 보낸 등록이 아니면 false (그때는 앱이 마무리)
+  /// late: 이미 떠난 글(다른 글로 가는 중·뒤로 가기로 되살아남)에 알려 주는 것 → 디시 화면만 정리하고 앱 알림·기록은 하지 않음
+  function nativeCmtDone(p) {
+    var job = p && cmtJobs[p.id];
+    if (!job) return false;
+    delete cmtJobs[p.id];
+    var jq = window.jQuery;
+    if (p.key && jq) { try { jq('#con_key').attr('value', p.key); } catch (e) {} }
+    var failed = true;
+    try { var res = JSON.parse(p.text || '').result; failed = p.status !== 200 || res === false || res === 0 || res === '0'; } catch (e) {}
+    var status = p.late && failed ? 0 : p.status;      // 떠난 글의 실패는 앱이 알리므로 디시 안내창 없이 '등록 중' 표시만 걷음
+    // 웹 댓글칸으로 썼는데 연결이 끊기면 디시의 '다시 시도해 주세요' 안내가 뜨게 (앱 입력창은 앱이 알림)
+    var why = status === 200 ? 'success' : (status === 0 && !p.late && !nativeCmtOn() ? 'timeout' : 'error');
+    try { job.done(status, why, { text: p.text || '' }, 'content-type: ' + (p.contentType || 'application/json')); } catch (e) {}
+    if (!p.late) {
+      // 페이지가 직접 보낸 것과 같은 알림: 429 자동 재등록·코드 칸·입력창 닫기·작성 기록·광고 차단 다시 켜기
+      var body = job.body.split(CMT_KEY).join(p.key || '');
+      window.dispatchEvent(new CustomEvent('dcapp-netlog', { detail: { url: '/ajax/comment-write (앱이 보냄)', status: p.status, body: p.text || '' } }));
+      window.dispatchEvent(new CustomEvent('dcapp-cmtwrite', { detail: { status: p.status, body: body, text: p.text || '' } }));
+      post('cmtdone', { status: p.status });
+    }
+    return true;
+  }
+  window.addEventListener('pageshow', function (e) {
+    var ids = Object.keys(cmtJobs);
+    if (e.persisted && ids.length) post('cmtjobsync', { ids: ids });
+  });
+
   // ---------- 앱 댓글 입력창: 댓글 칸을 누르면 웹 키보드 대신 앱 입력창을 띄움 ----------
   // 등록은 앱이 디시 댓글 양식에 채워서 디시 페이지가 처리 (Cloudflare 체크·429 재시도도 그대로)
   var composeTarget = null;
@@ -5075,6 +5247,25 @@ enum ContentScript {
     }
     var on = tsEp.active;
     document.documentElement.classList.toggle('dcapp-tscheck', on);
+    var isWrite = /\/write\b|\/writemini\b|\/writepr\b|\/modify\b/i.test(location.pathname);
+    var writeTs = on && isWrite;
+    document.documentElement.classList.toggle('dcapp-write-tscheck', writeTs);
+    if (writeTs) {
+      var slot = tsHost() || document.querySelector('.dc-ts-slot, #dc-turnstile, .cf-turnstile');
+      if (slot && document.body) {
+        var node = slot;
+        while (node && node !== document.body) {
+          var p = node.parentElement;
+          if (!p) break;
+          Array.prototype.forEach.call(p.children, function (c) {
+            if (c !== node && c.id !== 'dcapp-tsaux') c.classList.add('dcapp-write-tsx');
+          });
+          node = p;
+        }
+      }
+    } else if (document.querySelector('.dcapp-write-tsx')) {
+      document.querySelectorAll('.dcapp-write-tsx').forEach(function (el) { el.classList.remove('dcapp-write-tsx'); });
+    }
     if (on !== tsCheckLast) { tsCheckLast = on; post('tscheck', { on: on }); }
     tsAuxSync();
   }
@@ -5230,10 +5421,8 @@ enum ContentScript {
 
   // 댓글 등록 버튼은 양식의 onsubmit(comment_write_ok)을 부름. 이 함수가 아직 없으면 양식이 그냥 제출돼 페이지가 넘어가므로 준비될 때까지 기다림
   async function waitCommentReady(ms) {
-    for (var t = 0; t < ms; t += 200) {
-      if (typeof window.comment_write_ok === 'function') return true;
-      await sleep(200);
-    }
+    for (var t = 0; t < ms && typeof window.comment_write_ok !== 'function'; t += 200) await sleep(200);
+    installCmtCapture();
     return typeof window.comment_write_ok === 'function';
   }
   // 댓글 목록(/ajax/response-comment)이 다시 받아져 화면에 반영될 때까지 기다림 (최대 ms, 그 뒤엔 그냥 진행)
@@ -6361,8 +6550,9 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v373-imgnum','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v382-dcbest-pad','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
+    out.push('댓글 등록: ' + (bgCommentOn() ? '앱이 보냄' : '페이지가 보냄') + ' · 보내는 중 ' + Object.keys(cmtJobs).length + '건');
     out.push(tsHostDiag());
     // 화면 폭·안전 영역·본문 컨테이너 폭 (아이패드 가로 양옆 여백 확인용)
     try {
@@ -6704,6 +6894,7 @@ enum ContentScript {
     lastTouchInHScroll: function () { return lastTouchInHScroll; },
     textSelecting: textSelecting,
     refreshComments: refreshComments,
+    nativeCmtDone: nativeCmtDone,
     postAction: postAction,
     reportPost: reportPost,
     alarmAuthor: alarmAuthor,
@@ -6869,6 +7060,11 @@ enum ContentScript {
     });
     return XS.apply(this, arguments);
   };
+  // 앱이 대신 보낸 댓글 등록도 진단 기록에 남김
+  window.addEventListener('dcapp-netlog', function (e) {
+    var d = e.detail || {};
+    add('app', 'POST', d.url || '', d.status || 0, d.body || '');
+  });
   if (window.fetch) {
     var F = window.fetch;
     window.fetch = function (input, init) {
