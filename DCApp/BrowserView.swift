@@ -3463,6 +3463,8 @@ private struct MorePopoverButton<Label: View, MenuContent: View>: View {
         Button { open = true } label: { label() }
             .popover(isPresented: $open) {
                 menuContent { open = false }
+                    .foregroundStyle(Color.primary)
+                    .tint(Color.primary)
                     .popoverAdaptationCompat()
             }
     }
