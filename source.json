@@ -18,6 +18,15 @@
       "versions": [
         {
           "version": "0.11.2",
+          "buildVersion": "3",
+          "date": "2026-11-29",
+          "localizedDescription": "듀오 접은 화면 댓글 입력창 밀림 수정, 사진 보기 목록에서 디시 배지 아이콘 제외",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.2.3/DCApp.0.11.2.3.ipa",
+          "size": 31750310,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.11.2",
           "buildVersion": "2",
           "date": "2026-11-28",
           "localizedDescription": "좁은 창(Split View 등)의 댓글 입력창 키보드 위치 보정, 입력창 버튼 줄바꿈 방지",
