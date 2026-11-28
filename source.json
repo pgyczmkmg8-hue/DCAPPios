@@ -18,6 +18,15 @@
       "versions": [
         {
           "version": "0.11.2",
+          "buildVersion": "2",
+          "date": "2026-11-28",
+          "localizedDescription": "좁은 창(Split View 등)의 댓글 입력창 키보드 위치 보정, 입력창 버튼 줄바꿈 방지",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.2.2/DCApp.0.11.2.2.ipa",
+          "size": 31749272,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.11.2",
           "buildVersion": "1",
           "date": "2026-11-28",
           "localizedDescription": "댓글 정렬 바·⋯ 버튼 컨트롤바 여백, 유저 메모 직접 추가·갤러리별 메모, 분할 화면 보관함 버튼·왼쪽 목록 동기화",
