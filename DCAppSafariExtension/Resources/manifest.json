@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "디캡으로 열기",
+  "description": "Safari에서 디시인사이드 링크를 열면 DCApp(디캡)으로 바로 연결합니다.",
+  "version": "1.0",
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.dcinside.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
