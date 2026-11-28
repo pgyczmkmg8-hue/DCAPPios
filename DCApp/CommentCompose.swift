@@ -66,7 +66,7 @@ struct CommentComposerHost: View {
     /// 세로 컨트롤바가 가리는 폭과 그 위치(왼쪽이면 true) — 입력창 내용이 막대와 겹치지 않게 비움
     var barInset: CGFloat = 0
     var barLeft = false
-    /// 키보드 윗변의 화면 y (키보드가 없으면 nil) / 키보드가 화면 아래를 가린 높이
+    /// 키보드 윗변의 창(window) 좌표계 y (키보드가 없으면 nil) / 키보드가 창 아래를 가린 높이
     /// SwiftUI의 키보드 안전 영역 값은 글자를 칠 때(추천 줄이 바뀔 때) 실제 키보드와 10pt쯤 어긋나
     /// 입력창과 키보드 사이에 틈이 남음 → 입력창의 실제 아래 끝 위치를 재서 키보드 윗변에 맞게 보정
     @State private var keyboardTop: CGFloat?
@@ -75,31 +75,37 @@ struct CommentComposerHost: View {
 
     var body: some View {
         if let s = model.commentCompose {
-            ZStack(alignment: .bottom) {
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .onTapGesture { model.closeCommentCompose(sync: true) }
-                CommentComposer(session: s, model: model, barInset: barInset, barLeft: barLeft)
-                    .ignoresSafeArea(.container, edges: .trailing)   // 듀오 옆 세로 줄 자리까지 입력창을 채움 (줄은 맨 위 시계 자리라 아래쪽은 비어 있음)
-                    .background {
-                        GeometryReader { g in
-                            Color.clear
-                                .onChangeCompat(of: g.frame(in: .global).maxY) { _, y in realign(composerBottom: y) }
-                                .onAppear { realign(composerBottom: g.frame(in: .global).maxY) }
+            GeometryReader { hostGeo in
+                let hostW = hostGeo.size.width
+                let effectiveBarInset: CGFloat = hostW < 420 ? 0 : barInset
+                ZStack(alignment: .bottom) {
+                    Color.black.opacity(0.22)
+                        .ignoresSafeArea()
+                        .onTapGesture { model.closeCommentCompose(sync: true) }
+                    CommentComposer(session: s, model: model, barInset: effectiveBarInset, barLeft: barLeft, isNarrow: hostW < 440)
+                        .frame(width: hostW)
+                        .ignoresSafeArea(.container, edges: (BrowserView.hasSideColumnOnly && !BrowserView.windowLeftColumn) ? .trailing : [])
+                        .background {
+                            GeometryReader { g in
+                                Color.clear
+                                    .onChangeCompat(of: g.frame(in: .global).maxY) { _, y in realign(composerBottom: y) }
+                                    .onAppear { realign(composerBottom: g.frame(in: .global).maxY) }
+                            }
                         }
-                    }
-                    .padding(.bottom, max(0, keyboardCover - Self.windowBottomInset + correction))
-                    .transition(.move(edge: .bottom))
+                        .padding(.bottom, max(0, keyboardCover - Self.windowBottomInset + correction))
+                        .transition(.move(edge: .bottom))
+                }
+                .frame(width: hostW, height: hostGeo.size.height, alignment: .bottom)
             }
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .id(s.id)
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
                 guard let end = (n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
-                let kbTop = end.minY, winH = UIScreen.main.bounds.height
                 let d = (n.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+                let (kbTop, cover) = Self.keyboardMetrics(fromScreenFrame: end)
                 withAnimation(.easeOut(duration: d)) {
-                    keyboardTop = kbTop < winH - 1 ? kbTop : nil
-                    keyboardCover = max(0, winH - kbTop)
+                    keyboardTop = kbTop
+                    keyboardCover = cover
                     correction = 0
                 }
             }
@@ -118,10 +124,31 @@ struct CommentComposerHost: View {
         correction -= gap
     }
 
+    /// 화면 좌표계의 키보드 프레임을 현재 활성 창(UIWindow) 좌표계로 변환하여 Split View에서도 정확한 높이와 y를 계산
+    private static func keyboardMetrics(fromScreenFrame end: CGRect) -> (top: CGFloat?, cover: CGFloat) {
+        if let win = activeWindow {
+            let kbInWin = win.convert(end, from: nil)
+            let overlap = win.bounds.intersection(kbInWin)
+            if !overlap.isNull && overlap.height > 1 {
+                let cover = max(0, win.bounds.maxY - overlap.minY)
+                return (cover > 1 ? overlap.minY : nil, cover)
+            }
+            return (nil, 0)
+        }
+        let kbTop = end.minY, winH = UIScreen.main.bounds.height
+        return (kbTop < winH - 1 ? kbTop : nil, max(0, winH - kbTop))
+    }
+
+    private static var activeWindow: UIWindow? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { $0.windowLevel == .normal && !$0.isHidden }
+        return windows.first(where: \.isKeyWindow) ?? windows.first
+    }
+
     private static var windowBottomInset: CGFloat {
-        UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows).filter { $0.windowLevel == .normal && !$0.isHidden }
-            .map(\.safeAreaInsets.bottom).max() ?? 0
+        activeWindow?.safeAreaInsets.bottom ?? 0
     }
 }
 
@@ -131,6 +158,7 @@ private struct CommentComposer: View {
     let model: WebViewModel
     var barInset: CGFloat = 0
     var barLeft = false
+    var isNarrow = false
     private enum Field: Hashable { case text, nick, pw, code }
     @FocusState private var focus: Field?
     private enum Panel { case dccon, txtcon }
@@ -206,26 +234,47 @@ private struct CommentComposer: View {
                 onCommandReturn: { model.submitComment() })
                 .frame(height: Self.textBoxHeight(textH))      // 입력칸이 잰 실제 높이로 못 박음 (글이 늘 때 상자가 안 따라 늘어 글자가 상자 밖으로 나오던 문제)
                 .fieldBox(minHeight: 70)
-            HStack(spacing: 14) {
+            HStack(spacing: isNarrow ? 8 : 14) {
                 Button { togglePanel(.dccon) } label: {
-                    Label("디시콘", systemImage: panel == .dccon ? "keyboard" : "face.smiling").font(fonts.styleFont(.subheadline))
+                    HStack(spacing: 4) {
+                        Image(systemName: panel == .dccon ? "keyboard" : "face.smiling")
+                        Text("디시콘")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(fonts.styleFont(isNarrow ? .footnote : .subheadline))
                 }
                 .disabled(session.sending)
                 Button { togglePanel(.txtcon) } label: {
-                    Label("글자콘", systemImage: panel == .txtcon ? "keyboard" : "textformat").font(fonts.styleFont(.subheadline))
+                    HStack(spacing: 4) {
+                        Image(systemName: panel == .txtcon ? "keyboard" : "textformat")
+                        Text("글자콘")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .font(fonts.styleFont(isNarrow ? .footnote : .subheadline))
                 }
                 .disabled(session.sending)
-                Spacer()
+                Spacer(minLength: 4)
                 Text("\(session.text.count)자")
                     .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Button { model.closeCommentCompose(sync: true) } label: {
-                    Text("닫기").font(fonts.styleFont(.subheadline))
+                    Text("닫기")
+                        .font(fonts.styleFont(isNarrow ? .footnote : .subheadline))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 Button { model.submitComment() } label: {
                     Text(session.sending ? "등록 중…" : "등록")
-                        .font(fonts.styleFont(.subheadline, weight: .semibold))
+                        .font(fonts.styleFont(isNarrow ? .footnote : .subheadline, weight: .semibold))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 7)
+                        .padding(.horizontal, isNarrow ? 12 : 16).padding(.vertical, 7)
                         .background(DCTheme.navy.opacity(session.sending ? 0.5 : 1), in: Capsule())
                 }
                 .disabled(session.sending)
