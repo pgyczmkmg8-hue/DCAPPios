@@ -18,6 +18,15 @@
       "versions": [
         {
           "version": "0.11.2",
+          "buildVersion": "1",
+          "date": "2026-11-28",
+          "localizedDescription": "댓글 정렬 바·⋯ 버튼 컨트롤바 여백, 유저 메모 직접 추가·갤러리별 메모, 분할 화면 보관함 버튼·왼쪽 목록 동기화",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.2.1/DCApp.0.11.2.1.ipa",
+          "size": 31747794,
+          "minOSVersion": "16.0"
+        },
+        {
+          "version": "0.11.2",
           "buildVersion": "0",
           "date": "2026-11-28",
           "localizedDescription": "Safari 확장 프로그램 '디캡으로 열기' 추가 (설정 → Safari → 확장 프로그램에서 켜기)",
