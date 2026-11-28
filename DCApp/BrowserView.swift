@@ -478,6 +478,7 @@ struct BrowserView: View {
 
     // 유저 메모 입력 (길게 누르기 → 메모)
     @State private var memoTarget: (kind: BlockedUser.Kind, value: String, nick: String, existing: UserMemo?)?
+    @State private var galleryMemoScope: String? = nil
     // 메모가 이미 있는 대상 → 메모 목록 (눌러서 고치기 / 새 메모 추가)
     @State private var memoListTarget: (kind: BlockedUser.Kind, value: String, nick: String)?
     // 차단 범위 고르기 (이 갤러리만 / 모든 갤러리)
@@ -1183,6 +1184,14 @@ struct BrowserView: View {
                     .sheet(isPresented: $showFooterEditor) {
                         FooterQuickSheet(account: footerAccountKey, gallery: footerGalleryID ?? FooterRule.all)
                             .sheetUnderBlueBar(medium: true)
+                    }
+                    .sheet(isPresented: Binding(get: { galleryMemoScope != nil }, set: { if !$0 { galleryMemoScope = nil } })) {
+                        if let scope = galleryMemoScope {
+                            NavigationStack {
+                                MemoListView(galleryScope: scope, isSheet: true)
+                            }
+                            .sheetUnderBlueBar()
+                        }
                     }
                     .confirmationDialog("댓글 링크",
                                         isPresented: Binding(get: { model.commentLink != nil },
@@ -2397,10 +2406,11 @@ struct BrowserView: View {
             }
             Button("취소", role: .cancel) {}
         }
-        // 빈 한 자리: 글 보기면 보관함, 갤러리 목록이면 즐겨찾기, 그 밖에는 새로고침
-        if isPostPage {
+        // 빈 한 자리: 글 보기(분할화면 오른쪽에 글이 열린 경우 포함)면 보관함, 갤러리 목록이면 즐겨찾기, 그 밖에는 새로고침
+        let splitPostTarget: WebViewModel? = (router.splitActive && detailPane.url.flatMap(PostKey.from) != nil) ? detailPane : nil
+        if let postTarget = splitPostTarget ?? (isPostPage ? model : nil) {
             barItem("folder.badge.plus", "folder.fill.badge.plus", "보관함", selected: false) {
-                Task { await model.savePost() }
+                Task { await postTarget.savePost() }
             }
         } else if currentGallery != nil {
             barItem("star", "star.fill", "즐겨찾기", selected: isFavorite) {
@@ -2632,12 +2642,17 @@ struct BrowserView: View {
                 }
 
                 Divider().padding(.vertical, 4)
-                morePopoverHeader("차단")
-                morePopoverRow(model.isBlockPickMode ? "탭해서 차단 끝내기" : "탭해서 유저 차단",
+                morePopoverHeader("차단/메모")
+                morePopoverRow(model.isBlockPickMode ? "탭해서 차단/메모 끝내기" : "탭해서 유저 차단/메모",
                                systemImage: "hand.tap", dismiss: dismiss) {
                     model.setBlockPickMode(!model.isBlockPickMode)
                 }
-                morePopoverRow("차단 설정 가기", systemImage: "hand.raised", dismiss: dismiss) {
+                if let g = currentGallery {
+                    morePopoverRow("현재 갤러리에서 메모하기", systemImage: "note.text.badge.plus", dismiss: dismiss) {
+                        galleryMemoScope = g.id
+                    }
+                }
+                morePopoverRow("차단/메모 설정 가기", systemImage: "hand.raised", dismiss: dismiss) {
                     router.settingsAnchor = "block"
                     router.sheet = .settings
                 }
@@ -2725,16 +2740,21 @@ struct BrowserView: View {
                 Label("전체 페이지 캡처", systemImage: "doc.viewfinder")
             }
         }
-        Section("차단") {
+        Section("차단/메모") {
             Button { model.setBlockPickMode(!model.isBlockPickMode) } label: {
-                Label(model.isBlockPickMode ? "탭해서 차단 끝내기" : "탭해서 유저 차단",
+                Label(model.isBlockPickMode ? "탭해서 차단/메모 끝내기" : "탭해서 유저 차단/메모",
                       systemImage: "hand.tap")
+            }
+            if let g = currentGallery {
+                Button { galleryMemoScope = g.id } label: {
+                    Label("현재 갤러리에서 메모하기", systemImage: "note.text.badge.plus")
+                }
             }
             Button {
                 router.settingsAnchor = "block"
                 router.sheet = .settings
             } label: {
-                Label("차단 설정 가기", systemImage: "hand.raised")
+                Label("차단/메모 설정 가기", systemImage: "hand.raised")
             }
         }
         Section("화면 정리") {

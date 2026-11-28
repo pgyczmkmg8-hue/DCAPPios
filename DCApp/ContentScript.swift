@@ -238,6 +238,14 @@ enum ContentScript {
       'html.dcapp-duocol .dcapp-btnrow,html.dcapp-duocol .view-btn-box,html.dcapp-duocol .gallview-btn-box{box-sizing:border-box!important;border-left:max(env(safe-area-inset-left),var(--dcapp-bar-l,0px)) solid transparent!important;border-right:max(env(safe-area-inset-right),var(--dcapp-bar-r,0px)) solid transparent!important}',
       'html.dcapp-duoflip .dcapp-btnrow,html.dcapp-duoflip .view-btn-box,html.dcapp-duoflip .gallview-btn-box{border-left:var(--dcapp-bar-l,0px) solid transparent!important}',
       'html.dcapp-duoflip-r .dcapp-btnrow,html.dcapp-duoflip-r .view-btn-box,html.dcapp-duoflip-r .gallview-btn-box{border-right:max(env(safe-area-inset-left),var(--dcapp-bar-r,0px)) solid transparent!important}',
+      // 댓글 정렬 바(등록순/최신순/답글순) 및 각 댓글 우측 ... 더보기 버튼이 오른쪽 플로팅 컨트롤바에 가려지지 않도록 --dcapp-bar-r 여백 확보
+      '#comment_box .all-comment-tit{box-sizing:border-box!important;padding-right:calc(12px + var(--dcapp-bar-r,0px))!important}',
+      'html.dcapp-duocol #comment_box .all-comment-tit{padding-right:calc(12px + max(env(safe-area-inset-right),var(--dcapp-bar-r,0px)))!important}',
+      'html.dcapp-duoflip-r #comment_box .all-comment-tit{padding-right:calc(12px + max(env(safe-area-inset-left),var(--dcapp-bar-r,0px)))!important}',
+      '#comment_box .all-comment-lst .comment,#comment_box .all-comment-lst .comment-add,#comment_box .all-comment-lst .comment-full{box-sizing:border-box!important;padding-right:calc(12px + var(--dcapp-bar-r,0px))!important}',
+      'html.dcapp-duocol #comment_box .all-comment-lst .comment,html.dcapp-duocol #comment_box .all-comment-lst .comment-add,html.dcapp-duocol #comment_box .all-comment-lst .comment-full{padding-right:calc(12px + max(env(safe-area-inset-right),var(--dcapp-bar-r,0px)))!important}',
+      'html.dcapp-duoflip-r #comment_box .all-comment-lst .comment,html.dcapp-duoflip-r #comment_box .all-comment-lst .comment-add,html.dcapp-duoflip-r #comment_box .all-comment-lst .comment-full{padding-right:calc(12px + max(env(safe-area-inset-left),var(--dcapp-bar-r,0px)))!important}',
+      '#comment_box .all-comment-lst li .rt,#comment_box .all-comment-lst li .btn-more,#comment_box .all-comment-lst li .comment-more{right:calc(10px + var(--dcapp-bar-r,0px))!important}',
       'html.dcapp-duoflip::before{width:env(safe-area-inset-left)!important}',
       // 화면 전체 폭으로 뜨는 창(디시콘 정보 등)은 세로 줄 밑으로 깔려 오른쪽 끝 버튼(사용·X)이 터치 차단막에 막힘 → 창 안쪽을 줄 밖으로 비움
       'html.dcapp-duocol .layer-center-popup.full{box-sizing:border-box!important;padding-left:env(safe-area-inset-left)!important;padding-right:env(safe-area-inset-right)!important}',
@@ -6550,7 +6558,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v382-dcbest-pad','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v383-cmt-bar-inset','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push('댓글 등록: ' + (bgCommentOn() ? '앱이 보냄' : '페이지가 보냄') + ' · 보내는 중 ' + Object.keys(cmtJobs).length + '건');
     out.push(tsHostDiag());

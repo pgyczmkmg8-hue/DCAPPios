@@ -148,45 +148,131 @@ final class MemoStore: ObservableObject {
 
 /// 설정 → 유저 메모 목록 (눌러서 고치기, 밀어서 지우기)
 struct MemoListView: View {
+    var galleryScope: String? = nil
+    var isSheet: Bool = false
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject var fonts = FontStore.shared
     @ObservedObject private var store = MemoStore.shared
     @State private var editing: UserMemo?
     @State private var editText = ""
+    @State private var bulkInput = ""
+    @State private var addFeedback: String?
+
+    private var displayedMemos: [UserMemo] {
+        guard let g = galleryScope else { return store.memos }
+        return store.memos.filter { $0.gallery == g || $0.gallery == nil }
+    }
 
     var body: some View {
         List {
-            ForEach(store.memos) { m in
-                Button {
-                    editText = m.text
-                    editing = m
-                } label: {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(m.text).foregroundStyle(.primary)
-                        Text("\(m.kind.label) · \(m.value) · \(m.gallery.map { "\($0) 갤러리만" } ?? "모든 갤러리")")
-                            .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    ZStack(alignment: .topLeading) {
+                        TextEditor(text: $bulkInput)
+                            .font(fonts.styleFont(.subheadline))
+                            .frame(minHeight: 88)
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                        if bulkInput.isEmpty {
+                            Text("식별 코드-메모 또는 IP-메모 형식으로 입력\n예시) 123.456-개죽이")
+                                .font(fonts.styleFont(.subheadline))
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 14)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                    )
+
+                    HStack {
+                        if let feedback = addFeedback {
+                            Text(feedback)
+                                .font(fonts.styleFont(.caption))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("등록") { registerBulkMemos() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(DCTheme.navy)
+                            .disabled(bulkInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text(galleryScope.map { "\($0) 갤러리 메모 추가" } ?? "메모 직접 추가")
+            } footer: {
+                Text(galleryScope.map { "이 화면에서 등록한 메모는 \($0) 갤러리에서만 표시돼요. 한 줄에 하나씩 여러 개 붙여넣기도 가능해요." }
+                     ?? "한 줄에 하나씩 여러 개를 붙여넣어 한꺼번에 등록할 수 있어요.")
+            }
+
+            Section("저장된 메모 (\(displayedMemos.count))") {
+                if displayedMemos.isEmpty {
+                    Text("메모한 유저가 없어요. 위 입력창에 직접 등록하거나 글 목록·댓글을 길게 눌러 추가하세요.")
+                        .font(fonts.styleFont(.footnote))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    ForEach(displayedMemos) { m in
+                        Button {
+                            editText = m.text
+                            editing = m
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(m.text).foregroundStyle(.primary)
+                                Text("\(m.kind.label) · \(m.value) · \(m.gallery.map { "\($0) 갤러리만" } ?? "모든 갤러리")")
+                                    .font(fonts.styleFont(.caption)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .onDelete { offsets in
+                        let list = displayedMemos
+                        for i in offsets { store.remove(list[i]) }
                     }
                 }
             }
-            .onDelete { offsets in
-                let list = store.memos
-                for i in offsets { store.remove(list[i]) }
-            }
         }
-        .overlay {
-            if store.memos.isEmpty {
-                EmptyStateView("메모한 유저가 없어요", systemImage: "note.text",
-                                       description: Text("글 목록이나 댓글을 길게 누르고 '메모'를 고르세요."))
-            }
-        }
-        .navigationTitle("유저 메모")
+        .navigationTitle(galleryScope != nil ? "현재 갤러리 메모" : "유저 메모")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { EditButton() }
+        .toolbar {
+            if isSheet {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("닫기") { dismiss() }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) { EditButton() }
+        }
         .alert("메모 고치기", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
             TextField("메모", text: $editText)
             Button("저장") { if let m = editing { store.update(m, text: editText, gallery: m.gallery) } }
             Button("취소", role: .cancel) {}
         } message: {
             Text(editing.map { "\($0.kind.label) \($0.value)" } ?? "")
+        }
+    }
+
+    private func registerBulkMemos() {
+        let lines = bulkInput.components(separatedBy: .newlines)
+        var added = 0
+        for raw in lines {
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, let sep = line.firstIndex(of: "-") else { continue }
+            let key = String(line[..<sep]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let memo = String(line[line.index(after: sep)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !memo.isEmpty else { continue }
+            let isIP = key.range(of: #"^\d{1,3}\.\d{1,3}(\.\d{1,3}\.\d{1,3})?$"#, options: .regularExpression) != nil
+            store.add(kind: isIP ? .ip : .id, value: key, text: memo, gallery: galleryScope)
+            added += 1
+        }
+        if added > 0 {
+            bulkInput = ""
+            addFeedback = "\(added)개의 메모를 등록했어요."
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } else {
+            addFeedback = "형식을 확인해 주세요 (예: 123.456-개죽이)"
         }
     }
 }

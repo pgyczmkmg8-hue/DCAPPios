@@ -121,6 +121,7 @@ final class AppRouter: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] main in
                 guard let self, self.splitActive else { return }
+                if let until = self.suppressDetailClearUntil, Date() < until { return }
                 guard let du = self.detailBrowser.url, du.scheme != "about" else { return }
                 if WebViewModel.isDCHomeURL(main) {
                     self.detailBrowser.load(URL(string: "about:blank")!)
@@ -180,16 +181,22 @@ final class AppRouter: ObservableObject {
             .store(in: &syncBag)
     }
 
+    private var suppressDetailClearUntil: Date? = nil
+
     func open(_ url: URL) {
         sheet = nil
         let key = PostKey.from(url)
         // 글 주소는 분할이면 오른쪽(글) 화면, 아니면 지금 화면에서 연다 (기존과 같음)
         let target = (splitActive && key != nil) ? detailBrowser : primaryBrowser
-        // 분할 화면에서 홈에 있다가 읽은 글 보기 등으로 글을 열면 왼쪽도 그 글의 갤러리 목록으로 함께 띄움
-        if splitActive, key != nil,
-           mainBrowser.url == nil || WebViewModel.isDCHomeURL(mainBrowser.url),
-           let g = Gallery.parse(url) {
-            mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+        // 분할 화면에서 홈이나 다른 갤러리에 있다가 알림·외부 링크 등으로 다른 갤러리 글을 열면 왼쪽도 해당 갤러리 목록으로 동기화
+        // (단, dcbest 등 특수 목록이거나 이미 같은 갤러리인 경우 불필요한 새로고침 방지)
+        if splitActive, key != nil, let g = Gallery.parse(url) {
+            let curMain = mainBrowser.url.flatMap(Gallery.parse)
+            let isSpecialMain = curMain?.id == "dcbest"
+            if curMain == nil || (!isSpecialMain && curMain?.id != g.id) {
+                suppressDetailClearUntil = Date().addingTimeInterval(2.0)
+                mainBrowser.load(Gallery(galleryID: g.id, name: g.id, kind: g.kind).url)
+            }
         }
         // 그 화면에 이미 같은 글이 떠 있으면 주소만 바꿔 불러서는 아무 일도 안 일어남 (WebKit이 새로 받지 않음) → 다시 받아 옴
         if let key, let cur = target.url, PostKey.from(cur) == key {
