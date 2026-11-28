@@ -77,14 +77,17 @@ struct CommentComposerHost: View {
         if let s = model.commentCompose {
             GeometryReader { hostGeo in
                 let hostW = hostGeo.size.width
-                let effectiveBarInset: CGFloat = hostW < 420 ? 0 : barInset
+                // 듀오 옆 세로 줄(왼쪽이든 오른쪽이든)이 있으면 그 자리까지 입력창을 채움 (줄은 맨 위 시계 자리라 아래쪽은 비어 있음)
+                let fillColumn = BrowserView.hasSideColumnOnly
+                let cardW = hostW + (fillColumn ? hostGeo.safeAreaInsets.leading + hostGeo.safeAreaInsets.trailing : 0)
+                let effectiveBarInset: CGFloat = cardW < 420 ? 0 : barInset
                 ZStack(alignment: .bottom) {
                     Color.black.opacity(0.22)
                         .ignoresSafeArea()
                         .onTapGesture { model.closeCommentCompose(sync: true) }
-                    CommentComposer(session: s, model: model, barInset: effectiveBarInset, barLeft: barLeft, isNarrow: hostW < 440)
-                        .frame(width: hostW)
-                        .ignoresSafeArea(.container, edges: (BrowserView.hasSideColumnOnly && !BrowserView.windowLeftColumn) ? .trailing : [])
+                    CommentComposer(session: s, model: model, barInset: effectiveBarInset, barLeft: barLeft, isNarrow: cardW < 440)
+                        // 폭을 못 박지 않음: 못 박은 채 안전 영역으로 넓히면 카드가 줄 폭만큼 밀려 화면 밖으로 잘림
+                        .ignoresSafeArea(.container, edges: fillColumn ? .horizontal : [])
                         .background {
                             GeometryReader { g in
                                 Color.clear

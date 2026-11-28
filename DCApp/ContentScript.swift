@@ -1664,7 +1664,28 @@ enum ContentScript {
     var w = m && m.closest ? m.closest('.dcapp-imgblk') : null;
     return !!w && w.getAttribute('data-dcapp-blocked') === '1' && w.getAttribute('data-dcapp-img-revealed') !== '1';
   }
-  /// 글 속 사진·움짤 전체 (PC 원본 첨부와 순서를 맞추는 기준): 디시콘·스포일러 경고 칸 안·40px 이하 작은 사진 제외, 가려진 사진 포함
+  /// 본문에 섞여 든 디시 화면 아이콘(고닉·반고닉·실베 B·매니저 배지 등) — 사진이 아니므로 사진 보기 목록에서 뺌
+  /// 아직 안 받은 사진은 자리표시 그림 크기로 재어지므로, 크기보다 주소·칸·클래스·글에 적힌 크기를 먼저 봄
+  function isUIIcon(x, url) {
+    // 디시 화면 그림 서버(nstatic·wstatic)의 파일은 올린 사진이 아님 (올린 사진은 dcimg·viewimage)
+    if (/^https?:\/\/([^\/]*\.)?[nw]?static\.dcinside\.(com|co\.kr)\//i.test(url)) return true;
+    // 디시 서버의 아이콘 이름 파일 (바깥 사이트의 사진은 이름에 icon·best가 있어도 그대로)
+    if (/^https?:\/\/([^\/]*\.)?dcinside\.(com|co\.kr)\/[^?#]*\/(sp_|ico|icon|[\w-]*nik|[\w-]*gonik|[\w-]*best|[\w-]*manager)[\w-]*\.(png|gif|svg)/i.test(url)) return true;
+    // 작성자·닉네임 칸 안의 그림, 아이콘용 클래스
+    if (x.closest && x.closest('.ginfo-area, .ginfo2, .ginfo, .nick, .nickname, .gall_writer, .ub-writer, .writer_nikcon')) return true;
+    if (/(^|\s)(sp[-_][\w-]*|ico[-_][\w-]*|[\w-]*icon|[\w-]*nikcon)(\s|$)/i.test(clsOf(x))) return true;
+    // 글에 적힌 크기가 아이콘 크기 (px 또는 숫자만 적은 것. 가로·세로 중 적힌 것이 모두 40 이하)
+    var px = function (v) { var m = /^\s*(\d+(?:\.\d+)?)\s*(px)?\s*$/.exec(v || ''); return m ? parseFloat(m[1]) : 0; };
+    var w = px(x.style && x.style.width) || px(x.getAttribute('width')), h = px(x.style && x.style.height) || px(x.getAttribute('height'));
+    if ((w || h) && (!w || w <= 40) && (!h || h <= 40)) return true;
+    // 화면에 아이콘 크기로 그려진 것 (원본이 커도 24px 이하로 보이면 배지)
+    if (x.complete && x.getBoundingClientRect) {
+      var r = x.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && r.width <= 24 && r.height <= 24) return true;
+    }
+    return false;
+  }
+  /// 글 속 사진·움짤 전체 (PC 원본 첨부와 순서를 맞추는 기준): 디시콘·스포일러 경고 칸 안·40px 이하 작은 사진·화면 아이콘 제외, 가려진 사진 포함
   /// keep: 사진 보기에서 눌러 연 사진 (작은 사진이라도 보여 주려고 넣음)
   function bodyPhotos(keep) {
     var body = articleBody();
@@ -1673,6 +1694,7 @@ enum ContentScript {
       if (keep && x === keep) return true;
       if (dcconKey(x) || (x.closest && x.closest('#spoiler')) || !galleryMediaURL(x)) return false;
       if (x.tagName === 'VIDEO') return true;
+      if (isUIIcon(x, galleryMediaURL(x))) return false;
       var w = x.naturalWidth || parseInt(x.getAttribute('width'), 10) || x.width || 0;
       return w === 0 || w > 40;     // 아직 안 받아서 크기를 모르는 사진은 넣음 (PC 원본 목록에는 있을 가능성이 큼)
     });
@@ -6558,7 +6580,7 @@ enum ContentScript {
 
   // ---------- 구조 진단 ----------
   function diagnose() {
-    var out = ['script: v383-cmt-bar-inset','URL: ' + location.href, 'UA: ' + navigator.userAgent];
+    var out = ['script: v384-viewer-icons','URL: ' + location.href, 'UA: ' + navigator.userAgent];
     out.push(tsDiag());
     out.push('댓글 등록: ' + (bgCommentOn() ? '앱이 보냄' : '페이지가 보냄') + ' · 보내는 중 ' + Object.keys(cmtJobs).length + '건');
     out.push(tsHostDiag());
