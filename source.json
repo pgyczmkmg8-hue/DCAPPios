@@ -17,6 +17,15 @@
       "category": "social",
       "versions": [
         {
+          "version": "0.11.2",
+          "buildVersion": "0",
+          "date": "2026-11-28",
+          "localizedDescription": "Safari 확장 프로그램 '디캡으로 열기' 추가 (설정 → Safari → 확장 프로그램에서 켜기)",
+          "downloadURL": "https://github.com/pgyczmkmg8-hue/DCAPPios/releases/download/0.11.2.0/DCApp.0.11.2.0.ipa",
+          "size": 31720819,
+          "minOSVersion": "16.0"
+        },
+        {
           "version": "0.11.1",
           "buildVersion": "0",
           "date": "2026-11-27",
